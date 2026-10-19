@@ -14,6 +14,14 @@ bun install
 bun run device
 ```
 
+## Backend connection and authentication
+
+The local `.env` is configured from the current Connector v1 values; it is intentionally ignored by Git. The Connector uses the same email/password, email OTP, password-reset, and two-factor endpoints as Software. Tokens are stored in Android/iOS secure storage, never in plain application storage.
+
+For an Android emulator use `http://10.0.2.2:3000`; for a physical device, use the development machine's reachable LAN address. Production uses `https://api.hisaabsathi.com`. No mobile origin needs adding to `CORS_ORIGINS`: native fetch calls do not send a browser Origin.
+
+GraphQL is ready for future protected operations through `graphqlRequest` in `src/lib/api/graphql.ts`; pass the active Connector session token. Ola Maps configuration and reverse geocoding helpers are available in `src/lib/maps/ola-maps.ts` and use the public key mirrored from Connector v1.
+
 `device` finds the SDK/JDK, lets you choose among connected phones, reverses ports 8081 and 3000,
 generates/builds the Android dev client, installs it, and starts Metro. Once the dev client is
 installed, `bun run start` starts Metro only. Gradle output is quiet (progress and errors only); use

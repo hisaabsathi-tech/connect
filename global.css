@@ -39,6 +39,9 @@
 }
 
 @theme inline {
+  --font-sans: "Satoshi";
+  --font-body: "Satoshi";
+  --font-heading: "Satoshi-Medium";
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

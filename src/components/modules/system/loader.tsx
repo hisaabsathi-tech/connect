@@ -48,9 +48,10 @@ export function Loader({
 
   return (
     <View accessibilityLabel="Loading" accessibilityRole="progressbar" className={containerClasses}>
+      {/* NativeWind does not style RN's Animated.View, so the colour must be inline. */}
       <Animated.View
-        className="bg-primary"
         style={{
+          backgroundColor: "#465FFF",
           borderRadius: progress.interpolate({
             inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
             outputRange: [
