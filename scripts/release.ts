@@ -1,15 +1,15 @@
 /** biome-ignore-all lint/suspicious/noConsole: this CLI reports release progress */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { androidEnv } from "./android-env";
-import { productionEnv, signingEnv } from "./release-env";
+import { assertApiReachable, productionEnv, signingEnv } from "./release-env";
+import { bump, bumpKinds, nextRelease, readVersion, writeVersion } from "./version";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const versionPath = resolve(root, "version.json");
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const expo = resolve(root, "node_modules/.bin/expo");
@@ -40,9 +40,11 @@ function run(
   if (result.status !== 0) throw new Error(`${printable} failed`);
 }
 
-function buildStore(version: string): void {
+async function buildStore(version: string): Promise<void> {
   const { env } = androidEnv();
-  const buildEnv = { ...env, ...signingEnv(), ...productionEnv().env };
+  const production = productionEnv();
+  if (!dryRun) await assertApiReachable(production.apiUrl);
+  const buildEnv = { ...env, ...signingEnv(), ...production.env };
   run(expo, ["prebuild", "--platform", "android", "--no-install", "--clean"], { env: buildEnv });
   run("bun", ["scripts/configure-android-signing.ts"], { env: buildEnv });
   run("./gradlew", ["bundleRelease", "assembleRelease", "--no-daemon"], {
@@ -65,13 +67,6 @@ function buildStore(version: string): void {
     resolve(outDir, "hisaabsathi-connect.apk"),
   );
   console.log(`Store build ready in ${outDir}`);
-}
-
-function bump(version: string, kind: string): string {
-  const [major, minor, patch] = version.split(".").map(Number);
-  if (kind === "major") return `${major + 1}.0.0`;
-  if (kind === "minor") return `${major}.${minor + 1}.0`;
-  return `${major}.${minor}.${patch + 1}`;
 }
 
 /** One buffered line reader: readline.question drops lines that arrive before it is asked. */
@@ -104,33 +99,33 @@ async function select<T>(
 }
 
 async function main() {
-  const current = JSON.parse(readFileSync(versionPath, "utf8"));
+  const current = readVersion();
   const bumpKind =
     option("--bump") ??
     (await select(
       "Version bump",
-      ["patch", "minor", "major"].map((value) => ({
+      bumpKinds.map((value) => ({
         value,
         label: `${value}: ${current.version} → ${bump(current.version, value)}`,
       })),
       0,
     ));
-  if (!["patch", "minor", "major"].includes(bumpKind))
+  if (!bumpKinds.includes(bumpKind as (typeof bumpKinds)[number]))
     throw new Error("--bump must be patch, minor, or major.");
 
-  const next = { version: bump(current.version, bumpKind), versionCode: current.versionCode + 1 };
+  const next = nextRelease(current, bumpKind);
   console.log(`\nRelease v${next.version}`);
   console.log(`versionCode ${current.versionCode} → ${next.versionCode}`);
   if (dryRun) {
     console.log(`[dry-run] write ${JSON.stringify(next)}`);
   } else {
-    writeFileSync(versionPath, `${JSON.stringify(next, null, 2)}\n`);
+    writeVersion(next);
   }
 
   try {
-    buildStore(next.version);
+    await buildStore(next.version);
   } catch (error) {
-    if (!dryRun) writeFileSync(versionPath, `${JSON.stringify(current, null, 2)}\n`);
+    if (!dryRun) writeVersion(current);
     console.error(`Restored version.json to ${current.version}.`);
     throw error;
   }

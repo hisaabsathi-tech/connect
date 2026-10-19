@@ -76,3 +76,19 @@ export function productionEnv() {
     empty,
   };
 }
+
+/**
+ * Fails before a long build when the production API cannot be reached. Any HTTP status counts as
+ * reachable; a DNS, TLS, or connection failure means every request in the app would fail too.
+ */
+export async function assertApiReachable(apiUrl: string): Promise<void> {
+  try {
+    await fetch(apiUrl, { method: "HEAD", signal: AbortSignal.timeout(15_000) });
+  } catch (error) {
+    const reason = error instanceof Error ? (error.cause ?? error).toString() : String(error);
+    throw new Error(
+      `Cannot reach EXPO_PUBLIC_API_URL ${apiUrl} (${reason}). Fix it in \`.env.production\`; ` +
+        "the app would fail every request.",
+    );
+  }
+}

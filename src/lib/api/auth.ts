@@ -38,7 +38,10 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   try {
     response = await fetch(`${tokenUrl}${path}`, { ...options, headers });
   } catch {
-    throw new AuthApiError("An active internet connection is required.", 0);
+    throw new AuthApiError(
+      "Couldn't reach the server. Check your internet connection and try again.",
+      0,
+    );
   }
 
   const raw = await response.text();

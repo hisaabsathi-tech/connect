@@ -1,0 +1,178 @@
+name: Android APK
+
+# Run from Actions → Android APK → Run workflow, on main.
+#   rebuild              Build the current version.json version again and replace the APK on its
+#                        GitHub release (the tag moves to the rebuilt commit). Creates the release if
+#                        this version has none yet.
+#   patch / minor / major  Bump version.json, commit it to main, and publish a new GitHub release.
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "rebuild = same version, replace its APK; patch/minor/major = new release"
+        type: choice
+        options:
+          - rebuild
+          - patch
+          - minor
+          - major
+        default: rebuild
+
+permissions:
+  contents: write
+
+# Releases push to main and move tags, so never run two at once or cancel one halfway.
+concurrency:
+  group: android-apk
+  cancel-in-progress: false
+
+env:
+  EXPO_PUBLIC_APPLICATION_MODE: production
+  EXPO_PUBLIC_API_URL: https://server.hisaabsathi.in
+  EXPO_PUBLIC_AUTH_BASE_PATH: /api/auth
+  EXPO_PUBLIC_API_PREFIX: /api/v1
+  EXPO_PUBLIC_GRAPHQL_PATH: /graphql
+  RELEASE: ${{ inputs.release }}
+  ASSET: hisaabsathi-connect.apk
+
+jobs:
+  apk:
+    name: Build ${{ inputs.release }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Run this workflow on main; releases commit version.json and tag main."
+          exit 1
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint and typecheck
+        run: bun run lint && bun run typecheck
+
+      - name: Set version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE" != rebuild ]]; then
+            bun scripts/bump-version.ts "$RELEASE"
+          fi
+          version="$(jq -r .version version.json)"
+          if [[ "$RELEASE" != rebuild ]] && gh release view "v$version" >/dev/null 2>&1; then
+            echo "Release v$version already exists. Run rebuild to replace its APK, or bump again."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "code=$(jq -r .versionCode version.json)" >> "$GITHUB_OUTPUT"
+          echo "Building v$version (versionCode $(jq -r .versionCode version.json)) for $EXPO_PUBLIC_API_URL"
+
+      - name: Write production env and signing key
+        env:
+          EXPO_PUBLIC_OLA_MAPS_API_KEY: ${{ secrets.EXPO_PUBLIC_OLA_MAPS_API_KEY }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_ENV: ${{ secrets.ANDROID_RELEASE_ENV }}
+        run: |
+          set -euo pipefail
+          for name in EXPO_PUBLIC_OLA_MAPS_API_KEY ANDROID_KEYSTORE_BASE64 ANDROID_RELEASE_ENV; do
+            if [[ -z "${!name}" ]]; then
+              echo "Repository secret $name is empty. See docs/commands.md → GitHub Actions."
+              exit 1
+            fi
+          done
+          {
+            echo "EXPO_PUBLIC_APPLICATION_MODE=$EXPO_PUBLIC_APPLICATION_MODE"
+            echo "EXPO_PUBLIC_API_URL=$EXPO_PUBLIC_API_URL"
+            echo "EXPO_PUBLIC_AUTH_BASE_PATH=$EXPO_PUBLIC_AUTH_BASE_PATH"
+            echo "EXPO_PUBLIC_API_PREFIX=$EXPO_PUBLIC_API_PREFIX"
+            echo "EXPO_PUBLIC_GRAPHQL_PATH=$EXPO_PUBLIC_GRAPHQL_PATH"
+            echo "EXPO_PUBLIC_OLA_MAPS_API_KEY=$EXPO_PUBLIC_OLA_MAPS_API_KEY"
+          } > .env.production
+          mkdir -p .keys
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > .keys/android-upload.jks
+          printf '%s\n' "$ANDROID_RELEASE_ENV" > .keys/android-release.env
+
+      # Same command as local builds: production env only, release signing, and a check that the
+      # API URL is inside the bundle.
+      - name: Build production APK
+        run: bun run android:apk:build
+
+      - name: Name the APK
+        run: cp "apks/android/hisaabsathi-connect-v${{ steps.version.outputs.version }}.apk" "$ASSET"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hisaabsathi-connect-v${{ steps.version.outputs.version }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Commit version bump
+        if: inputs.release != 'rebuild'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release v${{ steps.version.outputs.version }}"
+          git push origin HEAD:main
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          sha="$(git rev-parse HEAD)"
+          cat > notes.md <<EOF
+          Hisaab Sathi Connect $tag (versionCode $CODE)
+
+          Built from $sha on $(date -u '+%Y-%m-%d %H:%M UTC'), for $EXPO_PUBLIC_API_URL.
+
+          Download **$ASSET** below and open it on the phone; allow "Install unknown apps" when
+          Android asks. It installs over the previous Connector build and keeps the app's data.
+          EOF
+
+          if [[ "$RELEASE" == rebuild ]] && gh release view "$tag" >/dev/null 2>&1; then
+            # Same version, new build: point the tag at this commit and replace the APK in place.
+            git tag -f "$tag" "$sha"
+            git push -f origin "refs/tags/$tag"
+            gh release upload "$tag" "$ASSET" --clobber
+            gh release edit "$tag" --notes-file notes.md
+            echo "Replaced $ASSET on $tag."
+          else
+            gh release create "$tag" "$ASSET" --target "$sha" \
+              --title "Hisaab Sathi Connect $tag" --notes-file notes.md --latest
+            echo "Published $tag."
+          fi

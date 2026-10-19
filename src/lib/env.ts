@@ -1,7 +1,9 @@
 const trailingSlash = /\/$/;
 
-function requiredUrl(name: "EXPO_PUBLIC_API_URL") {
-  const value = process.env[name]?.trim();
+// Release bundles inline only static `process.env.EXPO_PUBLIC_*` reads; `process.env[name]` is
+// undefined there, so callers pass the value read with a static key.
+function requiredUrl(name: string, raw: string | undefined) {
+  const value = raw?.trim();
   if (!value) {
     throw new Error(`${name} is required. Copy .env.example to .env and set the API origin.`);
   }
@@ -19,7 +21,7 @@ function path(value: string | undefined, fallback: string) {
 }
 
 export const env = {
-  apiUrl: requiredUrl("EXPO_PUBLIC_API_URL"),
+  apiUrl: requiredUrl("EXPO_PUBLIC_API_URL", process.env.EXPO_PUBLIC_API_URL),
   applicationMode: process.env.EXPO_PUBLIC_APPLICATION_MODE?.trim() || "development",
   authBasePath: path(process.env.EXPO_PUBLIC_AUTH_BASE_PATH, "/api/auth"),
   apiPrefix: path(process.env.EXPO_PUBLIC_API_PREFIX, "/api/v1"),

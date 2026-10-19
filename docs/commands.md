@@ -15,10 +15,13 @@ it. Run all commands from the `connector/` folder.
 | Check code before finishing work               | `bun run lint` and `bun run typecheck` |
 | Auto-fix formatting and lint issues            | `bun run fix`                        |
 | Check Expo config and dependency health        | `bun run doctor`                     |
-| Build a production APK to install on any phone | `bun run apk`                        |
+| Build a production APK to install on any phone | `bun run android:apk:build`                |
+| Install that APK on a connected phone          | `bun run android:device:install`     |
+| Remove every Connector app from a connected phone | `bun run android:device:uninstall` |
 | Make a Play Store release                      | `bun run release`                    |
 | Preview a release without changing anything    | `bun run release --dry-run`          |
 | Create the signing key (only once, ever)       | `bun run credentials:generate`       |
+| Build/release the APK on GitHub                | Actions → **Android APK** → Run workflow |
 
 ## One-time machine setup
 
@@ -163,7 +166,7 @@ Typical flow: `bun run fix`, then `bun run lint`, then `bun run typecheck`.
 
 ## Production environment: `.env.production`
 
-Release builds (`apk` and `release`) read **only** `.env.production`. The development `.env` is never
+Release builds (`android:apk:build` and `release`) read **only** `.env.production`. The development `.env` is never
 used for them, so a key missing from `.env.production` stays empty instead of silently falling back to
 a development value. The build stops if `EXPO_PUBLIC_API_URL` is not a public `https` URL or if
 `EXPO_PUBLIC_APPLICATION_MODE` is not `production`, and warns about any empty `EXPO_PUBLIC_` value.
@@ -172,10 +175,10 @@ a development value. The build stops if `EXPO_PUBLIC_API_URL` is not a public `h
 `.env.production` later does not change an APK you already built; build again. These values ship in
 the APK and are readable by anyone, so never put server secrets in this file. It is ignored by git.
 
-## Build a production APK: `bun run apk`
+## Build a production APK: `bun run android:apk:build`
 
 ```bash
-bun run apk
+bun run android:apk:build
 ```
 
 **Why:** Builds a signed release APK with the production keys, ready to send to and install on any
@@ -187,7 +190,9 @@ Android phone. It:
 4. Runs `./gradlew assembleRelease` and copies the APK to
    `apks/android/hisaabsathi-connect-vX.Y.Z.apk`.
 
-It does **not** change `version.json`; building the same version again replaces that APK.
+It does **not** change `version.json`. Building the same version again first deletes the old APK, then
+writes the new one in its place, so a failed build never leaves a stale file. After the build it
+checks that the production API URL is really inside the app bundle and fails if it is not.
 
 The APK is size-optimized: R8 removes unused Java/Kotlin code, unused resources are dropped, native
 libraries are stored compressed (set in `app.config.ts`), and only ARM CPU code is included
@@ -195,13 +200,44 @@ libraries are stored compressed (set in `app.config.ts`), and only ARM CPU code 
 For other targets:
 
 ```bash
-bun run apk --abi arm64-v8a                           # smallest: 64-bit phones only
-bun run apk --abi armeabi-v7a,arm64-v8a,x86,x86_64    # also runs on emulators
+bun run android:apk:build --abi arm64-v8a                           # smallest: 64-bit phones only
+bun run android:apk:build --abi armeabi-v7a,arm64-v8a,x86,x86_64    # also runs on emulators
 ```
 
-Non-default `--abi` builds get the ABIs in the file name, e.g. `hisaabsathi-connect-v0.0.1-arm64-v8a.apk`. Install it with
-`adb install -r apks/android/hisaabsathi-connect-vX.Y.Z.apk`, or copy the file to a phone and open it
-(allow "Install unknown apps" when asked). `apks/` is ignored by git.
+Non-default `--abi` builds get the ABIs in the file name, e.g. `hisaabsathi-connect-v0.0.1-arm64-v8a.apk`. Copy the file to any phone and open it (allow "Install unknown apps" when asked), or install it over USB
+with `bun run android:device:install`. `apks/` is ignored by git.
+
+## Install the APK on a phone: `bun run android:device:install`
+
+```bash
+bun run android:device:install
+bun run android:device:install --apk apks/android/hisaabsathi-connect-v0.0.1-arm64-v8a.apk
+```
+
+**Why:** Installs the production APK on a USB-connected phone and opens it. It:
+
+1. Picks this version's APK from `apks/android/` (or the newest APK there, or the one given with
+   `--apk`).
+2. Finds connected phones and asks which one if there is more than one. If none is ready, it explains
+   how to enable USB debugging.
+3. Checks the phone's CPU type is in the APK, and tells you which `--abi` to build if not.
+4. Installs with `adb install -r`, keeping the app's data when updating.
+5. If the phone has the development client (signed with a different key), asks before uninstalling
+   it, because Android cannot replace it and uninstalling deletes the app's data.
+6. Opens the app.
+
+## Remove the app from a phone: `bun run android:device:uninstall`
+
+```bash
+bun run android:device:uninstall          # lists the apps, then asks before removing
+bun run android:device:uninstall --yes    # no question
+```
+
+**Why:** Fully removes every Hisaab Sathi Connector app from a USB-connected phone: this app
+(`in.hisaabsathi.connect`, release or dev client), Connector v1 (`com.hisaabsathi.connect`), and any
+other package whose id contains `hisaabsathi` and `connect`. It also clears data left behind by an
+app uninstalled with "keep data", and removes the apps for every user profile on the phone. Use it
+before a clean test install, or when the dev client and release APK clash over signing keys.
 
 ## Releasing to the Play Store
 
@@ -262,6 +298,47 @@ adb install -r releases/vX.Y.Z/hisaabsathi-connect.apk
 replaces the installed app. If the dev client is installed, uninstall it first
 (`adb uninstall in.hisaabsathi.connect`), because the two are signed with different keys.
 
+## GitHub Actions: build and release the APK
+
+`.github/workflows/android-apk.yml` builds the same production APK in the cloud and publishes it as a
+GitHub release. Run it from **Actions → Android APK → Run workflow** on `main` and choose:
+
+| Choice                    | What happens                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| `rebuild` (default)       | Builds the current `version.json` version again. Replaces `hisaabsathi-connect.apk` on that version's release and moves its tag to the rebuilt commit. Creates the release if the version has none. No version change. |
+| `patch` / `minor` / `major` | Bumps `version.json` (and `versionCode`), builds, commits `Release vX.Y.Z` to `main`, and publishes a new `vX.Y.Z` release. Stops before building if that release already exists. |
+
+The workflow runs `bun run lint`, `bun run typecheck`, and then `bun run android:apk:build`, so it uses the
+same size optimizations and the same API-URL bundle check as a local build. It also keeps the APK as a
+workflow artifact for 14 days. The newest release's APK is always at:
+
+```
+https://github.com/hisaabsathi-tech/connector/releases/latest/download/hisaabsathi-connect.apk
+```
+
+**Production values:** the public values (`EXPO_PUBLIC_API_URL=https://server.hisaabsathi.in`, auth
+path, API prefix, GraphQL path) are in the workflow's `env:` block; change them there. The workflow
+writes `.env.production` from them on the runner. Your local `.env.production` is not used.
+
+### One-time secrets setup
+
+The CI APK must be signed with the **same** upload key as local builds, or phones cannot update from
+one to the other. Add these repository secrets once (from `connector/`, with `gh` signed in):
+
+```bash
+base64 -i .keys/android-upload.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_RELEASE_ENV < .keys/android-release.env
+gh secret set EXPO_PUBLIC_OLA_MAPS_API_KEY        # paste the production Ola Maps key
+```
+
+| Secret                         | Contents                                         |
+| ------------------------------ | ------------------------------------------------ |
+| `ANDROID_KEYSTORE_BASE64`      | `.keys/android-upload.jks`, base64-encoded       |
+| `ANDROID_RELEASE_ENV`          | The whole `.keys/android-release.env` file        |
+| `EXPO_PUBLIC_OLA_MAPS_API_KEY` | Production Ola Maps key                          |
+
+The workflow stops with a clear message if any of them is empty.
+
 ## Useful adb commands
 
 ```bash
@@ -283,9 +360,9 @@ If `adb` is not found, it lives in the SDK at
 | `assets/logo/android/` | all builds                  | Generated Android launcher icon assets         |
 | `assets/logo/splash/` | all builds                   | Splash SVG sources and generated native PNG    |
 | `version.json`        | `release`, home screen      | Updated by `release`; don't edit by hand    |
-| `scripts/`            | `device`, `release`, `credentials:generate` | Build helper scripts        |
-| `.env.production`     | `apk`, `release`            | Production keys baked into release builds   |
-| `.keys/`              | `apk`, `release`            | Signing key. Never commit or delete         |
+| `scripts/`            | all `bun run` helpers       | Build helper scripts        |
+| `.env.production`     | `android:apk:build`, `release`    | Production keys baked into release builds   |
+| `.keys/`              | `android:apk:build`, `release`    | Signing key. Never commit or delete         |
 | `android/`            | builds                      | Generated. Safe to delete; it is rebuilt    |
 | `releases/`           | `release` output            | Built AAB and APK files, ignored by git     |
-| `apks/android/`       | `apk` output                | Production APKs, ignored by git             |
+| `apks/android/`       | `android:apk:build`, `android:device:install` | Production APKs, ignored by git             |

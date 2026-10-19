@@ -37,7 +37,9 @@ export async function graphqlRequest<T>(options: {
       method: "POST",
     });
   } catch {
-    throw new GraphqlApiError("An active internet connection is required.");
+    throw new GraphqlApiError(
+      "Couldn't reach the server. Check your internet connection and try again.",
+    );
   }
 
   const payload = (await response.json().catch(() => null)) as GraphqlResponse<T> | null;

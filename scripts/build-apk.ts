@@ -1,11 +1,11 @@
 /** biome-ignore-all lint/suspicious/noConsole: this CLI reports build progress */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { androidEnv } from "./android-env";
-import { productionEnv, signingEnv } from "./release-env";
+import { assertApiReachable, productionEnv, signingEnv } from "./release-env";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const expo = resolve(root, "node_modules/.bin/expo");
@@ -25,8 +25,15 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv, cwd = root
 try {
   const { version } = JSON.parse(readFileSync(resolve(root, "version.json"), "utf8"));
   const production = productionEnv();
+  await assertApiReachable(production.apiUrl);
   const { env } = androidEnv();
   const buildEnv = { ...env, ...signingEnv(), ...production.env };
+
+  const outDir = resolve(root, "apks/android");
+  const suffix = abis === defaultAbis ? "" : `-${abis.replaceAll(",", "-")}`;
+  const apk = resolve(outDir, `hisaabsathi-connect-v${version}${suffix}.apk`);
+  // Remove the previous build of this version first, so a failed build never leaves a stale APK.
+  rmSync(apk, { force: true });
 
   console.log(`Building production APK v${version} (${abis}) for ${production.apiUrl}`);
   if (production.empty.length > 0) {
@@ -42,15 +49,25 @@ try {
     resolve(root, "android"),
   );
 
-  const outDir = resolve(root, "apks/android");
-  const suffix = abis === defaultAbis ? "" : `-${abis.replaceAll(",", "-")}`;
-  const apk = resolve(outDir, `hisaabsathi-connect-v${version}${suffix}.apk`);
+  const built = resolve(root, "android/app/build/outputs/apk/release/app-release.apk");
+  // Release bundles only contain EXPO_PUBLIC_ values read with a static key; a missing API URL
+  // means the app would crash on launch.
+  const bundle = spawnSync("unzip", ["-p", built, "assets/index.android.bundle"], {
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  if (bundle.status !== 0 || !bundle.stdout.includes(production.apiUrl)) {
+    throw new Error(
+      `The built JS bundle does not contain ${production.apiUrl}. Read env values as static ` +
+        "`process.env.EXPO_PUBLIC_*` keys, never `process.env[name]`.",
+    );
+  }
+
   mkdirSync(outDir, { recursive: true });
-  copyFileSync(resolve(root, "android/app/build/outputs/apk/release/app-release.apk"), apk);
+  copyFileSync(built, apk);
 
   const size = (statSync(apk).size / 1024 / 1024).toFixed(1);
   console.log(`\nProduction APK ready (${size} MB): ${relative(root, apk)}`);
-  console.log(`Install over USB: adb install -r ${relative(root, apk)}`);
+  console.log("Install on a connected phone: bun run android:device:install");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
