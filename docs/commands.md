@@ -187,8 +187,19 @@ Android phone. It:
 4. Runs `./gradlew assembleRelease` and copies the APK to
    `apks/android/hisaabsathi-connect-vX.Y.Z.apk`.
 
-It does **not** change `version.json`; building the same version again replaces that APK. The APK
-contains every CPU architecture, so it runs on all phones and emulators. Install it with
+It does **not** change `version.json`; building the same version again replaces that APK.
+
+The APK is size-optimized: R8 removes unused Java/Kotlin code, unused resources are dropped, native
+libraries are stored compressed (set in `app.config.ts`), and only ARM CPU code is included
+(`arm64-v8a` and `armeabi-v7a`), which covers every real Android phone, including 32-bit budget ones.
+For other targets:
+
+```bash
+bun run apk --abi arm64-v8a                           # smallest: 64-bit phones only
+bun run apk --abi armeabi-v7a,arm64-v8a,x86,x86_64    # also runs on emulators
+```
+
+Non-default `--abi` builds get the ABIs in the file name, e.g. `hisaabsathi-connect-v0.0.1-arm64-v8a.apk`. Install it with
 `adb install -r apks/android/hisaabsathi-connect-vX.Y.Z.apk`, or copy the file to a phone and open it
 (allow "Install unknown apps" when asked). `apks/` is ignored by git.
 

@@ -641,7 +641,7 @@ export default function AuthScreen() {
               <Image
                 accessibilityLabel="Hisaab Sathi Connect"
                 contentFit="contain"
-                source={require("@/assets/illustrations/auth.svg")}
+                source={require("@/assets/illustrations/auth.webp")}
                 style={{
                   height: ILLUSTRATION_HEIGHT,
                   marginBottom: ILLUSTRATION_GAP,
