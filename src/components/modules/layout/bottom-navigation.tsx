@@ -7,6 +7,7 @@ import { Pressable, View } from "react-native";
 
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
+import { type HapticKind, haptic } from "@/lib/haptics";
 
 type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
@@ -15,6 +16,12 @@ const items = {
   attendance: { icon: Calendar01Icon, label: "Attendance" },
   profile: { icon: User02Icon, label: "Profile" },
 } as const;
+
+const pageHaptics: Record<keyof typeof items, HapticKind> = {
+  attendance: "medium",
+  index: "selection",
+  profile: "light",
+};
 
 /** The current role baseline: every signed-in user gets these three destinations. */
 export function BottomNavigation({ insets, navigation, state }: BottomTabBarProps) {
@@ -31,7 +38,10 @@ export function BottomNavigation({ insets, navigation, state }: BottomTabBarProp
             target: route.key,
             type: "tabPress",
           });
-          if (!(active || event.defaultPrevented)) navigation.navigate(route.name);
+          if (!(active || event.defaultPrevented)) {
+            haptic(pageHaptics[route.name as keyof typeof items]);
+            navigation.navigate(route.name);
+          }
         };
         return (
           <Pressable

@@ -25,7 +25,8 @@ export default function TabsLayout() {
     <View className="flex-1 bg-background" onLayout={markStartupReady}>
       <Tabs
         backBehavior="history"
-        screenOptions={{ animation: "none", headerShown: false }}
+        // `shift` preserves a horizontal, directional-feeling transition between tabs.
+        screenOptions={{ animation: "shift", headerShown: false }}
         tabBar={(props) => <BottomNavigation {...props} />}
       >
         <Tabs.Screen name="index" />
