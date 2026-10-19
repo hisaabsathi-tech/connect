@@ -3,8 +3,10 @@ import { Redirect, router } from "expo-router";
 import { ArrowRight01Icon, CancelCircleIcon, ViewIcon, ViewOffIcon } from "hugeicons-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Dimensions,
   Keyboard,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   Pressable,
   ScrollView,
@@ -33,6 +35,13 @@ type Screen =
 const EMAIL = /^\S+@\S+\.\S+$/;
 const OTP = /^\d{6}$/;
 const STRONG_PASSWORD = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])\S{8,}$/;
+const ILLUSTRATION_HEIGHT = 170;
+const ILLUSTRATION_GAP = 24;
+// Space kept between the focused field and the keyboard.
+const KEYBOARD_GAP = 12;
+// Room above a field for its label, and below it for the next action.
+const FIELD_LABEL_SPACE = 40;
+const NEXT_ACTION_SPACE = 72;
 
 function ArrowRightIcon({ color }: { color: string }) {
   return <ArrowRight01Icon color={color} size={20} strokeWidth={2} />;
@@ -213,41 +222,76 @@ export default function AuthScreen() {
   const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now());
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // Part of the scroll view the keyboard covers. ~0 when the window resizes for
+  // the keyboard (Android adjustResize / iOS KeyboardAvoidingView), else its height.
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [formHeight, setFormHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+  const viewportRef = useRef<View>(null);
   const scrollOffset = useRef(0);
   const focusedInput = useRef<TextInput | null>(null);
-  const focusField = useCallback((input: TextInput | null) => {
-    if (!input) return;
-    focusedInput.current = input;
-    setKeyboardVisible(true);
-    // Wait for the OS keyboard animation/resize, then put the active field
-    // safely above it. This is the native equivalent of Connector v1's field lift.
-    setTimeout(() => {
-      input.measureInWindow((_x, y) => {
-        const target = Math.max(0, scrollOffset.current + y - 112);
-        scrollRef.current?.scrollTo({ animated: true, y: target });
-      });
-    }, 220);
+  // Window y of the keyboard's top edge; 0 while it is hidden.
+  const keyboardTop = useRef(0);
+  const measureKeyboardInset = useCallback(() => {
+    if (!keyboardTop.current) return;
+    viewportRef.current?.measureInWindow((_x, y, _width, height) => {
+      setKeyboardInset(Math.max(0, Math.round(y + height - keyboardTop.current)));
+    });
   }, []);
+  // Scroll only by what is needed to show the focused field (with its label)
+  // and the action under it above the keyboard. Fields already visible stay put.
+  const revealField = useCallback((input: TextInput | null) => {
+    const scroll = scrollRef.current;
+    const viewport = viewportRef.current;
+    if (!input || !scroll || !viewport) return;
+    viewport.measureInWindow((_sx, viewTop, _sw, viewHeight) => {
+      const visibleTop = viewTop + FIELD_LABEL_SPACE;
+      const visibleBottom =
+        Math.min(viewTop + viewHeight, keyboardTop.current || Number.POSITIVE_INFINITY) -
+        KEYBOARD_GAP;
+      input.measureInWindow((_x, top, _width, height) => {
+        const bottom = top + height + NEXT_ACTION_SPACE;
+        let delta = 0;
+        // Never push the field's label above the visible area to reveal the action.
+        if (bottom > visibleBottom) delta = Math.min(bottom - visibleBottom, top - visibleTop);
+        else if (top < visibleTop) delta = top - visibleTop;
+        if (Math.abs(delta) < 4) return;
+        scroll.scrollTo({ animated: true, y: Math.max(0, scrollOffset.current + delta) });
+      });
+    });
+  }, []);
+  const focusField = useCallback(
+    (input: TextInput | null) => {
+      if (!input) return;
+      focusedInput.current = input;
+      // Opening keyboard: keyboardDidShow reveals it once the layout settles.
+      if (keyboardTop.current) setTimeout(() => revealField(input), 60);
+    },
+    [revealField],
+  );
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
+      const { height, screenY } = event.endCoordinates;
+      keyboardTop.current = screenY || Dimensions.get("window").height - height;
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setKeyboardVisible(true);
-      setTimeout(() => focusField(focusedInput.current), 80);
+      measureKeyboardInset();
+      setTimeout(() => revealField(focusedInput.current), 140);
     });
     const hide = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboardHeight(0);
-      setKeyboardVisible(false);
+      keyboardTop.current = 0;
       focusedInput.current = null;
-      scrollRef.current?.scrollTo({ animated: true, y: 0 });
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setKeyboardVisible(false);
+      setKeyboardInset(0);
     });
     return () => {
       show.remove();
       hide.remove();
     };
-  }, [focusField]);
+  }, [measureKeyboardInset, revealField]);
   useEffect(() => {
     if (!resendAt) return;
     const id = setInterval(() => setNow(Date.now()), 1_000);
@@ -310,6 +354,12 @@ export default function AuthScreen() {
             : "verify-two-fa",
       );
     });
+  // With the keyboard open, keep the illustration only if it still fits above it
+  // alongside the whole form on this device.
+  const visibleHeight = viewportHeight - keyboardInset - KEYBOARD_GAP * 2 - 16;
+  const showIllustration =
+    screen === "sign-in" &&
+    (!keyboardVisible || formHeight + ILLUSTRATION_HEIGHT + ILLUSTRATION_GAP <= visibleHeight);
   // Don't mark startup ready yet: the root loader stays up until real content lays out.
   if (!isReady) return <Loader fullPage />;
   if (sessionToken)
@@ -552,31 +602,50 @@ export default function AuthScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         className="flex-1"
       >
-        <ScrollView
-          contentContainerClassName={
-            keyboardVisible
-              ? "items-center px-6 pt-4"
-              : "min-h-full items-center justify-center px-6 pb-10 pt-4"
-          }
-          contentContainerStyle={{ paddingBottom: keyboardVisible ? keyboardHeight + 32 : 40 }}
-          keyboardDismissMode="interactive"
-          keyboardShouldPersistTaps="handled"
-          onScroll={(event) => {
-            scrollOffset.current = event.nativeEvent.contentOffset.y;
+        {/* Content stays centred in whatever space is visible, so opening the
+            keyboard only nudges it up as far as the device actually needs. */}
+        <View
+          className="flex-1"
+          onLayout={(event) => {
+            setViewportHeight(event.nativeEvent.layout.height);
+            measureKeyboardInset();
           }}
-          ref={scrollRef}
-          scrollEventThrottle={16}
+          ref={viewportRef}
         >
-          {screen === "sign-in" && !keyboardVisible ? (
-            <Image
-              accessibilityLabel="Hisaab Sathi Connect"
-              contentFit="contain"
-              source={require("@/assets/illustrations/auth.svg")}
-              style={{ height: 170, marginBottom: 24, maxWidth: 241, width: "100%" }}
-            />
-          ) : null}
-          {content}
-        </ScrollView>
+          <ScrollView
+            contentContainerClassName="min-h-full items-center justify-center px-6 pt-4"
+            contentContainerStyle={{
+              paddingBottom: keyboardVisible ? keyboardInset + KEYBOARD_GAP * 2 : 40,
+            }}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            onScroll={(event) => {
+              scrollOffset.current = event.nativeEvent.contentOffset.y;
+            }}
+            ref={scrollRef}
+            scrollEventThrottle={16}
+          >
+            {showIllustration ? (
+              <Image
+                accessibilityLabel="Hisaab Sathi Connect"
+                contentFit="contain"
+                source={require("@/assets/illustrations/auth.svg")}
+                style={{
+                  height: ILLUSTRATION_HEIGHT,
+                  marginBottom: ILLUSTRATION_GAP,
+                  maxWidth: 241,
+                  width: "100%",
+                }}
+              />
+            ) : null}
+            <View
+              className="w-full items-center"
+              onLayout={(event) => setFormHeight(event.nativeEvent.layout.height)}
+            >
+              {content}
+            </View>
+          </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </View>
   );
