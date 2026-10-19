@@ -1,5 +1,6 @@
-import { Pressable, Text } from "react-native";
+import { Pressable } from "react-native";
 
+import { Text } from "@/components/modules/typography";
 import { type HapticKind, haptic } from "@/lib/haptics";
 
 type Tone = "brand" | "neutral" | "success" | "warning" | "danger";
@@ -18,15 +19,15 @@ const tones: Record<Tone, { button: string; label: string }> = {
   },
 };
 
-type Props = {
+export interface HapticButtonProps {
   label: string;
   kind: HapticKind;
   tone?: Tone;
   onPress?: () => void;
-};
+}
 
 /** Button that fires its haptic on touch-down, so the feedback lands with the finger. */
-export function HapticButton({ label, kind, tone = "neutral", onPress }: Props) {
+export function HapticButton({ label, kind, tone = "neutral", onPress }: HapticButtonProps) {
   const style = tones[tone];
   return (
     <Pressable

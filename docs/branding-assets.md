@@ -12,7 +12,6 @@ These are the files a designer should replace. Keep their current aspect ratios.
 | `assets/logo/base/app.svg` | Master app/launcher icon | 307 | 307 | 1:1 |
 | `assets/logo/base/app.png` | Optional PNG master icon fallback | Square | Square | 1:1 |
 | `assets/logo/splash/dark.svg` | Wordmark for the default whitish splash background | 669 | 144 | 223:48 (about 4.646:1) |
-| `assets/logo/splash/light.svg` | Wordmark reserved for a future dark splash background | 669 | 144 | 223:48 (about 4.646:1) |
 
 SVG dimensions come from each file's `viewBox`. If `app.svg` and `app.png` both exist, the generator
 uses `app.svg` unless `--source=app.png` is passed explicitly. A PNG app source must be square; use at
@@ -38,6 +37,23 @@ The command writes these build inputs:
 
 All generated PNG canvases are square because Android launcher and modern native splash resources
 are built from square inputs. The wide wordmark remains wide inside the square splash canvas.
+
+## In-app images are WebP
+
+Images the app `require`s from `src/` are WebP, rendered at 3× their on-screen size (the largest
+phone density) so one file stays sharp everywhere. SVG is kept only for the masters above, which
+`logo:generate` reads and which never ship in the bundle.
+
+`assets/logo/splash/dark.webp` (the wordmark in the auth header) is not written by
+`logo:generate`. After replacing `dark.svg`, re-export it at 474 px wide (3× its 158 pt display
+width) with any SVG renderer, then encode it losslessly:
+
+```bash
+cwebp -lossless -z 9 -exact dark.png -o assets/logo/splash/dark.webp
+```
+
+Encode flat vector art (icons, pins, logos) with `-lossless`; encode photographic or 3D
+illustrations with `-q 90 -alpha_q 100 -m 6 -sharp_yuv`, which is about 4× smaller.
 
 ## Artwork placement inside generated files
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Animated, Easing, View } from "react-native";
 
+import { colors } from "@/config/colors";
+
 export interface LoaderProps {
   className?: string;
   fullHeight?: boolean;
@@ -51,7 +53,7 @@ export function Loader({
       {/* NativeWind does not style RN's Animated.View, so the colour must be inline. */}
       <Animated.View
         style={{
-          backgroundColor: "#465FFF",
+          backgroundColor: colors.primary,
           borderRadius: progress.interpolate({
             inputRange: [0, 0.2, 0.4, 0.6, 0.8, 1],
             outputRange: [

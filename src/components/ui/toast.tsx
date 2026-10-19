@@ -18,6 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast, { type ToastConfig } from "react-native-toast-message";
 import { scheduleOnRN } from "react-native-worklets";
 
+import { colors } from "@/config/colors";
+
 type ToastKind = "error" | "info" | "success";
 
 function ToastIcon({ type }: { type: ToastKind }) {
@@ -27,7 +29,8 @@ function ToastIcon({ type }: { type: ToastKind }) {
       : type === "success"
         ? CheckmarkCircle02Icon
         : InformationCircleIcon;
-  const color = type === "error" ? "#DC2626" : type === "success" ? "#16A34A" : "#465FFF";
+  const color =
+    type === "error" ? colors.destructive : type === "success" ? colors.success : colors.primary;
   return <HugeiconsIcon color={color} icon={icon} size={20} strokeWidth={2} />;
 }
 
@@ -99,7 +102,10 @@ function AppToast({
             </View>
             <View className="flex-1">
               {text1 ? (
-                <Text className="font-heading text-sm leading-5 text-foreground" numberOfLines={2}>
+                <Text
+                  className="font-heading text-sm font-medium leading-5 text-foreground"
+                  numberOfLines={2}
+                >
                   {text1}
                 </Text>
               ) : null}

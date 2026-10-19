@@ -24,6 +24,27 @@
   },
   "linter": {
     "enabled": true,
-    "rules": { "preset": "none" }
-  }
+    "rules": {
+      "preset": "none",
+      "style": {
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "react-native": {
+                "importNames": ["Text"],
+                "message": "Use Text from @/components/modules/typography so copy is set in Satoshi."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/components/ui/**", "src/components/modules/typography/**"],
+      "linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
+    }
+  ]
 }

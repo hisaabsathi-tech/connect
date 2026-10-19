@@ -100,7 +100,40 @@ export default ({ config }: ConfigContext): ExpoConfig =>
         },
         plugins: [
           "expo-router",
+          // Satoshi ships only Regular and Medium. One native family maps every weight to a real
+          // face (500+ → Medium), so heavier classes never fall back to a synthesized bold.
+          [
+            "expo-font",
+            {
+              android: {
+                fonts: [
+                  {
+                    fontFamily: "Satoshi",
+                    fontDefinitions: [
+                      { path: "./assets/fonts/Satoshi-Regular.otf", weight: 400 },
+                      { path: "./assets/fonts/Satoshi-Medium.otf", weight: 500 },
+                      { path: "./assets/fonts/Satoshi-Medium.otf", weight: 600 },
+                      { path: "./assets/fonts/Satoshi-Medium.otf", weight: 700 },
+                    ],
+                  },
+                ],
+              },
+              ios: {
+                fonts: ["./assets/fonts/Satoshi-Regular.otf", "./assets/fonts/Satoshi-Medium.otf"],
+              },
+            },
+          ],
           "expo-secure-store",
+          // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
+          // A development/release build is required; this is not available in Expo Go.
+          "@maplibre/maplibre-react-native",
+          [
+            "expo-location",
+            {
+              locationWhenInUsePermission:
+                "Allow Hisaabsathi Connector to use your location for attendance.",
+            },
+          ],
           [
             "expo-splash-screen",
             {
