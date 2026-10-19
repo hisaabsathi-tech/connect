@@ -14,6 +14,8 @@ const expo = resolve(root, "node_modules/.bin/expo");
 // emulators: pass `--abi armeabi-v7a,arm64-v8a,x86,x86_64` to include it, or `--abi arm64-v8a`
 // for the smallest APK that runs on 64-bit phones only.
 const defaultAbis = "armeabi-v7a,arm64-v8a";
+// A warm Gradle daemon makes repeat local builds faster; CI runners are thrown away after one build.
+const daemonArgs = process.env.CI ? ["--no-daemon"] : [];
 const abiIndex = process.argv.indexOf("--abi");
 const abiArg = process.argv.find((arg) => arg.startsWith("--abi="))?.slice("--abi=".length);
 const abis = abiArg ?? (abiIndex >= 0 ? process.argv[abiIndex + 1] : undefined) ?? defaultAbis;
@@ -46,7 +48,7 @@ try {
   run("bun", ["scripts/configure-android-signing.ts"], buildEnv);
   run(
     "./gradlew",
-    ["assembleRelease", "--no-daemon", `-PreactNativeArchitectures=${abis}`],
+    ["assembleRelease", ...daemonArgs, `-PreactNativeArchitectures=${abis}`],
     buildEnv,
     resolve(root, "android"),
   );

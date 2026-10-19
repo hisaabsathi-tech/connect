@@ -1,5 +1,10 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
-import { type ConfigPlugin, withAndroidStyles, withGradleProperties } from "expo/config-plugins";
+import {
+  type ConfigPlugin,
+  withAndroidStyles,
+  withAppBuildGradle,
+  withGradleProperties,
+} from "expo/config-plugins";
 
 import androidLogo from "./assets/logo/android/metadata.json";
 import release from "./version.json";
@@ -22,63 +27,94 @@ const withTransparentAutofillHighlight: ConfigPlugin = (config) =>
   });
 
 // Smaller release builds: R8 strips unused Java/Kotlin code, unused resources are dropped, and
-// native libraries are stored compressed inside the APK.
-const releaseSizeProperties: Record<string, string> = {
+// native libraries are stored compressed inside the APK. Fresco's GIF and WebP add-ons only serve
+// React Native's <Image>; the app uses expo-image, and Android 7+ decodes WebP natively.
+const gradleProperties: Record<string, string> = {
   "android.enableMinifyInReleaseBuilds": "true",
   "android.enableShrinkResourcesInReleaseBuilds": "true",
   "expo.useLegacyPackaging": "true",
+  "expo.gif.enabled": "false",
+  "expo.webp.enabled": "false",
+  // Faster builds: reuse task outputs across `prebuild --clean` and CI runs, and give R8/dexing
+  // enough memory not to stall on garbage collection.
+  "org.gradle.caching": "true",
+  "org.gradle.jvmargs": "-Xmx4096m -XX:MaxMetaspaceSize=1024m",
 };
 
-const withReleaseSizeOptimizations: ConfigPlugin = (config) =>
+const withGradlePropertyOverrides: ConfigPlugin = (config) =>
   withGradleProperties(config, (config) => {
     config.modResults = config.modResults.filter(
-      (item) => !(item.type === "property" && item.key in releaseSizeProperties),
+      (item) => !(item.type === "property" && item.key in gradleProperties),
     );
-    for (const [key, value] of Object.entries(releaseSizeProperties)) {
+    for (const [key, value] of Object.entries(gradleProperties)) {
       config.modResults.push({ type: "property", key, value });
     }
     return config;
   });
 
+// Libraries ship translations for ~80 languages. The app is English-only, so keep only English
+// resources; library strings (e.g. accessibility labels) then also show in English. Release lint
+// ("lint vital") is skipped to save build time; `bun run lint` and typecheck still guard the code.
+const releaseBuildGradle = `
+android {
+    androidResources {
+        localeFilters += ["en"]
+    }
+    lint {
+        checkReleaseBuilds false
+    }
+}
+`;
+
+const withReleaseBuildGradle: ConfigPlugin = (config) =>
+  withAppBuildGradle(config, (config) => {
+    if (!config.modResults.contents.includes("localeFilters")) {
+      config.modResults.contents += releaseBuildGradle;
+    }
+    return config;
+  });
+
 export default ({ config }: ConfigContext): ExpoConfig =>
-  withReleaseSizeOptimizations(
-    withTransparentAutofillHighlight({
-      ...config,
-      name: "Hisaabsathi Connector",
-      slug: "hisaab-sathi-connect",
-      version: release.version,
-      orientation: "portrait",
-      icon: "./assets/logo/android/app.png",
-      scheme: "hisaabsathi-connect",
-      userInterfaceStyle: "light",
-      android: {
-        package: "in.hisaabsathi.connect",
-        versionCode: release.versionCode,
-        softwareKeyboardLayoutMode: "resize",
-        adaptiveIcon: {
-          backgroundColor: androidLogo.backgroundColor,
-          foregroundImage: "./assets/logo/android/adaptive-foreground.png",
-          backgroundImage: "./assets/logo/android/adaptive-background.png",
-          monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
-        },
-        predictiveBackGestureEnabled: true,
-      },
-      plugins: [
-        "expo-router",
-        "expo-secure-store",
-        [
-          "expo-splash-screen",
-          {
-            backgroundColor: androidLogo.splashBackgroundColor,
-            image: "./assets/logo/splash/dark.png",
-            imageWidth: 288,
-            resizeMode: "contain",
+  withReleaseBuildGradle(
+    withGradlePropertyOverrides(
+      withTransparentAutofillHighlight({
+        ...config,
+        name: "Hisaabsathi Connector",
+        slug: "hisaab-sathi-connect",
+        version: release.version,
+        orientation: "portrait",
+        icon: "./assets/logo/android/app.png",
+        scheme: "hisaabsathi-connect",
+        userInterfaceStyle: "light",
+        android: {
+          package: "in.hisaabsathi.connect",
+          versionCode: release.versionCode,
+          softwareKeyboardLayoutMode: "resize",
+          adaptiveIcon: {
+            backgroundColor: androidLogo.backgroundColor,
+            foregroundImage: "./assets/logo/android/adaptive-foreground.png",
+            backgroundImage: "./assets/logo/android/adaptive-background.png",
+            monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
           },
+          predictiveBackGestureEnabled: true,
+        },
+        plugins: [
+          "expo-router",
+          "expo-secure-store",
+          [
+            "expo-splash-screen",
+            {
+              backgroundColor: androidLogo.splashBackgroundColor,
+              image: "./assets/logo/splash/dark.png",
+              imageWidth: 288,
+              resizeMode: "contain",
+            },
+          ],
         ],
-      ],
-      experiments: {
-        typedRoutes: true,
-        reactCompiler: true,
-      },
-    }),
+        experiments: {
+          typedRoutes: true,
+          reactCompiler: true,
+        },
+      }),
+    ),
   );

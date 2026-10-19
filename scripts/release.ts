@@ -51,10 +51,15 @@ async function buildStore(version: string): Promise<void> {
   const buildEnv = { ...env, ...signingEnv(), ...production.env };
   run(expo, ["prebuild", "--platform", "android", "--no-install", "--clean"], { env: buildEnv });
   run("bun", ["scripts/configure-android-signing.ts"], { env: buildEnv });
-  run("./gradlew", ["bundleRelease", "assembleRelease", "--no-daemon"], {
-    cwd: resolve(root, "android"),
-    env: buildEnv,
-  });
+  // A warm Gradle daemon makes repeat local builds faster; CI runners are thrown away after one build.
+  run(
+    "./gradlew",
+    ["bundleRelease", "assembleRelease", ...(process.env.CI ? ["--no-daemon"] : [])],
+    {
+      cwd: resolve(root, "android"),
+      env: buildEnv,
+    },
+  );
   const outDir = resolve(root, "releases", `v${version}`);
   if (dryRun) {
     console.log(`[dry-run] copy AAB and APK to ${outDir}`);
