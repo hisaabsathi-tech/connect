@@ -1,6 +1,11 @@
 name: Android APK
 
-# Run from Actions → Android APK → Run workflow, on main.
+# Never runs on an ordinary push. It runs only when started by hand (Actions → Android APK → Run
+# workflow, on main) or when a commit pushed to main carries a flag in its message:
+#   [apk]  or  [apk rebuild]   rebuild
+#   [apk patch|minor|major]    new release of that kind
+# If several pushed commits carry a flag, the last one wins.
+#
 #   rebuild              Build the current version.json version again and replace the APK on its
 #                        GitHub release (the tag moves to the rebuilt commit). Creates the release if
 #                        this version has none yet.
@@ -17,6 +22,9 @@ on:
           - minor
           - major
         default: rebuild
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -32,12 +40,13 @@ env:
   EXPO_PUBLIC_AUTH_BASE_PATH: /api/auth
   EXPO_PUBLIC_API_PREFIX: /api/v1
   EXPO_PUBLIC_GRAPHQL_PATH: /graphql
-  RELEASE: ${{ inputs.release }}
   ASSET: hisaabsathi-connect.apk
 
 jobs:
   apk:
-    name: Build ${{ inputs.release }}
+    name: Build APK
+    # A push without an [apk...] flag skips the job, so it uses no Actions minutes.
+    if: github.event_name == 'workflow_dispatch' || contains(toJSON(github.event.commits.*.message), '[apk')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -46,6 +55,30 @@ jobs:
         run: |
           echo "Run this workflow on main; releases commit version.json and tag main."
           exit 1
+
+      - name: Resolve build type
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT: ${{ inputs.release }}
+          MESSAGES: ${{ toJSON(github.event.commits.*.message) }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT" == workflow_dispatch ]]; then
+            release="$INPUT"
+          else
+            flag="$(jq -r '.[]' <<<"$MESSAGES" | grep -oE '\[apk( (rebuild|patch|minor|major))?\]' | tail -1 || true)"
+            if [[ -z "$flag" ]]; then
+              echo "A commit mentions [apk but has no valid flag."
+              echo "Use [apk], [apk rebuild], [apk patch], [apk minor], or [apk major]."
+              exit 1
+            fi
+            release="$(sed -E 's/\[apk ?([a-z]*)\]/\1/' <<<"$flag")"
+            release="${release:-rebuild}"
+          fi
+          echo "Build type: $release"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "RELEASE=$release" >> "$GITHUB_ENV"
 
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -138,7 +171,7 @@ jobs:
           retention-days: 14
 
       - name: Commit version bump
-        if: inputs.release != 'rebuild'
+        if: steps.mode.outputs.release != 'rebuild'
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"

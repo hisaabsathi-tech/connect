@@ -301,7 +301,28 @@ replaces the installed app. If the dev client is installed, uninstall it first
 ## GitHub Actions: build and release the APK
 
 `.github/workflows/android-apk.yml` builds the same production APK in the cloud and publishes it as a
-GitHub release. Run it from **Actions → Android APK → Run workflow** on `main` and choose:
+GitHub release. It **never runs on an ordinary push**. Start it in one of two ways:
+
+- **Commit flag:** put a flag anywhere in a commit message and push to `main`:
+
+  | Flag in the commit message | Build type |
+  | -------------------------- | ---------- |
+  | `[apk]` or `[apk rebuild]` | `rebuild`  |
+  | `[apk patch]`              | `patch`    |
+  | `[apk minor]`              | `minor`    |
+  | `[apk major]`              | `major`    |
+
+  ```bash
+  git commit -m "Fix login screen [apk]"          # rebuild the current version
+  git commit -m "Add attendance screen [apk minor]"   # new minor release
+  ```
+
+  If several pushed commits carry a flag, the last one wins. A push without a flag skips the job and
+  uses no Actions minutes. An unknown flag such as `[apk beta]` fails the run with the list of valid
+  ones. Flags are lowercase.
+- **By hand:** **Actions → Android APK → Run workflow** on `main`.
+
+The build types:
 
 | Choice                    | What happens                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------- |
