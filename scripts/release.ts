@@ -1,11 +1,12 @@
 /** biome-ignore-all lint/suspicious/noConsole: this CLI reports release progress */
 
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { androidEnv } from "./android-env";
+import { productionEnv, signingEnv } from "./release-env";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const versionPath = resolve(root, "version.json");
@@ -39,25 +40,9 @@ function run(
   if (result.status !== 0) throw new Error(`${printable} failed`);
 }
 
-function signingEnv() {
-  const keystore = resolve(root, ".keys/android-upload.jks");
-  const envFile = resolve(root, ".keys/android-release.env");
-  if (!(existsSync(keystore) && existsSync(envFile))) {
-    throw new Error("Upload keystore is missing. Run `bun run credentials:generate` first.");
-  }
-  const values = Object.fromEntries(
-    readFileSync(envFile, "utf8")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith("#"))
-      .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
-  );
-  return { ...values, ANDROID_KEYSTORE_PATH: keystore };
-}
-
 function buildStore(version: string): void {
   const { env } = androidEnv();
-  const buildEnv = { ...env, ...signingEnv() };
+  const buildEnv = { ...env, ...signingEnv(), ...productionEnv().env };
   run(expo, ["prebuild", "--platform", "android", "--no-install", "--clean"], { env: buildEnv });
   run("bun", ["scripts/configure-android-signing.ts"], { env: buildEnv });
   run("./gradlew", ["bundleRelease", "assembleRelease", "--no-daemon"], {

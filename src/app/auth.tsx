@@ -1,6 +1,12 @@
+import {
+  ArrowRight01Icon,
+  CancelCircleIcon,
+  ViewIcon,
+  ViewOffIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
 import { Redirect, router } from "expo-router";
-import { ArrowRight01Icon, CancelCircleIcon, ViewIcon, ViewOffIcon } from "hugeicons-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Dimensions,
@@ -44,16 +50,22 @@ const FIELD_LABEL_SPACE = 40;
 const NEXT_ACTION_SPACE = 72;
 
 function ArrowRightIcon({ color }: { color: string }) {
-  return <ArrowRight01Icon color={color} size={20} strokeWidth={2} />;
+  return <HugeiconsIcon color={color} icon={ArrowRight01Icon} size={20} strokeWidth={2} />;
 }
 
 function EyeIcon({ hidden }: { hidden: boolean }) {
-  const Icon = hidden ? ViewOffIcon : ViewIcon;
-  return <Icon color="#5F6470" size={21} strokeWidth={1.8} />;
+  return (
+    <HugeiconsIcon
+      color="#5F6470"
+      icon={hidden ? ViewOffIcon : ViewIcon}
+      size={21}
+      strokeWidth={1.8}
+    />
+  );
 }
 
 function ClearIcon() {
-  return <CancelCircleIcon color="#DC2626" size={22} strokeWidth={2} />;
+  return <HugeiconsIcon color="#DC2626" icon={CancelCircleIcon} size={19} strokeWidth={2} />;
 }
 
 function Card({

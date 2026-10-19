@@ -15,6 +15,7 @@ it. Run all commands from the `connector/` folder.
 | Check code before finishing work               | `bun run lint` and `bun run typecheck` |
 | Auto-fix formatting and lint issues            | `bun run fix`                        |
 | Check Expo config and dependency health        | `bun run doctor`                     |
+| Build a production APK to install on any phone | `bun run apk`                        |
 | Make a Play Store release                      | `bun run release`                    |
 | Preview a release without changing anything    | `bun run release --dry-run`          |
 | Create the signing key (only once, ever)       | `bun run credentials:generate`       |
@@ -160,6 +161,37 @@ Run lint and typecheck before you call any task done.
 
 Typical flow: `bun run fix`, then `bun run lint`, then `bun run typecheck`.
 
+## Production environment: `.env.production`
+
+Release builds (`apk` and `release`) read **only** `.env.production`. The development `.env` is never
+used for them, so a key missing from `.env.production` stays empty instead of silently falling back to
+a development value. The build stops if `EXPO_PUBLIC_API_URL` is not a public `https` URL or if
+`EXPO_PUBLIC_APPLICATION_MODE` is not `production`, and warns about any empty `EXPO_PUBLIC_` value.
+
+**Why:** `EXPO_PUBLIC_` values are baked into the JavaScript bundle when it is built. Changing
+`.env.production` later does not change an APK you already built; build again. These values ship in
+the APK and are readable by anyone, so never put server secrets in this file. It is ignored by git.
+
+## Build a production APK: `bun run apk`
+
+```bash
+bun run apk
+```
+
+**Why:** Builds a signed release APK with the production keys, ready to send to and install on any
+Android phone. It:
+
+1. Reads and checks `.env.production`.
+2. Regenerates `android/` with `expo prebuild --clean`.
+3. Adds release signing with the upload keystore in `.keys/`.
+4. Runs `./gradlew assembleRelease` and copies the APK to
+   `apks/android/hisaabsathi-connect-vX.Y.Z.apk`.
+
+It does **not** change `version.json`; building the same version again replaces that APK. The APK
+contains every CPU architecture, so it runs on all phones and emulators. Install it with
+`adb install -r apks/android/hisaabsathi-connect-vX.Y.Z.apk`, or copy the file to a phone and open it
+(allow "Install unknown apps" when asked). `apks/` is ignored by git.
+
 ## Releasing to the Play Store
 
 ### First time only: create the signing key
@@ -241,6 +273,8 @@ If `adb` is not found, it lives in the SDK at
 | `assets/logo/splash/` | all builds                   | Splash SVG sources and generated native PNG    |
 | `version.json`        | `release`, home screen      | Updated by `release`; don't edit by hand    |
 | `scripts/`            | `device`, `release`, `credentials:generate` | Build helper scripts        |
-| `.keys/`              | `release`                   | Signing key. Never commit or delete         |
+| `.env.production`     | `apk`, `release`            | Production keys baked into release builds   |
+| `.keys/`              | `apk`, `release`            | Signing key. Never commit or delete         |
 | `android/`            | builds                      | Generated. Safe to delete; it is rebuilt    |
 | `releases/`           | `release` output            | Built AAB and APK files, ignored by git     |
+| `apks/android/`       | `apk` output                | Production APKs, ignored by git             |

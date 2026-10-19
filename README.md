@@ -49,6 +49,18 @@ such as `bg-background`, `text-foreground`, `bg-primary`, and `border-border`. T
 across the whole app, edit only `--radius`; it is currently `0px` to match the Software UI. See
 [docs/branding-assets.md](docs/branding-assets.md) for every logo and splash dimension.
 
+## Production APK
+
+Put production values in `.env.production` (gitignored), then:
+
+```bash
+bun run apk
+```
+
+This builds a signed release APK using only `.env.production` and writes it to
+`apks/android/hisaabsathi-connect-vX.Y.Z.apk`, ready to install on any Android phone. It does not
+bump the version.
+
 ## Releases
 
 `version.json` holds the app version and Android version code. Releases build on this machine.
@@ -59,7 +71,7 @@ bun run release --dry-run --bump minor
 ```
 
 The release command bumps the version, prebuilds `android/`, signs with the upload keystore in
-`.keys/`, and writes `hisaabsathi-connect.aab` and `hisaabsathi-connect.apk` to `releases/vX.Y.Z/`.
+`.keys/`, bakes in `.env.production`, and writes `hisaabsathi-connect.aab` and `hisaabsathi-connect.apk` to `releases/vX.Y.Z/`.
 Upload the AAB to Play. If the build fails, `version.json` is restored.
 
 ## Signing credentials

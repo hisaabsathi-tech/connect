@@ -9,6 +9,8 @@
         "@expo/ui": "~57.0.23",
         "@gluestack-ui/core": "^5.0.15",
         "@gluestack-ui/utils": "^5.0.6",
+        "@hugeicons/core-free-icons": "^4.3.5",
+        "@hugeicons/react-native": "^1.0.16",
         "@legendapp/motion": "^2.5.3",
         "expo": "~57.0.28",
         "expo-constants": "~57.0.21",
@@ -26,7 +28,6 @@
         "expo-symbols": "~57.0.3",
         "expo-system-ui": "~57.0.4",
         "expo-web-browser": "~57.0.3",
-        "hugeicons-react-native": "^0.0.2",
         "nativewind": "5.0.0-rc.0",
         "react": "19.2.3",
         "react-dom": "19.2.3",
@@ -304,6 +305,10 @@
     "@gluestack-ui/core": ["@gluestack-ui/core@5.0.15", "", { "dependencies": { "@react-aria/checkbox": "^3.16.3", "@react-aria/focus": "^3.21.3", "@react-aria/interactions": "^3.26.0", "@react-aria/label": "^3.7.23", "@react-aria/menu": "^3.19.4", "@react-aria/overlays": "^3.31.0", "@react-aria/radio": "^3.12.3", "@react-aria/selection": "^3.27.0", "@react-aria/slider": "^3.8.3", "@react-aria/switch": "^3.7.10", "@react-aria/utils": "^3.32.0", "@react-aria/visually-hidden": "^3.8.29", "@react-stately/checkbox": "^3.7.4", "@react-stately/collections": "^3.12.9", "@react-stately/menu": "^3.9.10", "@react-stately/overlays": "^3.6.22", "@react-stately/radio": "^3.11.4", "@react-stately/slider": "^3.7.4", "@react-stately/toggle": "^3.9.4", "@react-stately/tree": "^3.9.5", "@react-stately/utils": "^3.11.0", "@react-types/button": "^3.14.1", "@react-types/checkbox": "^3.10.2", "@react-types/menu": "^3.10.5", "@react-types/overlays": "^3.9.2", "@react-types/radio": "^3.9.2", "@react-types/shared": "^3.33.0", "@react-types/slider": "^3.8.2", "@react-types/switch": "^3.5.15", "date-fns": "^4.1.0" }, "peerDependencies": { "@gluestack-ui/utils": "*", "react": ">=16.8.0", "react-native": ">=0.64.0", "react-native-safe-area-context": ">=4.0.0", "react-native-svg": ">=12.0.0", "react-native-web": ">=0.19.0" } }, "sha512-H9dOYlofbraLbdxt0B0WFuWp+n4ZBNJcFTThiC6y5gvVZlrOoWLG67OehcAsPr7iD+yiV3dAXMkVjRZyWltnAQ=="],
 
     "@gluestack-ui/utils": ["@gluestack-ui/utils@5.0.6", "", { "dependencies": { "@react-aria/dialog": "^3.5.27", "@react-aria/focus": "^3.21.3", "@react-aria/interactions": "^3.26.0", "@react-aria/ssr": "^3.9.9", "@react-aria/utils": "^3.32.0", "@react-stately/toggle": "^3.9.4", "@react-types/checkbox": "^3.10.2", "@react-types/dialog": "^3.5.22", "@react-types/shared": "^3.33.0", "dom-helpers": "^6.0.1", "react-aria": "^3.48.0", "react-stately": "^3.46.0", "tailwind-variants": "0.1.20" }, "peerDependencies": { "react": ">=16.8.0", "react-native": ">=0.64.0", "react-native-web": ">=0.19.0", "tailwindcss": ">=3.0.0" } }, "sha512-GjVIic+ea0XIrxgTzuiGqd/QiDyd/nPypIleKuMUthpTNX5MWz+dSTQf0GAXY0XeMxqGPlmX3T2o3uVTaevIcQ=="],
+
+    "@hugeicons/core-free-icons": ["@hugeicons/core-free-icons@4.3.5", "", {}, "sha512-Sv+NjHRPnQk+yZsGCMcGznCHdTfJR9PMMOEKcJYAQU4gy90dmlc9PwdtvYOImBZIjiheMsTLL5eMn2DmHxUiUg=="],
+
+    "@hugeicons/react-native": ["@hugeicons/react-native@1.0.16", "", { "peerDependencies": { "react": ">=16.0.0", "react-native": ">=0.60.0", "react-native-svg": ">=12.0.0" } }, "sha512-566CkIQPK82oa2Q3sadoNrGgxlsFH7JBz+mXZ8cqelm1o+KFfNhXXgJAII5+OI4nilEBSH2qPQzo9H80uNRUOA=="],
 
     "@internationalized/date": ["@internationalized/date@3.12.4", "", { "dependencies": { "@swc/helpers": "^0.5.0" } }, "sha512-M1dEn4c1U1HsSlaVR8upZtSqvXrTkHDfv18H01uCSJyjVLDxnBR38v/fMxecmlwXKR4i9HeZcmgQAPE6A+aGJQ=="],
 
@@ -898,8 +903,6 @@
     "http-errors": ["http-errors@2.0.1", "", { "dependencies": { "depd": "~2.0.0", "inherits": "~2.0.4", "setprototypeof": "~1.2.0", "statuses": "~2.0.2", "toidentifier": "~1.0.1" } }, "sha512-4FbRdAX+bSdmo4AUFuS0WNiPz8NgFt+r8ThgNWmlrjQjt1Q7ZR9+zTlce2859x4KSXrwIsaeTqDoKQmtP8pLmQ=="],
 
     "https-proxy-agent": ["https-proxy-agent@7.0.6", "", { "dependencies": { "agent-base": "^7.1.2", "debug": "4" } }, "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw=="],
-
-    "hugeicons-react-native": ["hugeicons-react-native@0.0.2", "", { "peerDependencies": { "react": ">=16.0.0", "react-native": ">=0.63.0", "react-native-svg": ">=13.14.0" } }, "sha512-rJYXwCNZB0l+HNUGwf1pGpm8yW4ckWtaITBup9XT46xe5ZTTKlMGiL38pR+NtZR6WogsM91dprfvywRcV8c+rg=="],
 
     "hyphenate-style-name": ["hyphenate-style-name@1.1.0", "", {}, "sha512-WDC/ui2VVRrz3jOVi+XtjqkDjiVjTtFaAGiW37k6b+ohyQ5wYDOGkvCZa8+H0nx3gyvv0+BST9xuOgIyGQ00gw=="],
 

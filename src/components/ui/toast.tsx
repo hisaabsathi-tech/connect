@@ -2,7 +2,8 @@ import {
   AlertCircleIcon,
   CheckmarkCircle02Icon,
   InformationCircleIcon,
-} from "hugeicons-react-native";
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { type PropsWithChildren, useEffect } from "react";
 import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -20,14 +21,14 @@ import { scheduleOnRN } from "react-native-worklets";
 type ToastKind = "error" | "info" | "success";
 
 function ToastIcon({ type }: { type: ToastKind }) {
-  const Icon =
+  const icon =
     type === "error"
       ? AlertCircleIcon
       : type === "success"
         ? CheckmarkCircle02Icon
         : InformationCircleIcon;
   const color = type === "error" ? "#DC2626" : type === "success" ? "#16A34A" : "#465FFF";
-  return <Icon color={color} size={20} strokeWidth={2} />;
+  return <HugeiconsIcon color={color} icon={icon} size={20} strokeWidth={2} />;
 }
 
 function AppToast({
