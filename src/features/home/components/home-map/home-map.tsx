@@ -15,7 +15,7 @@ import { Modal, Pressable, View } from "react-native";
 
 import { Text } from "@/components/modules/typography";
 import type { Point } from "@/lib/api/attendance";
-import type { Coordinates } from "@/lib/maps/geo";
+import { type Coordinates, distanceInMetres } from "@/lib/maps/geo";
 import { loadOlaMapStyle, OLA_MAPS_API_BASE, olaMapsKey } from "@/lib/maps/ola-maps";
 
 type Props = {
@@ -49,7 +49,7 @@ function MapLegend({ points, bottom }: { points: MapPoint[]; bottom: number }) {
   if (!points.length) return null;
   return (
     <View
-      className="absolute left-3 gap-1 bg-white/95 px-2 py-1.5"
+      className="absolute left-3 flex-row items-center gap-3 bg-white/95 px-2 py-1.5"
       pointerEvents="none"
       style={{ bottom, elevation: 3 }}
     >
@@ -74,6 +74,32 @@ if (olaMapsApiKey) {
     name: "api_key",
     value: olaMapsApiKey,
   });
+}
+
+// Pins closer than this are one place (e.g. checked in and out at the desk). They fan out from
+// the shared spot: each tilts about its tip and shifts a little, so both stay visible.
+const SAME_PLACE_METRES = 30;
+const FAN_SHIFT = 6;
+const FAN_DEGREES = 14;
+
+type PinLayout = { offset: [number, number]; rotate: number };
+
+/** Per-pin shift and tilt; a pin alone at its place is left upright and centred. */
+function fannedLayout(points: MapPoint[]) {
+  const groups: MapPoint[][] = [];
+  for (const point of points) {
+    const group = groups.find((members) => distanceInMetres(members[0], point) < SAME_PLACE_METRES);
+    if (group) group.push(point);
+    else groups.push([point]);
+  }
+  const layout = {} as Record<MapPoint["kind"], PinLayout>;
+  for (const group of groups) {
+    group.forEach((point, index) => {
+      const side = group.length > 1 ? (index - (group.length - 1) / 2) * 2 : 0;
+      layout[point.kind] = { offset: [side * FAN_SHIFT, 0], rotate: side * FAN_DEGREES };
+    });
+  }
+  return layout;
 }
 
 function boundsFor(points: MapPoint[]): [number, number, number, number] | null {
@@ -139,6 +165,7 @@ function NativeOlaMap({ points, controlsTop, legendBottom, children }: NativeOla
   const camera = useRef<CameraRef>(null);
   const style = useOlaMapStyle();
   const bounds = useMemo(() => boundsFor(points), [points]);
+  const layout = useMemo(() => fannedLayout(points), [points]);
   const center = points[0] ?? { latitude: 22.9734, longitude: 78.6569 };
 
   /** Frames every pin (or the single pin at street zoom), undoing any drag or zoom. */
@@ -194,8 +221,17 @@ function NativeOlaMap({ points, controlsTop, legendBottom, children }: NativeOla
               id={point.kind}
               key={point.kind}
               lngLat={[point.longitude, point.latitude]}
+              offset={layout[point.kind].offset}
             >
-              <Image contentFit="contain" source={pins[point.kind]} style={PIN_SIZE} />
+              <View
+                style={{
+                  ...PIN_SIZE,
+                  transform: [{ rotate: `${layout[point.kind].rotate}deg` }],
+                  transformOrigin: "bottom",
+                }}
+              >
+                <Image contentFit="contain" source={pins[point.kind]} style={PIN_SIZE} />
+              </View>
             </Marker>
           ))}
         </Map>
