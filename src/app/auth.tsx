@@ -180,6 +180,68 @@ function Field({
     </View>
   );
 }
+
+function OtpField({
+  value,
+  onChangeText,
+  onFocusField,
+}: {
+  value: string;
+  onChangeText: (value: string) => void;
+  onFocusField?: (input: TextInput | null) => void;
+}) {
+  const inputs = useRef<Array<TextInput | null>>([]);
+  const digits = Array.from({ length: 6 }, (_, index) => value[index] ?? "");
+
+  const setDigit = (index: number, rawValue: string) => {
+    const nextDigits = [...digits];
+    const pasted = rawValue.replace(/\D/g, "").slice(0, 6 - index);
+    if (pasted.length > 1) {
+      pasted.split("").forEach((digit, offset) => {
+        nextDigits[index + offset] = digit;
+      });
+    } else {
+      nextDigits[index] = pasted;
+    }
+    onChangeText(nextDigits.join(""));
+    const nextIndex = Math.min(index + Math.max(pasted.length, 1), 5);
+    if (pasted) inputs.current[nextIndex]?.focus();
+  };
+
+  return (
+    <View>
+      <Text className="mb-2 text-sm font-medium text-foreground">Verification code</Text>
+      <View className="flex-row justify-between gap-2">
+        {digits.map((digit, index) => (
+          <TextInput
+            accessibilityLabel={`Verification code digit ${index + 1}`}
+            className="h-12 min-w-0 flex-1 border border-input bg-background text-center text-lg font-medium text-foreground"
+            cursorColor="#465FFF"
+            keyboardType="number-pad"
+            key={index}
+            maxLength={6}
+            onChangeText={(nextValue) => setDigit(index, nextValue)}
+            onFocus={() => onFocusField?.(inputs.current[index])}
+            onKeyPress={({ nativeEvent }) => {
+              if (nativeEvent.key === "Backspace" && !digit && index > 0) {
+                inputs.current[index - 1]?.focus();
+              }
+            }}
+            ref={(input) => {
+              inputs.current[index] = input;
+            }}
+            returnKeyType="done"
+            selectionColor="#465FFF"
+            style={{ fontFamily: "Satoshi", paddingHorizontal: 0 }}
+            textContentType="oneTimeCode"
+            value={digit}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function Action({
   label,
   onPress,
@@ -458,9 +520,14 @@ export default function AuthScreen() {
           loading={pending}
           onPress={() => sendCode(reset ? "reset" : "sign-in")}
         />
+        <View className="flex-row items-center gap-4">
+          <View className="h-px flex-1 bg-border" />
+          <Text className="text-sm text-muted-foreground">or</Text>
+          <View className="h-px flex-1 bg-border" />
+        </View>
         <Action
           disabled={pending}
-          label="Back to sign in"
+          label={reset ? "Back to sign in" : "Use password instead"}
           onPress={() => setScreen("sign-in")}
           outline
         />
@@ -475,15 +542,22 @@ export default function AuthScreen() {
     const twoFa = screen === "verify-two-fa";
     content = (
       <Card
-        title="Verify your code"
-        description={`Enter the six-digit code${twoFa ? "" : ` sent to ${email.trim()}`}.`}
+        title={
+          reset
+            ? "Enter your reset code"
+            : twoFa
+              ? "Enter your two-factor code"
+              : "Enter your sign-in code"
+        }
+        description={
+          twoFa
+            ? "Enter the code sent to your email to continue."
+            : `Enter the one-time code sent to your email address. ${email.trim()}`
+        }
       >
-        <Field
-          complete="one-time-code"
-          label="Verification code"
+        <OtpField
           onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))}
           onFocusField={focusField}
-          type="number-pad"
           value={code}
         />
         <Action
@@ -504,17 +578,32 @@ export default function AuthScreen() {
             })
           }
         />
+        <View className="flex-row items-center justify-between gap-4">
+          <Text className="text-sm text-foreground">Did not receive a code?</Text>
+          <Pressable
+            disabled={pending || resendSeconds > 0}
+            onPress={() => sendCode(reset ? "reset" : twoFa ? "two-fa" : "sign-in")}
+          >
+            <Text
+              className={`text-sm font-medium ${pending || resendSeconds > 0 ? "text-muted-foreground" : "text-primary"}`}
+            >
+              {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Resend code"}
+            </Text>
+          </Pressable>
+        </View>
+        <View className="flex-row items-center gap-4">
+          <View className="h-px flex-1 bg-border" />
+          <Text className="text-sm text-muted-foreground">or</Text>
+          <View className="h-px flex-1 bg-border" />
+        </View>
         <Action
-          disabled={pending || resendSeconds > 0}
-          label={resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Resend code"}
-          onPress={() => sendCode(reset ? "reset" : twoFa ? "two-fa" : "sign-in")}
+          disabled={pending}
+          label={
+            reset ? "Change email" : twoFa ? "Use authenticator instead" : "Use password instead"
+          }
+          onPress={() => setScreen(reset ? "forgot" : twoFa ? "two-fa" : "sign-in")}
           outline
         />
-        <Pressable onPress={() => setScreen(reset ? "forgot" : twoFa ? "two-fa" : "sign-in")}>
-          <Text className="text-center text-sm font-medium text-primary">
-            Use another sign-in method
-          </Text>
-        </Pressable>
       </Card>
     );
   } else if (screen === "reset")
