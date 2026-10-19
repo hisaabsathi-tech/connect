@@ -31,15 +31,17 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [nextIdentity, { attendance, attendedToday: attended }] = await Promise.all([
+      const [nextIdentity, { attendance, attendedToday: attended, today }] = await Promise.all([
         fetchHomeIdentity(token),
         fetchOpenAttendance(token),
       ]);
       setIdentity(nextIdentity);
       setOpen(attendance);
       setAttendedToday(attended);
-      setCheckInPoint(checkInPointOf(attendance));
-      setCheckOutPoint(checkOutPointOf(attendance));
+      // After checking out there is no open session; today's closed one still has both points.
+      const todaySession = attendance ?? today ?? null;
+      setCheckInPoint(checkInPointOf(todaySession));
+      setCheckOutPoint(checkOutPointOf(todaySession));
       const address = nextIdentity?.organization?.address;
       const place = address ? await geocodeAddress(address, token) : null;
       setOrganization(place ? { latitude: place.lat, longitude: place.lng } : null);

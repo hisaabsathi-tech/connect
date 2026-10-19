@@ -33,11 +33,16 @@ export function checkOutPointOf(session: AttendanceSession | null): Point | null
   };
 }
 
+/**
+ * The open session (null once checked out), whether the member attended today, and today's
+ * latest session even when closed, for showing where they checked in and out.
+ */
 export function fetchOpenAttendance(token: string) {
-  return apiRequest<{ attendance: AttendanceSession | null; attendedToday: boolean }>(
-    "/organizations/me/attendance/open",
-    token,
-  );
+  return apiRequest<{
+    attendance: AttendanceSession | null;
+    attendedToday: boolean;
+    today?: AttendanceSession | null;
+  }>("/organizations/me/attendance/open", token);
 }
 
 export function checkIn(token: string, point: Point) {
