@@ -1,15 +1,19 @@
+import { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
 import { TabScreen } from "@/components/modules/layout";
 import { colors } from "@/config/colors";
 import { useLiveLocation } from "@/hooks/use-live-location";
+import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
 import { useDateFilter } from "@/lib/date";
 
 import { AttendanceAction } from "./components/attendance-action";
 import { DateStrip } from "./components/date-strip";
+import { DayRecord } from "./components/day-record";
 import { HomeHeader } from "./components/home-header";
 import { HomeMap } from "./components/home-map";
+import { useDayAttendance } from "./hooks/use-day-attendance";
 import { useHomeAttendance } from "./hooks/use-home-attendance";
 
 /** Signed-in only: the tabs layout redirects to /auth before this renders without a session. */
@@ -17,11 +21,21 @@ export function HomeScreen() {
   const { token } = useAuthSession();
   const live = useLiveLocation(Boolean(token));
   const home = useHomeAttendance(token, live);
-  const { resetToToday } = useDateFilter();
+  const { resetToToday, selectedDate, today } = useDateFilter();
+  // The calendar picks whose pins and record show; the swipe button always acts on today.
+  const day = useDayAttendance(token, selectedDate, today);
+  // Stable per record: the map re-frames its camera whenever its pins change.
+  const dayCheckIn = useMemo(() => checkInPointOf(day.record), [day.record]);
+  const dayCheckOut = useMemo(() => checkOutPointOf(day.record), [day.record]);
 
   const refresh = () => {
     resetToToday();
     void home.refresh();
+    void day.reload();
+  };
+
+  const submit = async () => {
+    if ((await home.submit()) && day.kind === "today") void day.reload();
   };
 
   return (
@@ -40,21 +54,22 @@ export function HomeScreen() {
       >
         <HomeHeader identity={home.identity} />
         <HomeMap
-          checkIn={home.checkInPoint}
-          checkOut={home.checkOutPoint}
+          checkIn={dayCheckIn}
+          checkOut={dayCheckOut}
           live={live}
           organization={home.organization}
         />
         <DateStrip />
+        <DayRecord failed={day.failed} kind={day.kind} loading={day.loading} record={day.record} />
       </ScrollView>
       {/* Pinned above the navigation; anything added below the calendar scrolls behind it. */}
       <View className="bg-background px-5 py-3">
         <AttendanceAction
           attendedToday={home.attendedToday}
           busy={home.busy}
-          canSubmit={Boolean(live)}
+          canSubmit={Boolean(live) && home.statusLoaded}
           isCheckedIn={home.isCheckedIn}
-          onSubmit={home.submit}
+          onSubmit={submit}
         />
       </View>
     </TabScreen>

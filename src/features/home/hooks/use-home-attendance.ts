@@ -4,9 +4,7 @@ import { Alert } from "react-native";
 import {
   type AttendanceSession,
   checkIn,
-  checkInPointOf,
   checkOut,
-  checkOutPointOf,
   fetchOpenAttendance,
   type Point,
 } from "@/lib/api/attendance";
@@ -16,14 +14,17 @@ import { errorMessage } from "@/lib/errors";
 import type { Coordinates } from "@/lib/maps/geo";
 import { reverseGeocodeAddress } from "@/lib/maps/ola-maps";
 
-/** The signed-in user, their organisation's location and today's attendance, with check in/out. */
+/**
+ * The signed-in user, their organisation's location and today's check in/out state. The swipe
+ * button is always about today, whichever day the calendar shows.
+ */
 export function useHomeAttendance(token: string | null, live: Coordinates | null) {
   const [identity, setIdentity] = useState<HomeIdentity | null>(null);
   const [organization, setOrganization] = useState<Coordinates | null>(null);
   const [open, setOpen] = useState<AttendanceSession | null>(null);
   const [attendedToday, setAttendedToday] = useState(false);
-  const [checkInPoint, setCheckInPoint] = useState<Point | null>(null);
-  const [checkOutPoint, setCheckOutPoint] = useState<Point | null>(null);
+  // Until today's status arrives the button can't know whether to check in or out.
+  const [statusLoaded, setStatusLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -31,17 +32,14 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [nextIdentity, { attendance, attendedToday: attended, today }] = await Promise.all([
+      const [nextIdentity, { attendance, attendedToday: attended }] = await Promise.all([
         fetchHomeIdentity(token),
         fetchOpenAttendance(token),
       ]);
       setIdentity(nextIdentity);
       setOpen(attendance);
       setAttendedToday(attended);
-      // After checking out there is no open session; today's closed one still has both points.
-      const todaySession = attendance ?? today ?? null;
-      setCheckInPoint(checkInPointOf(todaySession));
-      setCheckOutPoint(checkOutPointOf(todaySession));
+      setStatusLoaded(true);
       const address = nextIdentity?.organization?.address;
       const place = address ? await geocodeAddress(address, token) : null;
       setOrganization(place ? { latitude: place.lat, longitude: place.lng } : null);
@@ -64,24 +62,24 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
     }
   }, [load]);
 
-  /** Checks in, or out when a session is open, at the live position. */
+  /** Checks in, or out when a session is open, at the live position. Resolves true on success. */
   const submit = useCallback(async () => {
-    if (!(token && live) || busy) return;
+    if (!(token && live) || busy) return false;
     setBusy(true);
     try {
       const point: Point = { ...live, address: await reverseGeocodeAddress(live) };
       if (open) {
         await checkOut(token, point);
-        setCheckOutPoint(point);
         setOpen(null);
       } else {
         const result = await checkIn(token, point);
-        setCheckInPoint(point);
         setOpen(result.attendance);
       }
       setAttendedToday(true);
+      return true;
     } catch (error) {
       Alert.alert("Attendance was not updated", errorMessage(error, "Please try again."));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -90,13 +88,12 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   return {
     attendedToday,
     busy,
-    checkInPoint,
-    checkOutPoint,
     identity,
     isCheckedIn: Boolean(open),
     organization,
     refresh,
     refreshing,
+    statusLoaded,
     submit,
   };
 }

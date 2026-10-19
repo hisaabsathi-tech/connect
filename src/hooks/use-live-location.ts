@@ -28,6 +28,9 @@ export function useLiveLocation(enabled = true) {
     void (async () => {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status !== "granted") return;
+      // A fresh fix can take seconds; show the last known position meanwhile.
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown) accept(lastKnown.coords);
       const first = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });

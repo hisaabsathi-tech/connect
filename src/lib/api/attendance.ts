@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/client";
+import { graphqlRequest } from "@/lib/api/graphql";
 import type { Coordinates } from "@/lib/maps/geo";
 
 export type Point = Coordinates & { address?: string | null };
@@ -7,6 +8,8 @@ export type AttendanceSession = {
   id: string;
   checkInAt: string;
   checkOutAt: string | null;
+  /** AUTO when the organisation's auto-checkout closed the session. */
+  checkOutKind?: "AUTO" | "MANUAL" | null;
   checkInLatitude?: number | null;
   checkInLongitude?: number | null;
   checkInAddress?: string | null;
@@ -33,16 +36,32 @@ export function checkOutPointOf(session: AttendanceSession | null): Point | null
   };
 }
 
-/**
- * The open session (null once checked out), whether the member attended today, and today's
- * latest session even when closed, for showing where they checked in and out.
- */
 export function fetchOpenAttendance(token: string) {
-  return apiRequest<{
-    attendance: AttendanceSession | null;
-    attendedToday: boolean;
-    today?: AttendanceSession | null;
-  }>("/organizations/me/attendance/open", token);
+  return apiRequest<{ attendance: AttendanceSession | null; attendedToday: boolean }>(
+    "/organizations/me/attendance/open",
+    token,
+  );
+}
+
+const MY_ATTENDANCE_DAY_QUERY = `
+query ConnectorAttendanceDay($date: String!) {
+  myAttendances(from: $date, to: $date) {
+    items {
+      id checkInAt checkOutAt checkOutKind
+      checkInAddress checkInLatitude checkInLongitude
+      checkOutAddress checkOutLatitude checkOutLongitude
+    }
+  }
+}`;
+
+/** The signed-in member's attendance on one `YYYY-MM-DD` day (the latest, if several), or null. */
+export async function fetchMyAttendanceOn(token: string, date: string) {
+  const payload = await graphqlRequest<{ myAttendances: { items: AttendanceSession[] } }>({
+    query: MY_ATTENDANCE_DAY_QUERY,
+    token,
+    variables: { date },
+  });
+  return payload.myAttendances.items.at(-1) ?? null;
 }
 
 export function checkIn(token: string, point: Point) {
