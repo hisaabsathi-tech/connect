@@ -21,9 +21,12 @@ export function formatTime(iso: string) {
   return timeFormatter.format(new Date(iso)).toLowerCase();
 }
 
-/** "08:20" (hours:minutes) between two instants; open-ended runs up to now. */
+const twoDigits = (value: number) => String(value).padStart(2, "0");
+
+/** "08:20:11" (hours:minutes:seconds) between two instants; open-ended runs up to now. */
 export function formatDuration(fromIso: string, toIso: string | null, now = Date.now()) {
   const end = toIso ? Date.parse(toIso) : now;
-  const minutes = Math.max(0, Math.floor((end - Date.parse(fromIso)) / 60_000));
-  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  const seconds = Math.max(0, Math.floor((end - Date.parse(fromIso)) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  return `${twoDigits(hours)}:${twoDigits(Math.floor((seconds % 3600) / 60))}:${twoDigits(seconds % 60)}`;
 }

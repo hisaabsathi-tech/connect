@@ -2,11 +2,12 @@ import { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
 import { TabScreen } from "@/components/modules/layout";
+import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
-import { useDateFilter } from "@/lib/date";
+import { formatDuration, formatTime, useDateFilter } from "@/lib/date";
 
 import { AttendanceAction } from "./components/attendance-action";
 import { DateStrip } from "./components/date-strip";
@@ -22,6 +23,7 @@ export function HomeScreen() {
   const live = useLiveLocation(Boolean(token));
   const home = useHomeAttendance(token, live);
   const { resetToToday, selectedDate, today } = useDateFilter();
+  const toast = useToast();
   // The calendar picks whose pins and record show; the swipe button always acts on today.
   const day = useDayAttendance(token, selectedDate, today);
   // Stable per record: the map re-frames its camera whenever its pins change.
@@ -35,7 +37,24 @@ export function HomeScreen() {
   };
 
   const submit = async () => {
-    if ((await home.submit()) && day.kind === "today") void day.reload();
+    const session = await home.submit();
+    if (!session) return;
+    // Show today's updated record, whichever day the calendar was on.
+    resetToToday();
+    void day.reload();
+    toast.show(
+      session.checkOutAt
+        ? {
+            description: `You worked ${formatDuration(session.checkInAt, session.checkOutAt)} today.`,
+            title: `Checked out at ${formatTime(session.checkOutAt)}`,
+            type: "success",
+          }
+        : {
+            description: "Your working hours are now being tracked.",
+            title: `Checked in at ${formatTime(session.checkInAt)}`,
+            type: "success",
+          },
+    );
   };
 
   return (

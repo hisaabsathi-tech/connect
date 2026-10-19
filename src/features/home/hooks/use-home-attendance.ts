@@ -62,24 +62,22 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
     }
   }, [load]);
 
-  /** Checks in, or out when a session is open, at the live position. Resolves true on success. */
-  const submit = useCallback(async () => {
-    if (!(token && live) || busy) return false;
+  /**
+   * Checks in, or out when a session is open, at the live position. Resolves to the saved
+   * session (server times), or null when nothing was saved.
+   */
+  const submit = useCallback(async (): Promise<AttendanceSession | null> => {
+    if (!(token && live) || busy) return null;
     setBusy(true);
     try {
       const point: Point = { ...live, address: await reverseGeocodeAddress(live) };
-      if (open) {
-        await checkOut(token, point);
-        setOpen(null);
-      } else {
-        const result = await checkIn(token, point);
-        setOpen(result.attendance);
-      }
+      const result = open ? await checkOut(token, point) : await checkIn(token, point);
+      setOpen(open ? null : result.attendance);
       setAttendedToday(true);
-      return true;
+      return result.attendance;
     } catch (error) {
       Alert.alert("Attendance was not updated", errorMessage(error, "Please try again."));
-      return false;
+      return null;
     } finally {
       setBusy(false);
     }

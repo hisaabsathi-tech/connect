@@ -47,11 +47,12 @@ function Stat({ children, label, value }: { children?: ReactNode; label: string;
 /** Check-in time and hours worked for the calendar's selected day. */
 export function DayRecord({ failed, kind, loading, record }: DayRecordProps) {
   const open = Boolean(record && !record.checkOutAt);
-  // An open session's working time keeps counting; refresh it every minute.
+  // An open session's working time keeps counting, to the second.
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (!open) return;
-    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [open]);
 

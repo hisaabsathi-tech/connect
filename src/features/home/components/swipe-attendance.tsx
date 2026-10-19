@@ -119,7 +119,9 @@ export function SwipeAttendance({ action, busy, disabled, mode }: SwipeAttendanc
         className="absolute inset-0 items-center justify-center"
         style={{ opacity: labelOpacity }}
       >
-        <Text className="text-base text-white">{busy ? "Saving attendance…" : label}</Text>
+        <Text className="text-base text-white">
+          {busy ? (mode === "in" ? "Checking you in" : "Checking you out") : label}
+        </Text>
       </Animated.View>
       <Animated.View
         {...responder.panHandlers}
