@@ -5,6 +5,7 @@ import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { androidEnv } from "./android-env";
+import { acquireBuildLock } from "./build-lock";
 import { assertApiReachable, productionEnv, signingEnv } from "./release-env";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -24,6 +25,7 @@ function run(command: string, args: string[], env: NodeJS.ProcessEnv, cwd = root
 
 try {
   const { version } = JSON.parse(readFileSync(resolve(root, "version.json"), "utf8"));
+  acquireBuildLock();
   const production = productionEnv();
   await assertApiReachable(production.apiUrl);
   const { env } = androidEnv();

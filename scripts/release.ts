@@ -6,6 +6,7 @@ import { dirname, resolve } from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { androidEnv } from "./android-env";
+import { acquireBuildLock } from "./build-lock";
 import { assertApiReachable, productionEnv, signingEnv } from "./release-env";
 import { bump, bumpKinds, nextRelease, readVersion, writeVersion } from "./version";
 
@@ -43,7 +44,10 @@ function run(
 async function buildStore(version: string): Promise<void> {
   const { env } = androidEnv();
   const production = productionEnv();
-  if (!dryRun) await assertApiReachable(production.apiUrl);
+  if (!dryRun) {
+    acquireBuildLock();
+    await assertApiReachable(production.apiUrl);
+  }
   const buildEnv = { ...env, ...signingEnv(), ...production.env };
   run(expo, ["prebuild", "--platform", "android", "--no-install", "--clean"], { env: buildEnv });
   run("bun", ["scripts/configure-android-signing.ts"], { env: buildEnv });
