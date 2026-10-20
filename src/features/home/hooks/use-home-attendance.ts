@@ -30,6 +30,8 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   const [attendedToday, setAttendedToday] = useState(false);
   // The organisation's Image Confirmation module: a photo is taken before every check in/out.
   const [imageConfirmation, setImageConfirmation] = useState(false);
+  // False for a superadmin while the organisation's Superadmin Attendance module is off.
+  const [selfAttendance, setSelfAttendance] = useState(true);
   const photo = useAttendancePhoto();
   // Until today's status arrives the button can't know whether to check in or out.
   const [statusLoaded, setStatusLoaded] = useState(false);
@@ -42,12 +44,16 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [nextIdentity, { attendance, attendedToday: attended, imageConfirmation: photos }] =
-        await Promise.all([fetchHomeIdentity(token), fetchOpenAttendance(token)]);
+      const [nextIdentity, status] = await Promise.all([
+        fetchHomeIdentity(token),
+        fetchOpenAttendance(token),
+      ]);
       setIdentity(nextIdentity);
-      setOpen(attendance);
-      setAttendedToday(attended);
-      setImageConfirmation(Boolean(photos));
+      setOpen(status.attendance);
+      setAttendedToday(status.attendedToday);
+      setImageConfirmation(Boolean(status.imageConfirmation));
+      // Older servers don't send it; everyone checked in before the module existed.
+      setSelfAttendance(status.selfAttendance !== false);
       setStatusLoaded(true);
       const address = nextIdentity?.organization?.address;
       const place = address ? await geocodeAddress(address, token) : null;
@@ -122,6 +128,8 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
     photoModal: photo.modal,
     refresh,
     refreshing,
+    /** Whether the user checks in and out at all; false hides the swipe for the attendance card. */
+    selfAttendance,
     statusLoaded,
     submit,
   };

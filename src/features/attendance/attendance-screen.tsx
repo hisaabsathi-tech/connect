@@ -4,6 +4,7 @@ import { Pressable, View } from "react-native";
 import { TabScreen } from "@/components/modules/layout";
 import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
+import { fetchOpenAttendance } from "@/lib/api/attendance";
 import { fetchCanViewAllAttendance } from "@/lib/api/attendance-roster";
 import { useAuthSession } from "@/lib/auth/session";
 import { haptic } from "@/lib/haptics";
@@ -17,6 +18,13 @@ const TABS: { label: string; value: AttendanceView }[] = [
   { label: "Company", value: "company" },
   { label: "Own", value: "own" },
 ];
+
+type Access = {
+  /** attendance GET_ALL: the organisation's roster. */
+  canViewAll: boolean;
+  /** Checks in themselves; false for a superadmin while Superadmin Attendance is off. */
+  selfAttendance: boolean;
+};
 
 function ViewTabs({
   onChange,
@@ -53,43 +61,47 @@ function ViewTabs({
   );
 }
 
-/** Whether the member may see everyone's attendance; null until known. */
-function useCanViewAll(token: string | null) {
-  const [canViewAll, setCanViewAll] = useState<boolean | null>(null);
+/** What the member's Attendance tab shows; null until known. */
+function useAccess(token: string | null) {
+  const [access, setAccess] = useState<Access | null>(null);
   useEffect(() => {
     if (!token) return;
     let active = true;
-    fetchCanViewAllAttendance(token)
-      .then((allowed) => {
-        if (active) setCanViewAll(allowed);
-      })
+    Promise.all([
       // Unknown access falls back to the member's own attendance.
-      .catch(() => {
-        if (active) setCanViewAll(false);
-      });
+      fetchCanViewAllAttendance(token).catch(() => false),
+      fetchOpenAttendance(token)
+        // Older servers don't send it; everyone checked in before the module existed.
+        .then((status) => status.selfAttendance !== false)
+        .catch(() => true),
+    ]).then(([canViewAll, selfAttendance]) => {
+      if (active) setAccess({ canViewAll, selfAttendance });
+    });
     return () => {
       active = false;
     };
   }, [token]);
-  return canViewAll;
+  return access;
 }
 
 /**
- * The Attendance tab. Admins (attendance GET_ALL) get Company / Own tabs: the organisation's
- * roster by default, or their own attendance like any member's. Everyone else sees their own.
+ * The Attendance tab. Admins (attendance GET_ALL) get the organisation's roster; those who also
+ * check in themselves (a superadmin only with Superadmin Attendance on) get Company / Own tabs to
+ * see their own attendance too. Everyone else sees their own.
  */
 export function AttendanceScreen() {
   const { token } = useAuthSession();
-  const canViewAll = useCanViewAll(token);
+  const access = useAccess(token);
   const [view, setView] = useState<AttendanceView>("company");
 
-  if (canViewAll === null)
+  if (!access)
     return (
       <TabScreen>
         <Loader fullPage />
       </TabScreen>
     );
-  if (!canViewAll) return <OwnAttendance />;
+  if (!access.canViewAll) return <OwnAttendance />;
+  if (!access.selfAttendance) return <CompanyAttendance />;
   const tabs = <ViewTabs onChange={setView} value={view} />;
   return view === "company" ? <CompanyAttendance tabs={tabs} /> : <OwnAttendance tabs={tabs} />;
 }

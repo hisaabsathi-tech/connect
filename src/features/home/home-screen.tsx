@@ -11,6 +11,7 @@ import { useAuthSession } from "@/lib/auth/session";
 import { formatDuration, formatTime, useDateFilter } from "@/lib/date";
 
 import { AttendanceAction } from "./components/attendance-action";
+import { AttendanceCard } from "./components/attendance-card";
 import { DateStrip } from "./components/date-strip";
 import { DayRecord } from "./components/day-record";
 import { HomeHeader } from "./components/home-header";
@@ -114,30 +115,38 @@ export function HomeScreen() {
           organization={home.organization}
         />
         <DateStrip />
-        <DayRecord
-          date={selectedDate}
-          failed={day.failed}
-          kind={day.kind}
-          loading={day.loading}
-          offDay={day.offDay}
-          onOpenPhoto={(side) => {
-            if (day.record) setPhoto({ date: selectedDate, id: day.record.id, side });
-          }}
-          record={day.record}
-        />
+        {/* A superadmin without Superadmin Attendance doesn't check in: the card leads to the
+            organisation's attendance instead of their own day. */}
+        {home.selfAttendance ? (
+          <DayRecord
+            date={selectedDate}
+            failed={day.failed}
+            kind={day.kind}
+            loading={day.loading}
+            offDay={day.offDay}
+            onOpenPhoto={(side) => {
+              if (day.record) setPhoto({ date: selectedDate, id: day.record.id, side });
+            }}
+            record={day.record}
+          />
+        ) : (
+          <AttendanceCard />
+        )}
       </ScrollView>
       {/* Pinned above the navigation; anything added below the calendar scrolls behind it. */}
-      <AttendanceAction
-        attendedToday={home.attendedToday}
-        busy={home.busy}
-        isCheckedIn={home.isCheckedIn}
-        kind={day.kind}
-        located={Boolean(live)}
-        location={location.status}
-        onFixLocation={location.resolve}
-        onSubmit={submit}
-        ready={home.statusLoaded}
-      />
+      {home.selfAttendance ? (
+        <AttendanceAction
+          attendedToday={home.attendedToday}
+          busy={home.busy}
+          isCheckedIn={home.isCheckedIn}
+          kind={day.kind}
+          located={Boolean(live)}
+          location={location.status}
+          onFixLocation={location.resolve}
+          onSubmit={submit}
+          ready={home.statusLoaded}
+        />
+      ) : null}
       {home.photoModal}
       <PhotoViewer onClose={() => setPhoto(null)} target={photo} token={token} />
     </TabScreen>

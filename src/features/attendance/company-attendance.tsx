@@ -53,7 +53,7 @@ function Separator() {
  * search bar picks a date range, and the search narrows to an employee's name. Download saves the
  * web app's daily register as a PNG per day. `tabs` (Company / Own) sits under the title.
  */
-export function CompanyAttendance({ tabs }: { tabs: ReactNode }) {
+export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
   const { token } = useAuthSession();
   const { today } = useDateFilter();
   const toast = useToast();

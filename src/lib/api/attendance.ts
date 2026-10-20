@@ -50,6 +50,8 @@ export function fetchOpenAttendance(token: string) {
     attendedToday: boolean;
     /** The organisation's Image Confirmation module: a photo is required to check in or out. */
     imageConfirmation?: boolean;
+    /** False for a superadmin while the Superadmin Attendance module is off: no check in/out. */
+    selfAttendance?: boolean;
   }>("/organizations/me/attendance/open", token);
 }
 
