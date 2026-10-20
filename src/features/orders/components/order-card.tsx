@@ -41,6 +41,36 @@ function collectable(order: DrsOrder) {
 
 const rupees = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 
+/** A tinted square icon button on the receiver's row (call, view on map). */
+function ActionSquare({
+  busy = false,
+  icon,
+  label,
+  onPress,
+}: {
+  busy?: boolean;
+  icon: typeof Call02Icon;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      className="h-12 w-12 items-center justify-center bg-[#CDD4FF] active:opacity-80"
+      disabled={busy}
+      onPress={onPress}
+      onPressIn={() => haptic("light")}
+    >
+      {busy ? (
+        <ActivityIndicator color={colors.primary} size="small" />
+      ) : (
+        <HugeiconsIcon color={colors.primary} icon={icon} size={20} strokeWidth={1.8} />
+      )}
+    </Pressable>
+  );
+}
+
 function Label({ children }: { children: string }) {
   return (
     <Text className="text-[11px] font-medium uppercase tracking-[0.3px] text-muted-foreground">
@@ -51,7 +81,7 @@ function Label({ children }: { children: string }) {
 
 /**
  * An order on the delivery boy's run, as the Figma lays it out: the AWB with its payment pill,
- * the receiver with a call button, the delivery address with View on Map, and the amount to
+ * the receiver with View on Map and Call buttons, the delivery address, and the amount to
  * collect for COD and To Pay. The card itself isn't tappable yet; delivering from it comes later.
  */
 export function OrderCard({
@@ -101,53 +131,34 @@ export function OrderCard({
             </View>
           ) : null}
         </View>
-        {dial ? (
-          <Pressable
-            accessibilityLabel={`Call ${name}`}
-            accessibilityRole="button"
-            className="h-12 w-12 items-center justify-center bg-[#CDD4FF] active:opacity-80"
-            onPress={() => void Linking.openURL(dial).catch(() => undefined)}
-            onPressIn={() => haptic("light")}
-          >
-            <HugeiconsIcon color={colors.primary} icon={Call02Icon} size={20} strokeWidth={1.8} />
-          </Pressable>
-        ) : null}
+        {/* The receiver's actions side by side: View on Map, then Call. */}
+        <View className="flex-row gap-2">
+          {address ? (
+            <ActionSquare
+              busy={locating}
+              icon={Location01Icon}
+              label={`View ${order.awbNo} on the map`}
+              onPress={onViewMap}
+            />
+          ) : null}
+          {dial ? (
+            <ActionSquare
+              icon={Call02Icon}
+              label={`Call ${name}`}
+              onPress={() => void Linking.openURL(dial).catch(() => undefined)}
+            />
+          ) : null}
+        </View>
       </View>
 
-      <View className="mt-4 flex-row items-center justify-between gap-3">
-        <View className="flex-1">
-          <Label>Address</Label>
-          <Text className="mt-1 text-base leading-6 text-foreground">{address || "—"}</Text>
-        </View>
-        {address ? (
-          <Pressable
-            accessibilityLabel={`View ${order.awbNo} on the map`}
-            accessibilityRole="button"
-            className="h-10 min-w-[124px] flex-row items-center justify-center gap-1.5 border border-primary bg-[#F0F2FF] px-3 active:bg-accent"
-            disabled={locating}
-            onPress={onViewMap}
-            onPressIn={() => haptic("light")}
-          >
-            {locating ? (
-              <ActivityIndicator color={colors.primary} size="small" />
-            ) : (
-              <>
-                <Text className="text-sm font-medium text-primary">View on Map</Text>
-                <HugeiconsIcon
-                  color={colors.primary}
-                  icon={Location01Icon}
-                  size={16}
-                  strokeWidth={1.8}
-                />
-              </>
-            )}
-          </Pressable>
-        ) : null}
+      <View className="mt-4">
+        <Label>Address</Label>
+        <Text className="mt-1 text-base leading-6 text-foreground">{address || "—"}</Text>
       </View>
 
       {amount ? (
         <View className="mt-4 bg-success-soft px-4 py-3">
-          <Label>Collectable Amount</Label>
+          <Label>{payment(order) === "COD" ? "Collect COD Amount" : "Collectable Amount"}</Label>
           <Text className="mt-0.5 text-2xl font-semibold leading-8 text-success">
             ₹{rupees.format(amount)}
           </Text>

@@ -46,6 +46,7 @@ import {
   ORDER_FILTERS,
   type OrderFilter,
   ordersFromSheets,
+  pendingFirst,
 } from "./lib/orders";
 
 function Separator() {
@@ -118,10 +119,13 @@ export function OrdersScreen() {
   const activeDrsId = drsId && sheets.some((sheet) => sheet.id === drsId) ? drsId : null;
 
   const scopedOrders = useMemo(() => ordersFromSheets(sheets, activeDrsId), [activeDrsId, sheets]);
+  // Orders still to deliver come first; delivered ones sink to the bottom.
   const orders = useMemo(
     () =>
-      scopedOrders.filter(
-        (order) => matchesOrderFilter(order, orderFilter) && matchesOrderSearch(order, query),
+      pendingFirst(
+        scopedOrders.filter(
+          (order) => matchesOrderFilter(order, orderFilter) && matchesOrderSearch(order, query),
+        ),
       ),
     [orderFilter, query, scopedOrders],
   );

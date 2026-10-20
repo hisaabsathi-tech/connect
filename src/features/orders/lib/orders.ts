@@ -84,3 +84,13 @@ export function matchesOrderSearch(order: DrsOrder, search: string) {
     order.destinationPincode,
   ].some((value) => value?.toLowerCase().includes(needle));
 }
+
+/** Where an order sorts: still to deliver first, then returned or cancelled, delivered last. */
+const deliveryRank = (order: DrsOrder) => (isPending(order) ? 0 : isDelivered(order) ? 2 : 1);
+
+/** The orders with those still to deliver on top; each group keeps its own order. */
+export const pendingFirst = (orders: DrsOrder[]) =>
+  orders
+    .map((order, index) => ({ index, order, rank: deliveryRank(order) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map(({ order }) => order);
