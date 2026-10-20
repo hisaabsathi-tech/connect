@@ -20,9 +20,9 @@ const PHOTO_SIZE = 512;
 
 const PERMISSION_ERRORS: Record<string, string> = {
   E_NO_CAMERA_PERMISSION:
-    "Allow camera access for Hisaabsathi Connector in Settings, then try again.",
+    "Allow camera access for Hisaab Sathi Connect in Settings, then try again.",
   E_NO_LIBRARY_PERMISSION:
-    "Allow photo access for Hisaabsathi Connector in Settings, then try again.",
+    "Allow photo access for Hisaab Sathi Connect in Settings, then try again.",
 };
 
 function errorCode(error: unknown) {

@@ -105,7 +105,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       withGradlePropertyOverrides(
         withTransparentAutofillHighlight({
           ...config,
-          name: "Hisaabsathi Connector",
+          name: "Hisaab Sathi Connect",
           slug: "hisaab-sathi-connect",
           version: release.version,
           orientation: "portrait",
@@ -162,7 +162,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
               "expo-location",
               {
                 locationWhenInUsePermission:
-                  "Allow Hisaabsathi Connector to use your location for attendance.",
+                  "Allow Hisaab Sathi Connect to use your location for attendance.",
               },
             ],
             [

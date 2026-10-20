@@ -75,7 +75,7 @@ export function useLiveLocation(enabled = true) {
           cancelLabel: "No, thanks",
           confirmLabel: "Open settings",
           description:
-            "Location permission is off for Hisaabsathi Connector. Allow it in Settings to check in and out.",
+            "Location permission is off for Hisaab Sathi Connect. Allow it in Settings to check in and out.",
           title: "Allow Location",
         });
         if (open) await Linking.openSettings();

@@ -63,7 +63,7 @@ export function useAttendancePhoto() {
       void dialog.alert({
         description:
           errorCode(error) === "E_NO_CAMERA_PERMISSION"
-            ? "Allow camera access for Hisaabsathi Connector in Settings, then try again."
+            ? "Allow camera access for Hisaab Sathi Connect in Settings, then try again."
             : errorMessage(error, "Could not open the camera. Please try again."),
         title: "Photo needed",
         tone: "danger",

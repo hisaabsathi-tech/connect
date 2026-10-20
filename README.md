@@ -1,4 +1,4 @@
-# Hisaabsathi Connector
+# Hisaab Sathi Connect
 
 Android Expo client for Hisaab Sathi. Native projects (`android/`) are generated with Expo Continuous
 Native Generation and are never edited by hand.
