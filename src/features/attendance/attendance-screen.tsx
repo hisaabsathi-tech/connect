@@ -5,7 +5,7 @@ import { TabScreen } from "@/components/modules/layout";
 import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
 import { fetchOpenAttendance } from "@/lib/api/attendance";
-import { fetchCanViewAllAttendance } from "@/lib/api/attendance-roster";
+import { fetchIsOrgOwner } from "@/lib/api/attendance-roster";
 import { useAuthSession } from "@/lib/auth/session";
 import { haptic } from "@/lib/haptics";
 
@@ -20,8 +20,8 @@ const TABS: { label: string; value: AttendanceView }[] = [
 ];
 
 type Access = {
-  /** attendance GET_ALL: the organisation's roster. */
-  canViewAll: boolean;
+  /** Owns the organisation: the only person who gets its roster. */
+  owner: boolean;
   /** Checks in themselves; false for a superadmin while Superadmin Attendance is off. */
   selfAttendance: boolean;
 };
@@ -68,14 +68,14 @@ function useAccess(token: string | null) {
     if (!token) return;
     let active = true;
     Promise.all([
-      // Unknown access falls back to the member's own attendance.
-      fetchCanViewAllAttendance(token).catch(() => false),
+      // Unknown ownership falls back to the member's own attendance.
+      fetchIsOrgOwner(token).catch(() => false),
       fetchOpenAttendance(token)
         // Older servers don't send it; everyone checked in before the module existed.
         .then((status) => status.selfAttendance !== false)
         .catch(() => true),
-    ]).then(([canViewAll, selfAttendance]) => {
-      if (active) setAccess({ canViewAll, selfAttendance });
+    ]).then(([owner, selfAttendance]) => {
+      if (active) setAccess({ owner, selfAttendance });
     });
     return () => {
       active = false;
@@ -85,9 +85,9 @@ function useAccess(token: string | null) {
 }
 
 /**
- * The Attendance tab. Admins (attendance GET_ALL) get the organisation's roster; those who also
- * check in themselves (a superadmin only with Superadmin Attendance on) get Company / Own tabs to
- * see their own attendance too. Everyone else sees their own.
+ * The Attendance tab. Only the organisation's owner gets its roster (Company); when they also
+ * check in themselves (Superadmin Attendance on) they get Company / Own tabs to see their own
+ * attendance too. Every internal member, whatever their role or permissions, sees only their own.
  */
 export function AttendanceScreen() {
   const { token } = useAuthSession();
@@ -100,7 +100,7 @@ export function AttendanceScreen() {
         <Loader fullPage />
       </TabScreen>
     );
-  if (!access.canViewAll) return <OwnAttendance />;
+  if (!access.owner) return <OwnAttendance />;
   if (!access.selfAttendance) return <CompanyAttendance />;
   const tabs = <ViewTabs onChange={setView} value={view} />;
   return view === "company" ? <CompanyAttendance tabs={tabs} /> : <OwnAttendance tabs={tabs} />;

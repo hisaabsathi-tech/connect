@@ -13,6 +13,8 @@ export type Profile = {
   /** The active organisation, to mark it in the organisation switcher. */
   organizationId: string | null;
   role: string | null;
+  /** The vehicle assigned in the active organisation (delivery boys), or null. */
+  vehicleNo: string | null;
 };
 
 const PROFILE_QUERY = `
@@ -24,20 +26,41 @@ query ConnectorProfile {
   }
 }`;
 
-/** The signed-in person's contact data shown in the profile tab. */
+/**
+ * The vehicle assigned to the signed-in member in the active organisation. The server answers
+ * VEHICLE_NOT_FOUND for someone without one, and it is a separate request so that error can't
+ * fail the whole profile: any failure here just means there is no vehicle to show.
+ */
+async function fetchMyVehicleNo(token: string) {
+  try {
+    const payload = await graphqlRequest<{ myVehicle?: { vehicleNo?: string | null } | null }>({
+      query: "query ConnectorMyVehicle { myVehicle { vehicleNo } }",
+      token,
+    });
+    return payload.myVehicle?.vehicleNo?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/** The signed-in person's contact data shown in the profile tab, with their vehicle if any. */
 export async function fetchProfile(token: string): Promise<Profile> {
-  const payload = await graphqlRequest<{
-    me: {
-      orgRole?: { role?: string | null } | null;
-      organization?: { id?: string | null; name?: string | null } | null;
-      user: Omit<Profile, "organizationId" | "organizationName" | "role">;
-    };
-  }>({ query: PROFILE_QUERY, token });
+  const [payload, vehicleNo] = await Promise.all([
+    graphqlRequest<{
+      me: {
+        orgRole?: { role?: string | null } | null;
+        organization?: { id?: string | null; name?: string | null } | null;
+        user: Omit<Profile, "organizationId" | "organizationName" | "role" | "vehicleNo">;
+      };
+    }>({ query: PROFILE_QUERY, token }),
+    fetchMyVehicleNo(token),
+  ]);
   return {
     ...payload.me.user,
     organizationId: payload.me.organization?.id ?? null,
     organizationName: payload.me.organization?.name ?? null,
     role: payload.me.orgRole?.role ?? null,
+    vehicleNo,
   };
 }
 

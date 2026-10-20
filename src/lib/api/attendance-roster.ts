@@ -3,16 +3,17 @@ import { graphqlRequest } from "@/lib/api/graphql";
 
 import type { AttendanceSubStatus } from "./attendance";
 
-/** Whether the signed-in member may see everyone's attendance (attendance GET_ALL). */
-export async function fetchCanViewAllAttendance(token: string): Promise<boolean> {
+/**
+ * Whether the signed-in user owns the active organisation, the only person who gets its
+ * attendance (Company tab). Internal members never do, even with the superadmin role, which can
+ * be given to anyone, so this compares the organisation's owner with the user instead.
+ */
+export async function fetchIsOrgOwner(token: string): Promise<boolean> {
   const payload = await graphqlRequest<{
-    me: { permissions?: { resource: string; actions: string[] }[] | null };
-  }>({ query: "query ConnectorAccess { me { permissions { resource actions } } }", token });
-  return Boolean(
-    payload.me.permissions?.some(
-      (grant) => grant.resource === "attendance" && grant.actions.includes("GET_ALL"),
-    ),
-  );
+    me: { organization?: { ownerUserId?: string | null } | null; user: { id: string } };
+  }>({ query: "query ConnectorOwner { me { organization { ownerUserId } user { id } } }", token });
+  const owner = payload.me.organization?.ownerUserId;
+  return Boolean(owner && owner === payload.me.user.id);
 }
 
 export type RosterStatus = "ABSENT" | "HOLIDAY" | "PRESENT";

@@ -1,6 +1,7 @@
 import {
   Building03Icon,
   CallIcon,
+  DeliveryTruck01Icon,
   FloppyDiskIcon,
   Location01Icon,
   Mail01Icon,
@@ -174,6 +175,22 @@ export function ProfileDetails({ onSave, profile, saving, token }: ProfileDetail
         </View>
         <OrganizationSwitch activeId={profile?.organizationId} />
       </View>
+      {profile?.vehicleNo ? (
+        <View className="flex-row items-center gap-3 border-border border-b py-5">
+          <HugeiconsIcon
+            color={colors.primary}
+            icon={DeliveryTruck01Icon}
+            size={22}
+            strokeWidth={1.8}
+          />
+          <View className="flex-1">
+            <Text className="text-xs text-muted-foreground">Vehicle Number</Text>
+            <Text className="mt-0.5 text-sm font-medium text-foreground" numberOfLines={1}>
+              {profile.vehicleNo}
+            </Text>
+          </View>
+        </View>
+      ) : null}
       <DetailRow icon={Mail01Icon} value={profile?.email ?? null} />
       {editing ? (
         <EditField

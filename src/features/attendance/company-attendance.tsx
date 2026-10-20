@@ -48,7 +48,7 @@ function Separator() {
 }
 
 /**
- * The organisation's attendance for admins (attendance GET_ALL): totals on top, then every
+ * The organisation's attendance for its owner: totals on top, then every
  * employee's day as a card, absent and holidays included. By default today; the calendar in the
  * search bar picks a date range, and the search narrows to an employee's name. Download saves the
  * web app's daily register as a PNG per day. `tabs` (Company / Own) sits under the title.
