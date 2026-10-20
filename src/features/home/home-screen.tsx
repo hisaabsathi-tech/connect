@@ -1,6 +1,6 @@
 import { useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { RefreshControl, ScrollView } from "react-native";
+import { RefreshControl, ScrollView, View } from "react-native";
 
 import { TabScreen } from "@/components/modules/layout";
 import { useToast } from "@/components/ui/toast";
@@ -28,6 +28,10 @@ import { useHomeAttendance } from "./hooks/use-home-attendance";
 // the day's record and the swipe usually fit without scrolling.
 const MAP_MIN_HEIGHT = 200;
 const MAP_MAX_HEIGHT = 360;
+// A delivery boy's map shows their deliveries, so it gets more room: the Orders card may sit just
+// under the fold (the page scrolls to it), and the map fills the rest within these bounds.
+const DELIVERY_MAP_MIN_HEIGHT = 300;
+const DELIVERY_MAP_MAX_HEIGHT = 560;
 
 /** What the header's location button shows; the one place that decides when each state appears. */
 function locationIndicatorState({
@@ -56,13 +60,21 @@ export function HomeScreen() {
   const deliveries = useActiveOrders(isDeliveryBoy ? token : null, today);
   const showOrders = deliveries.active && selectedDate === today;
   const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
+  // Bumped by a pull to refresh, which recenters the map.
+  const [mapResetKey, setMapResetKey] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   // Content height minus the map: everything else on the page, which the map makes room for.
   const [restHeight, setRestHeight] = useState(0);
+  // The Orders card's height (with its margin), left out of what must fit on screen.
+  const [ordersCardHeight, setOrdersCardHeight] = useState(0);
+  const [minHeight, maxHeight] = isDeliveryBoy
+    ? [DELIVERY_MAP_MIN_HEIGHT, DELIVERY_MAP_MAX_HEIGHT]
+    : [MAP_MIN_HEIGHT, MAP_MAX_HEIGHT];
+  const onScreen = restHeight - (isDeliveryBoy ? ordersCardHeight : 0);
   const mapHeight =
     viewportHeight && restHeight
-      ? Math.min(MAP_MAX_HEIGHT, Math.max(MAP_MIN_HEIGHT, viewportHeight - restHeight))
-      : MAP_MAX_HEIGHT;
+      ? Math.min(maxHeight, Math.max(minHeight, viewportHeight - onScreen))
+      : maxHeight;
   // The height the content was last laid out with, to subtract from its measured size.
   const renderedMapHeight = useRef(mapHeight);
   renderedMapHeight.current = mapHeight;
@@ -82,6 +94,7 @@ export function HomeScreen() {
 
   const refresh = () => {
     resetToToday();
+    setMapResetKey((key) => key + 1);
     void home.refresh();
     void day.reload();
     void deliveries.reload(true);
@@ -137,6 +150,7 @@ export function HomeScreen() {
           live={live}
           orders={showOrders ? deliveries.pins : null}
           organization={home.organization}
+          resetKey={mapResetKey}
         />
         <DateStrip />
         {/* A superadmin without Superadmin Attendance doesn't check in: the card leads to the
@@ -157,7 +171,11 @@ export function HomeScreen() {
           <AttendanceCard />
         )}
         {/* Under the day's record; the page scrolls once the map is down to its smallest. */}
-        {isDeliveryBoy ? <OrdersCard /> : null}
+        {isDeliveryBoy ? (
+          <View onLayout={(event) => setOrdersCardHeight(event.nativeEvent.layout.height)}>
+            <OrdersCard />
+          </View>
+        ) : null}
       </ScrollView>
       {/* Pinned above the navigation; anything added below the calendar scrolls behind it. */}
       {home.selfAttendance ? (

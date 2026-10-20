@@ -42,7 +42,10 @@ type Props = {
   checkOut: Point | null;
   organization: Coordinates | null;
   live: Coordinates | null;
-  /** A delivery boy shows as the rider wherever they are. */
+  /**
+   * A delivery boy shows as the rider wherever they are; their map has no office pin and no
+   * legend, only themselves and their deliveries (or the day's check-in and check-out).
+   */
   deliveryBoy?: boolean;
   /**
    * A delivery boy's orders still to deliver, when they have any: the map then shows where they
@@ -51,6 +54,8 @@ type Props = {
   orders?: OrderPoint[] | null;
   /** Inline height; the home screen sizes the map to what the rest of the page leaves. */
   height: number;
+  /** Changes when the page reloads: the map drops a tapped pin and recenters. */
+  resetKey?: number;
 };
 
 type PinKind =
@@ -147,6 +152,8 @@ const SAME_PLACE_METRES = 30;
 const SAME_PLACE_SHIFT = 10;
 // Tapping a pin zooms in this close to it; "Recenter map" returns to the overview.
 const PIN_FOCUS_ZOOM = 17;
+// A map anchored on the user (a delivery boy with no orders) shows their streets at this zoom.
+const ANCHOR_ZOOM = 16;
 
 /** Horizontal pixel offset per pin; a pin alone at its place stays centred. */
 function samePlaceOffsets(points: MapPoint[]) {
@@ -199,15 +206,15 @@ function ExternalMapButton({
       className="h-10 flex-1 flex-row items-center justify-center gap-2 border border-primary active:bg-accent"
       onPress={() => void Linking.openURL(url).catch(() => undefined)}
     >
-      <HugeiconsIcon color={colors.primary} icon={icon} size={18} strokeWidth={1.8} />
       <Text className="text-sm font-medium text-primary">{label}</Text>
+      <HugeiconsIcon color={colors.primary} icon={icon} size={18} strokeWidth={1.8} />
     </Pressable>
   );
 }
 
 /**
- * The tapped order's address along the bottom of the map, with Connector v1's Google Maps (the
- * place) and Directions (from where the user is) links. An exact pin goes by its coordinates;
+ * The tapped order's address along the bottom of the map, with View Location (the place in
+ * Google Maps) and Directions (from where the user is) links. An exact pin goes by its coordinates;
  * one placed only in the area lets Google Maps find the written address itself.
  */
 function PinDetail({
@@ -254,7 +261,7 @@ function PinDetail({
       <View className="mt-3 flex-row gap-2 pr-1">
         <ExternalMapButton
           icon={MapsLocation01Icon}
-          label="Google Maps"
+          label="View Location"
           url={googleMapsPlaceUrl({ address, point: destination })}
         />
         <ExternalMapButton
@@ -310,6 +317,11 @@ interface NativeOlaMapProps {
   onFocus: (point: MapPoint | null) => void;
   /** Where the user is, for directions. */
   origin: Coordinates | null;
+  showLegend: boolean;
+  /** The pin the overview centres on (zoomed in) instead of framing every pin. */
+  anchorId: string | null;
+  /** Changes when the page reloads; the overview is shown again. */
+  resetKey: number;
   /** Distance of the control row from the top edge. */
   controlsTop: number;
   /** Distance of the pin legend from the bottom edge. */
@@ -319,6 +331,7 @@ interface NativeOlaMapProps {
 }
 
 function NativeOlaMap({
+  anchorId,
   children,
   controlsTop,
   focusId,
@@ -326,6 +339,8 @@ function NativeOlaMap({
   onFocus,
   origin,
   points,
+  resetKey,
+  showLegend,
 }: NativeOlaMapProps) {
   const camera = useRef<CameraRef>(null);
   // Camera commands only apply once the map has loaded; earlier ones find no native view.
@@ -333,18 +348,23 @@ function NativeOlaMap({
   const style = useOlaMapStyle();
   const bounds = useMemo(() => boundsFor(points), [points]);
   const offsets = useMemo(() => samePlaceOffsets(points), [points]);
-  const center = points[0] ?? { latitude: 22.9734, longitude: 78.6569 };
+  const anchor = points.find((point) => point.id === anchorId) ?? null;
+  const anchored = anchor !== null;
+  const center = anchor ?? points[0] ?? { latitude: 22.9734, longitude: 78.6569 };
   // While a pin is focused, a moving live position doesn't reframe the map away from it.
   const focus = points.find((point) => point.id === focusId) ?? null;
   const focusRef = useRef(focus);
   focusRef.current = focus;
 
-  /** Frames every pin (or the single pin at street zoom), undoing any drag or zoom. */
+  /**
+   * The overview, undoing any drag or zoom: zoomed in on the anchor when there is one, else
+   * every pin framed (or the single pin at street zoom).
+   */
   const fitCamera = useCallback(
     (duration = 0) => {
       if (!loaded.current) return;
       moveCamera(
-        bounds
+        bounds && !anchored
           ? camera.current?.fitBounds(bounds, {
               duration,
               padding: { bottom: 56, left: 56, right: 56, top: 56 },
@@ -352,11 +372,11 @@ function NativeOlaMap({
           : camera.current?.easeTo({
               center: [center.longitude, center.latitude],
               duration,
-              zoom: 15,
+              zoom: anchored ? ANCHOR_ZOOM : 15,
             }),
       );
     },
-    [bounds, center.latitude, center.longitude],
+    [anchored, bounds, center.latitude, center.longitude],
   );
 
   /** Zooms in on the focused pin. */
@@ -372,20 +392,32 @@ function NativeOlaMap({
     );
   }, []);
 
+  // A new focus zooms to it, and clearing it (the card's close, Recenter) eases back to the
+  // overview. Otherwise the overview reframes as the pins change (a moving live position), but
+  // never away from a focused pin.
+  const shownFocusId = useRef(focusId);
   useEffect(() => {
-    if (!focusRef.current) fitCamera();
-  }, [fitCamera]);
+    const changed = shownFocusId.current !== focusId;
+    shownFocusId.current = focusId;
+    if (focusRef.current) {
+      if (changed) showFocus(500);
+      return;
+    }
+    fitCamera(changed ? 500 : 0);
+  }, [fitCamera, focusId, showFocus]);
 
-  // A new focus zooms to it; clearing it (the card's close) goes back to the overview.
+  // A page reload shows the overview again (the page has already cleared any focus).
+  const shownResetKey = useRef(resetKey);
   useEffect(() => {
-    if (focusId) showFocus(500);
-    else fitCamera(500);
-    // Only on a focus change; the overview's own refits run in the effect above.
-  }, [focusId]);
+    if (shownResetKey.current === resetKey) return;
+    shownResetKey.current = resetKey;
+    if (!focusRef.current) fitCamera(500);
+  }, [fitCamera, resetKey]);
 
+  // Clearing the focus reframes through the effect; with nothing focused, reframe here.
   const recenter = () => {
-    onFocus(null);
-    fitCamera(500);
+    if (focusId) onFocus(null);
+    else fitCamera(500);
   };
   useEffect(
     () => () => {
@@ -421,7 +453,10 @@ function NativeOlaMap({
             initialViewState={
               focus
                 ? { center: [focus.longitude, focus.latitude], zoom: PIN_FOCUS_ZOOM }
-                : { center: [center.longitude, center.latitude], zoom: points.length > 1 ? 13 : 15 }
+                : {
+                    center: [center.longitude, center.latitude],
+                    zoom: anchored ? ANCHOR_ZOOM : points.length > 1 ? 13 : 15,
+                  }
             }
             ref={camera}
           />
@@ -455,9 +490,9 @@ function NativeOlaMap({
           origin={origin}
           point={{ ...focus, detail: focus.detail }}
         />
-      ) : (
+      ) : showLegend ? (
         <MapLegend bottom={legendBottom} points={points} />
-      )}
+      ) : null}
       <View className="absolute left-4 flex-row gap-3" style={{ top: controlsTop }}>
         {children}
         <MapControl icon={Gps01Icon} label="Recenter map" onPress={recenter} />
@@ -474,9 +509,16 @@ export function HomeMap({
   live,
   orders,
   organization,
+  resetKey = 0,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
+  // A reload (a new `resetKey`) drops a tapped pin; the maps then recenter.
+  useEffect(() => {
+    if (resetKey) setFocusId(null);
+  }, [resetKey]);
+  // With no orders to deliver, a delivery boy's map opens zoomed in on where they are.
+  const anchorId = deliveryBoy && !orders && live ? "here" : null;
   // An order's pin opens the full-screen map on it, with its address and map links; any other
   // pin just zooms in where it is.
   const focusFromPage = (point: MapPoint | null) => {
@@ -487,9 +529,10 @@ export function HomeMap({
     setExpanded(false);
     setFocusId(null);
   };
-  // Organisation: always. A delivery boy with orders to deliver: where they are now and a pin
-  // per order (exact address, or only its area). Otherwise, before checking in: where the user
-  // is now; after, the check-in point replaces it, and a check-out adds the destination pin.
+  // Organisation: for everyone but delivery boys. A delivery boy with orders to deliver: where
+  // they are now and a pin per order (exact address, or only its area). Otherwise, before
+  // checking in: where the user is now; after, the check-in point replaces it, and a check-out
+  // adds the destination pin.
   const points = useMemo(() => {
     const at = (place: Coordinates, id: string, kind: PinKind): MapPoint => ({
       id,
@@ -511,12 +554,13 @@ export function HomeMap({
           })),
         ]
       : [
-          checkIn ? at(checkIn, "check-in", "transit") : here,
+          // A delivery boy stays on the map after checking in, beside the day's pins.
+          checkIn ? at(checkIn, "check-in", "transit") : deliveryBoy ? null : here,
+          deliveryBoy ? here : null,
           checkOut ? at(checkOut, "check-out", "destination") : null,
         ];
-    return [organization ? at(organization, "office", "organization") : null, ...day].filter(
-      (point): point is MapPoint => point !== null,
-    );
+    const office = organization && !deliveryBoy ? at(organization, "office", "organization") : null;
+    return [office, ...day].filter((point): point is MapPoint => point !== null);
   }, [checkIn, checkOut, deliveryBoy, live, orders, organization]);
   return (
     <>
@@ -525,6 +569,7 @@ export function HomeMap({
         style={{ height }}
       >
         <NativeOlaMap
+          anchorId={anchorId}
           controlsTop={16}
           // Under the full-screen map the small one keeps the overview.
           focusId={expanded ? null : focusId}
@@ -532,6 +577,8 @@ export function HomeMap({
           onFocus={focusFromPage}
           origin={live}
           points={points}
+          resetKey={resetKey}
+          showLegend={!deliveryBoy}
         >
           <MapControl
             icon={FullScreenIcon}
@@ -543,12 +590,15 @@ export function HomeMap({
       <Modal animationType="fade" onRequestClose={minimize} visible={expanded}>
         <View className="flex-1 bg-accent">
           <NativeOlaMap
+            anchorId={anchorId}
             controlsTop={56}
             focusId={focusId}
             legendBottom={40}
             onFocus={(point) => setFocusId(point?.id ?? null)}
             origin={live}
             points={points}
+            resetKey={resetKey}
+            showLegend={!deliveryBoy}
           >
             <MapControl icon={Cancel01Icon} label="Minimize map" onPress={minimize} />
           </NativeOlaMap>
