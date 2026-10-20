@@ -6,23 +6,17 @@ import { formatClock, formatDayLabel, formatDuration, weekdayOf } from "@/lib/da
 import type { DateRange } from "../hooks/use-attendance-range";
 import { type AttendanceDayEntry, workedMs } from "./days";
 
-const COLUMNS = [
-  "Date",
-  "Day",
-  "Status",
-  "Check In",
-  "Check Out",
-  "Hours Worked",
-  "Remarks",
-  "Check In Address",
-  "Check Out Address",
-];
+const COLUMNS = ["Date", "Day", "Status", "Check In", "Check Out", "Hours Worked", "Remarks"];
 
-// Tells Excel the file is UTF-8, so names and addresses keep their characters.
+// Tells Excel the file is UTF-8, so holiday names keep their characters.
 const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
 
-/** A CSV field, quoted when it holds a comma, quote or line break. */
-function field(value: string) {
+/**
+ * A CSV field, quoted when it holds a comma, quote or line break. No-break spaces become plain
+ * ones, which every spreadsheet reads.
+ */
+function field(text: string) {
+  const value = text.replace(/[\u00a0\u202f]/g, " ");
   return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
@@ -50,8 +44,6 @@ function row(day: AttendanceDayEntry, today: string) {
     record?.checkOutAt ? formatClock(record.checkOutAt) : "",
     record && workedMs(record, today) ? formatDuration(record.checkInAt, record.checkOutAt) : "",
     remarks,
-    record?.checkInAddress ?? "",
-    record?.checkOutAddress ?? "",
   ];
 }
 

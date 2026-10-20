@@ -115,7 +115,9 @@ export function AttendanceDayCard({
             </Text>
           ) : null}
         </View>
-        <Text className="text-xs font-semibold text-muted-foreground">{formatDayLabel(day.date, "long")}</Text>
+        <Text className="text-xs font-semibold text-muted-foreground">
+          {formatDayLabel(day.date, "long")}
+        </Text>
       </View>
     </Pressable>
   );

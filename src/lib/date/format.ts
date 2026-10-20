@@ -16,9 +16,13 @@ const timeFormatter = new Intl.DateTimeFormat("en-IN", {
   timeZone: "Asia/Kolkata",
 });
 
+// Intl puts a narrow no-break space (U+202F) before am/pm; plain spaces keep the text the same
+// everywhere it goes, e.g. spreadsheets that otherwise show it as "â€¯".
+const plainSpaces = (text: string) => text.replace(/\s/g, " ");
+
 /** "10:20 am" in India time. */
 export function formatTime(iso: string) {
-  return timeFormatter.format(new Date(iso)).toLowerCase();
+  return plainSpaces(timeFormatter.format(new Date(iso))).toLowerCase();
 }
 
 const clockFormatter = new Intl.DateTimeFormat("en-IN", {
@@ -30,7 +34,7 @@ const clockFormatter = new Intl.DateTimeFormat("en-IN", {
 
 /** "09:51 PM" in India time. */
 export function formatClock(iso: string) {
-  return clockFormatter.format(new Date(iso)).toUpperCase();
+  return plainSpaces(clockFormatter.format(new Date(iso))).toUpperCase();
 }
 
 const twoDigits = (value: number) => String(value).padStart(2, "0");
