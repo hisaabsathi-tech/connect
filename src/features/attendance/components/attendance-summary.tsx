@@ -63,7 +63,7 @@ function useLiveNow(live: boolean) {
 
 /**
  * Days present out of all the days, and the time worked as hours:minutes:seconds, counting up
- * live while today's session is open. By default for this month and this week; with a range
+ * live while today's session is open. By default for this month and the last 7 days; with a range
  * applied, both for that range.
  */
 export function AttendanceSummaryCards({
@@ -82,7 +82,7 @@ export function AttendanceSummaryCards({
         value={summary ? `${summary.presentDays}/${summary.totalDays}` : "--"}
       />
       <StatCard
-        label={ranged ? "Total Working Hrs" : "Weekly Working Hrs"}
+        label={ranged ? "Total Working Hrs" : "Last 7 Days Hrs"}
         value={summary ? formatElapsed(workedSoFarMs(summary, now)) : "--"}
       />
     </View>

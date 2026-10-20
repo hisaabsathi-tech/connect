@@ -1,6 +1,6 @@
 import type { AttendanceRange, AttendanceRecord } from "@/lib/api/attendance";
 import { type DayKind, dayKindOf, isWeeklyOff } from "@/lib/attendance/remarks";
-import { daysBetween, durationMs, eachDay, startOfMonth, startOfWeek } from "@/lib/date";
+import { addDays, daysBetween, durationMs, eachDay, startOfMonth } from "@/lib/date";
 
 /** One calendar day in the list or table: its session, or why there is none. */
 export type AttendanceDayEntry = {
@@ -43,8 +43,8 @@ export function workedMs(record: AttendanceRecord, today: string, now = Date.now
 }
 
 /**
- * The top cards' numbers for a period: by default this month's days and this week's hours, or
- * the applied date range for both.
+ * The top cards' numbers for a period: by default this month's days and the last 7 days' hours,
+ * or the applied date range for both.
  */
 export type AttendanceSummary = {
   /** Days attended in the period: only days with a check-in. */
@@ -76,24 +76,29 @@ const closedTime = (
     .filter((record) => record !== open)
     .reduce((total, record) => total + workedMs(record, today), 0);
 
-/** The day that a summary's range has to start on to cover both this month and this week. */
+// The hours card covers today and the 6 days before it, so it never drops to zero on a Monday.
+const HOURS_WINDOW_DAYS = 7;
+
+/** The first day of the hours card's rolling window. */
+const hoursStart = (today: string) => addDays(today, -(HOURS_WINDOW_DAYS - 1));
+
+/** The day that a summary's range has to start on to cover both this month and the last 7 days. */
 export function summaryStart(today: string) {
   const month = startOfMonth(today);
-  const week = startOfWeek(today);
-  return month < week ? month : week;
+  const window = hoursStart(today);
+  return month < window ? month : window;
 }
 
 /** The top cards' numbers from a range starting at `summaryStart(today)` and ending today. */
 export function summarize(range: AttendanceRange, today: string): AttendanceSummary {
   const monthStart = startOfMonth(today);
-  const weekStart = startOfWeek(today);
   const attended = new Set(
     range.items.filter((item) => item.date >= monthStart).map((item) => item.date),
   );
-  const week = range.items.filter((item) => item.date >= weekStart);
-  const open = openToday(week, today);
+  const window = range.items.filter((item) => item.date >= hoursStart(today));
+  const open = openToday(window, today);
   return {
-    closedMs: closedTime(week, open, today),
+    closedMs: closedTime(window, open, today),
     openSince: open?.checkInAt ?? null,
     presentDays: attended.size,
     // Day 0 of next month is this month's last day.

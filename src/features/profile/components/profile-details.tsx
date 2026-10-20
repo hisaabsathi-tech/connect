@@ -28,7 +28,7 @@ function DetailRow({
   value: string | null;
 }) {
   return (
-    <View className={`flex-row items-center gap-3 py-5 ${border ? "border-border border-b" : ""}`}>
+    <View className={`flex-row items-center gap-3 py-4 ${border ? "border-border border-b" : ""}`}>
       <HugeiconsIcon color={colors.primary} icon={icon} size={22} strokeWidth={1.8} />
       <Text className="flex-1 text-sm leading-5 text-foreground" numberOfLines={3}>
         {value?.trim() || "—"}
@@ -165,7 +165,7 @@ export function ProfileDetails({ onSave, profile, saving, token }: ProfileDetail
 
   return (
     <View className="mt-3 border border-border bg-[#FAFBFF] px-3">
-      <View className="flex-row items-center gap-3 border-border border-b py-5">
+      <View className="flex-row items-center gap-3 border-border border-b py-4">
         <HugeiconsIcon color={colors.primary} icon={Building03Icon} size={22} strokeWidth={1.8} />
         <View className="flex-1">
           <Text className="text-xs text-muted-foreground">Organization</Text>
@@ -176,7 +176,7 @@ export function ProfileDetails({ onSave, profile, saving, token }: ProfileDetail
         <OrganizationSwitch activeId={profile?.organizationId} />
       </View>
       {profile?.vehicleNo ? (
-        <View className="flex-row items-center gap-3 border-border border-b py-5">
+        <View className="flex-row items-center gap-3 border-border border-b py-4">
           <HugeiconsIcon
             color={colors.primary}
             icon={DeliveryTruck01Icon}

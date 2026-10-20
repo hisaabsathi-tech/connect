@@ -33,7 +33,7 @@ function Separator() {
 }
 
 /**
- * The member's own attendance: this month's present days and this week's hours on top, then
+ * The member's own attendance: this month's present days and the last 7 days' hours on top, then
  * every attended day from today backwards as cards (this month first, a month more on each
  * scroll to the end). With a date range applied, that range shows as a table instead, which can
  * be exported as CSV. `tabs` (Company / Own, for admins) sits under the title.

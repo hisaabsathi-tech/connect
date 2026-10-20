@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
-import { TabScreen } from "@/components/modules/layout";
+import { TabScreen, useScrollFit } from "@/components/modules/layout";
 import { PhotoDialog } from "@/components/modules/photo";
 import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
@@ -22,6 +22,8 @@ export function ProfileScreen() {
   const { loading, profile, refresh, refreshing, save, savePhoto, saving } = useProfile(token);
   const photo = useProfilePhoto(savePhoto);
   const [viewing, setViewing] = useState(false);
+  // Scrolls only when the profile is taller than the screen.
+  const scrollFit = useScrollFit();
 
   return (
     <TabScreen>
@@ -29,8 +31,10 @@ export function ProfileScreen() {
         <Loader fullPage size={"md"} />
       ) : (
         <ScrollView
+          {...scrollFit}
           className="flex-1"
-          contentContainerClassName="flex-grow px-5 pb-8"
+          // Enough room below the footer that its last line scrolls clear of the tab bar.
+          contentContainerClassName="flex-grow px-5 pb-12"
           keyboardShouldPersistTaps="handled"
           removeClippedSubviews={false}
           refreshControl={
@@ -55,7 +59,10 @@ export function ProfileScreen() {
               <ChangePassword email={profile?.email} />
               <LogoutButton />
             </View>
-            <BrandFooter />
+            {/* Pinned to the bottom when there is room; never closer than this to the logout. */}
+            <View className="pt-8">
+              <BrandFooter />
+            </View>
           </View>
         </ScrollView>
       )}

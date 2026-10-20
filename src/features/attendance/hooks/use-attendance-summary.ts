@@ -5,7 +5,7 @@ import { fetchMyAttendanceRange } from "@/lib/api/attendance";
 import { type AttendanceSummary, summarize, summaryStart } from "../lib/days";
 import { retryOnce } from "../lib/retry";
 
-/** The default top cards: days present this month out of all its days, and this week's hours. */
+/** The default top cards: days present this month out of all its days, and the last 7 days' hours. */
 export function useAttendanceSummary(token: string | null, today: string) {
   const [summary, setSummary] = useState<AttendanceSummary | null>(null);
   const [failed, setFailed] = useState(false);
