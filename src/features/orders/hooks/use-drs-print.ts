@@ -5,7 +5,6 @@ import { fetchDrs } from "@/lib/api/drs";
 import { useAuthSession } from "@/lib/auth/session";
 import { useViewer } from "@/lib/auth/viewer";
 import { errorMessage } from "@/lib/errors";
-import { saveToDevice, shareFile } from "@/lib/files/device-files";
 
 import { A4, type DrsPrintAssets, drsHtml } from "../lib/drs-print/drs-html";
 import { drsPrintData } from "../lib/drs-print/template-data";
@@ -64,9 +63,9 @@ async function inlineImage(url: string): Promise<string | null> {
 }
 
 /**
- * Prints a DRS the way the web app does (the classic A4 template), as a PDF saved on the phone:
- * into the export folder (picked once, like the attendance download), then the share sheet to
- * print or send it. `printing` is the id of the sheet being made.
+ * Prints a DRS the way the web app does (the classic A4 template): the PDF is made on the phone,
+ * then Android's print screen opens on it with its preview, paper size, printers and Save as PDF
+ * (offering `DRS-<id>.pdf`). `printing` is the id of the sheet being made.
  */
 export function useDrsPrint() {
   const { token } = useAuthSession();
@@ -91,23 +90,16 @@ export function useDrsPrint() {
           fontRegular: assets.fontRegular,
           logo: logo ?? assets.mark,
         });
-        const Print = await import("expo-print");
-        const { base64 } = await Print.printToFileAsync({
-          base64: true,
-          height: A4.height,
-          html,
-          width: A4.width,
-        });
-        if (!base64) throw new Error("The PDF could not be made.");
-        const file = {
-          contents: base64,
-          encoding: "base64" as const,
-          mimeType: "application/pdf",
-          name: `DRS-${sheet.id}.pdf`,
-        };
-        const folder = await saveToDevice([file]);
-        if (folder) toast.success("DRS downloaded", `Saved to ${folder} on your device.`);
-        await shareFile(file, `DRS ${sheet.id}`);
+        const [Print, { File, Paths }] = await Promise.all([
+          import("expo-print"),
+          import("expo-file-system"),
+        ]);
+        const { uri } = await Print.printToFileAsync({ height: A4.height, html, width: A4.width });
+        // The print screen names the job (and the Save as PDF file) after the file it prints.
+        const named = new File(Paths.cache, `DRS-${sheet.id}.pdf`);
+        if (named.exists) named.delete();
+        await new File(uri).move(named);
+        await Print.printAsync({ uri: named.uri });
       } catch (error) {
         toast.error("Couldn't print the DRS", errorMessage(error, "Please try again."));
       } finally {
