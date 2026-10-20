@@ -1,8 +1,9 @@
 import { Image02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { type ReactNode, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { RemarkBadge } from "@/components/modules/remark-badge";
+import { Skeleton } from "@/components/modules/skeleton";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import type { AttendanceSession } from "@/lib/api/attendance";
@@ -30,6 +31,9 @@ interface DayRecordProps {
 export type PhotoSide = "checkIn" | "checkOut";
 
 // Absent, holidays and the plain states (weekly off, upcoming, today) as in the design.
+// About a day block's height (two lines in generous padding), before any record has shown.
+const DEFAULT_RECORD_HEIGHT = 136;
+
 const tones: Record<DayStateTone, { box: string; label: string; value: string }> = {
   absent: {
     box: "border-destructive bg-[#FFF1F2]",
@@ -171,13 +175,11 @@ export function DayRecord({
   onOpenPhoto,
   record,
 }: DayRecordProps) {
+  // The last shown record's height: the loading skeleton keeps it, so the page doesn't shrink
+  // and grow back while another day loads.
+  const [shownHeight, setShownHeight] = useState(DEFAULT_RECORD_HEIGHT);
   let content: ReactNode;
-  if (loading)
-    content = (
-      <View className="h-[84px] items-center justify-center border border-[#E6E9F8] bg-card">
-        <ActivityIndicator color={colors.primary} />
-      </View>
-    );
+  if (loading) content = <Skeleton height={shownHeight} />;
   else if (failed)
     content = (
       <StateBlock label="Couldn't load attendance" tone="plain" value="Pull down to retry" />
@@ -185,5 +187,14 @@ export function DayRecord({
   else if (record)
     content = <RecordCards date={date} kind={kind} onOpenPhoto={onOpenPhoto} record={record} />;
   else content = <StateBlock {...dayStateWithoutRecord(kind, offDay)} />;
-  return <View className="mt-2">{content}</View>;
+  return (
+    <View
+      className="mt-2"
+      onLayout={(event) => {
+        if (!loading) setShownHeight(event.nativeEvent.layout.height);
+      }}
+    >
+      {content}
+    </View>
+  );
 }

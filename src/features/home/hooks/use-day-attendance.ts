@@ -14,7 +14,9 @@ export function useDayAttendance(token: string | null, date: string, today: stri
   const kind = dayKindOf(date, today);
   const [record, setRecord] = useState<AttendanceSession | null>(null);
   const [offDay, setOffDay] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Loading from the first render (the fetch starts in an effect), so the page never shows an
+  // empty day before it.
+  const [loading, setLoading] = useState(Boolean(token));
   const [failed, setFailed] = useState(false);
   // Only the latest request may update state, so quickly tapping through days can't show an
   // older day's record.

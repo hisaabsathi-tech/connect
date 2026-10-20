@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
 import { TabScreen } from "@/components/modules/layout";
-import { Loader } from "@/components/modules/system";
+import { ListPageSkeleton } from "@/components/modules/skeleton";
 import { Text } from "@/components/modules/typography";
 import { fetchOpenAttendance } from "@/lib/api/attendance";
 import { fetchIsOrgOwner } from "@/lib/api/attendance-roster";
@@ -100,7 +100,7 @@ export function AttendanceScreen() {
   if (!access)
     return (
       <TabScreen>
-        <Loader fullPage />
+        <ListPageSkeleton chips={false} />
       </TabScreen>
     );
   if (!access.owner) return <OwnAttendance />;

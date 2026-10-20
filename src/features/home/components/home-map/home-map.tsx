@@ -1,5 +1,6 @@
 /** biome-ignore-all lint/suspicious/noShadowRestrictedNames: <forced> */
 import {
+  Call02Icon,
   Cancel01Icon,
   FullScreenIcon,
   Gps01Icon,
@@ -19,6 +20,12 @@ import {
 import { Image } from "expo-image";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Modal, Pressable, View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -32,6 +39,8 @@ export type OrderPoint = Coordinates & {
   orderId: string;
   awbNo: string;
   receiver: string | null;
+  /** The receiver's mobile, to call from the map. */
+  mobile: string | null;
   /** The order's address as given (street, area, pincode). */
   address: string;
   exact: boolean;
@@ -54,6 +63,8 @@ type Props = {
   orders?: OrderPoint[] | null;
   /** Inline height; the home screen sizes the map to what the rest of the page leaves. */
   height: number;
+  /** Eases height changes in; off while the page is still settling behind its skeleton. */
+  animateHeight?: boolean;
   /** Changes when the page reloads: the map drops a tapped pin and recenters. */
   resetKey?: number;
 };
@@ -71,7 +82,13 @@ type MapPoint = Coordinates & {
   id: string;
   kind: PinKind;
   /** An order's pin: tapping it opens the map full screen with this card along the bottom. */
-  detail?: { title: string; address: string; exact: boolean };
+  detail?: {
+    title: string;
+    address: string;
+    exact: boolean;
+    receiver: string | null;
+    mobile: string | null;
+  };
 };
 
 const pins: Record<PinKind, number> = {
@@ -212,6 +229,53 @@ function ExternalMapButton({
   );
 }
 
+/** "+91 98765 43210" for an Indian number; anything else as entered. */
+function displayMobile(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const local =
+    digits.length === 12 && digits.startsWith("91")
+      ? digits.slice(2)
+      : digits.length === 10
+        ? digits
+        : null;
+  return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : value;
+}
+
+/**
+ * Who receives the order, on its own row: their name and mobile, with a call button that opens
+ * the phone's dialer on the number. Nothing when the order has neither.
+ */
+function Receiver({ mobile, name }: { mobile: string | null; name: string | null }) {
+  if (!(name || mobile)) return null;
+  const dial = mobile?.replace(/[^\d+]/g, "") ?? "";
+  return (
+    <View className="mt-1.5 flex-row items-center gap-3">
+      <View className="flex-1">
+        {name ? (
+          <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
+            {name}
+          </Text>
+        ) : null}
+        {mobile ? (
+          <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+            {displayMobile(mobile)}
+          </Text>
+        ) : null}
+      </View>
+      {dial ? (
+        <Pressable
+          accessibilityLabel={`Call ${name ?? displayMobile(mobile ?? "")}`}
+          accessibilityRole="button"
+          className="h-10 w-10 items-center justify-center bg-[#CDD4FF] active:opacity-80"
+          onPress={() => void Linking.openURL(`tel:${dial}`).catch(() => undefined)}
+        >
+          <HugeiconsIcon color={colors.primary} icon={Call02Icon} size={18} strokeWidth={1.8} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 /**
  * The tapped order's address along the bottom of the map, with View Location (the place in
  * Google Maps) and Directions (from where the user is) links. An exact pin goes by its coordinates;
@@ -244,7 +308,8 @@ function PinDetail({
           <Text className="mt-0.5 text-sm font-semibold text-foreground" numberOfLines={1}>
             {point.detail.title}
           </Text>
-          <Text className="mt-0.5 text-xs leading-4 text-muted-foreground" numberOfLines={3}>
+          <Receiver mobile={point.detail.mobile} name={point.detail.receiver} />
+          <Text className="mt-1 text-xs leading-4 text-muted-foreground" numberOfLines={3}>
             {point.detail.address}
           </Text>
         </View>
@@ -510,7 +575,16 @@ export function HomeMap({
   orders,
   organization,
   resetKey = 0,
+  animateHeight = true,
 }: Props) {
+  // Height changes (the page settling, the day's record growing) ease in rather than jump.
+  const animatedHeight = useSharedValue(height);
+  useEffect(() => {
+    animatedHeight.value = animateHeight
+      ? withTiming(height, { duration: 280, easing: Easing.out(Easing.cubic) })
+      : height;
+  }, [animateHeight, animatedHeight, height]);
+  const heightStyle = useAnimatedStyle(() => ({ height: animatedHeight.value }));
   const [expanded, setExpanded] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   // A reload (a new `resetKey`) drops a tapped pin; the maps then recenter.
@@ -549,7 +623,9 @@ export function HomeMap({
             detail: {
               address: order.address,
               exact: order.exact,
-              title: order.receiver ? `${order.awbNo} · ${order.receiver}` : order.awbNo,
+              mobile: order.mobile,
+              receiver: order.receiver,
+              title: order.awbNo,
             },
           })),
         ]
@@ -564,29 +640,28 @@ export function HomeMap({
   }, [checkIn, checkOut, deliveryBoy, live, orders, organization]);
   return (
     <>
-      <View
-        className="border border-border overflow-hidden rounded-2xl bg-accent"
-        style={{ height }}
-      >
-        <NativeOlaMap
-          anchorId={anchorId}
-          controlsTop={16}
-          // Under the full-screen map the small one keeps the overview.
-          focusId={expanded ? null : focusId}
-          legendBottom={12}
-          onFocus={focusFromPage}
-          origin={live}
-          points={points}
-          resetKey={resetKey}
-          showLegend={!deliveryBoy}
-        >
-          <MapControl
-            icon={FullScreenIcon}
-            label="Maximize map"
-            onPress={() => setExpanded(true)}
-          />
-        </NativeOlaMap>
-      </View>
+      <Animated.View style={heightStyle}>
+        <View className="flex-1 border border-border overflow-hidden rounded-2xl bg-accent">
+          <NativeOlaMap
+            anchorId={anchorId}
+            controlsTop={16}
+            // Under the full-screen map the small one keeps the overview.
+            focusId={expanded ? null : focusId}
+            legendBottom={12}
+            onFocus={focusFromPage}
+            origin={live}
+            points={points}
+            resetKey={resetKey}
+            showLegend={!deliveryBoy}
+          >
+            <MapControl
+              icon={FullScreenIcon}
+              label="Maximize map"
+              onPress={() => setExpanded(true)}
+            />
+          </NativeOlaMap>
+        </View>
+      </Animated.View>
       <Modal animationType="fade" onRequestClose={minimize} visible={expanded}>
         <View className="flex-1 bg-accent">
           <NativeOlaMap

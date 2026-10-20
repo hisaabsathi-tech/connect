@@ -3,8 +3,8 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
 import { Pressable, useWindowDimensions, View } from "react-native";
 
+import { CardListSkeleton } from "@/components/modules/skeleton";
 import { Loader } from "@/components/modules/system";
-
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 
@@ -18,7 +18,8 @@ const SCREEN_SHARE = 0.5;
 /**
  * A block for a list or table with nothing to show: the web app's empty illustration (or its
  * empty-table icon inside a table), a title, a line of help and an optional action. Without a
- * title it is a loading block of the same height.
+ * title it is loading: a list shows skeleton cards in place of the cards to come, a table a
+ * loading block of the same height.
  */
 export function EmptyBlock({
   action,
@@ -34,6 +35,7 @@ export function EmptyBlock({
 }) {
   const { height } = useWindowDimensions();
   const framed = variant === "illustration";
+  if (!title && framed) return <CardListSkeleton />;
   return (
     <View
       className={`items-center justify-center bg-card px-6 py-8 ${framed ? "border border-border" : ""}`}

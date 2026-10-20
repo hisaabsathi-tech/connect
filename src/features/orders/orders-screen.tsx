@@ -4,8 +4,13 @@ import { FlatList, RefreshControl, View } from "react-native";
 
 import { type DateRange, rangeLabel, SearchRangeToolbar } from "@/components/modules/date-range";
 import { TabScreen } from "@/components/modules/layout";
+import {
+  CardListSkeleton,
+  ListPageSkeleton,
+  Skeleton,
+  StatCardSkeleton,
+} from "@/components/modules/skeleton";
 import { StatCard } from "@/components/modules/stat-card";
-import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import type { DrsSheet } from "@/lib/api/drs";
@@ -157,7 +162,7 @@ export function OrdersScreen() {
   if (!viewer.isLoaded)
     return (
       <TabScreen>
-        <Loader fullPage />
+        <ListPageSkeleton tabs />
       </TabScreen>
     );
   if (!viewer.isDeliveryBoy) return <Redirect href="/" />;
@@ -169,7 +174,6 @@ export function OrdersScreen() {
       ? "today"
       : formatDayLabel(selectedDate);
   const period = range || selectedDate !== today ? `for ${day}` : "for today";
-  const count = (value: number) => (data.loading ? "--" : String(value));
 
   const header = (
     <View className="pb-4">
@@ -179,19 +183,24 @@ export function OrdersScreen() {
       </Text>
       <PageTabs onChange={changeTab} value={tab} />
       <View className="mt-5 flex-row gap-3">
-        {onOrders ? (
+        {data.loading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : onOrders ? (
           <>
             <StatCard
               active={orderFilter === "pending"}
               label="Pending Orders"
               onPress={() => toggleOrderFilter("pending")}
-              value={count(scopedOrders.filter(isPending).length)}
+              value={String(scopedOrders.filter(isPending).length)}
             />
             <StatCard
               active={orderFilter === "delivered"}
               label="Orders Delivered"
               onPress={() => toggleOrderFilter("delivered")}
-              value={count(scopedOrders.filter(isDelivered).length)}
+              value={String(scopedOrders.filter(isDelivered).length)}
             />
           </>
         ) : (
@@ -200,13 +209,13 @@ export function OrdersScreen() {
               active={drsFilter === "ongoing"}
               label="Ongoing DRS"
               onPress={() => toggleDrsFilter("ongoing")}
-              value={count(sheets.filter(isDrsOngoing).length)}
+              value={String(sheets.filter(isDrsOngoing).length)}
             />
             <StatCard
               active={drsFilter === "RESOLVED"}
               label="Completed DRS"
               onPress={() => toggleDrsFilter("RESOLVED")}
-              value={count(sheets.filter((sheet) => !isDrsOngoing(sheet)).length)}
+              value={String(sheets.filter((sheet) => !isDrsOngoing(sheet)).length)}
             />
           </>
         )}
@@ -227,7 +236,10 @@ export function OrdersScreen() {
           today={today}
         />
       </View>
-      {onOrders && sheets.length ? (
+      {/* The DRS picker's place is held while the sheets load, so the list doesn't jump down. */}
+      {!onOrders ? null : data.loading ? (
+        <Skeleton className="mt-3" height={48} />
+      ) : sheets.length ? (
         <DrsPicker onChange={setDrsId} sheets={sheets} value={activeDrsId} />
       ) : null}
     </View>
@@ -235,7 +247,7 @@ export function OrdersScreen() {
 
   const searching = query.trim();
   const empty = data.loading ? (
-    <ListEmpty />
+    <CardListSkeleton />
   ) : data.failed ? (
     <ListEmpty
       action={{ label: "Try again", onPress: () => void load() }}

@@ -16,6 +16,8 @@ export type OrderPin = Coordinates & {
   orderId: string;
   awbNo: string;
   receiver: string | null;
+  /** The receiver's mobile, to call from the map. */
+  mobile: string | null;
   /** The order's address as given (street, area, pincode). */
   address: string;
   exact: boolean;
@@ -60,6 +62,7 @@ async function placeOrder(token: string, order: DrsOrder): Promise<OrderPin | nu
   const base = {
     awbNo: order.awbNo,
     orderId: order.orderId,
+    mobile: order.customerMobile?.trim() || null,
     receiver: order.receiverName?.trim() || order.customerName?.trim() || null,
   };
   const full = join([street, area]);

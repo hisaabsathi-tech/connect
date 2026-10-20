@@ -5,7 +5,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
-import { Loader } from "@/components/modules/system";
+import { CardSkeleton, ListPageSkeleton } from "@/components/modules/skeleton";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
@@ -160,7 +160,9 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
   // With no cards yet, the empty block shows loading and errors instead.
   const footer =
     range || !attendedDays.length ? null : list.loadingMore ? (
-      <Loader className="py-6" fullHeight={false} size="sm" transparent />
+      <View className="pt-3">
+        <CardSkeleton />
+      </View>
     ) : list.moreFailed ? (
       <Pressable accessibilityRole="button" className="items-center py-6" onPress={list.retryMore}>
         <Text className="text-sm text-primary">Couldn't load earlier days. Tap to retry</Text>
@@ -191,7 +193,7 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
   if (list.loading && !list.days.length && !range)
     return (
       <TabScreen>
-        <Loader fullPage />
+        <ListPageSkeleton chips={false} />
       </TabScreen>
     );
 

@@ -35,6 +35,8 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   const photo = useAttendancePhoto();
   // Until today's status arrives the button can't know whether to check in or out.
   const [statusLoaded, setStatusLoaded] = useState(false);
+  // The first load has finished, loaded or not; the page stops showing its skeleton then.
+  const [settled, setSettled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const dialog = useDialog();
@@ -55,6 +57,8 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
       // Older servers don't send it; everyone checked in before the module existed.
       setSelfAttendance(status.selfAttendance !== false);
       setStatusLoaded(true);
+      // The office pin below doesn't change the layout, so the page needn't wait for it.
+      setSettled(true);
       const address = nextIdentity?.organization?.address;
       const place = address ? await geocodeAddress(address, token) : null;
       setOrganization(place ? { latitude: place.lat, longitude: place.lng } : null);
@@ -64,6 +68,8 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
         title: "Could not load home",
         tone: "danger",
       });
+    } finally {
+      setSettled(true);
     }
   }, [dialog, token]);
 
@@ -130,6 +136,7 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
     refreshing,
     /** Whether the user checks in and out at all; false hides the swipe for the attendance card. */
     selfAttendance,
+    settled,
     statusLoaded,
     submit,
   };

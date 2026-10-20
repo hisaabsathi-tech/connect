@@ -1,8 +1,9 @@
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import Animated, { FadeOut } from "react-native-reanimated";
 
-import { TabScreen } from "@/components/modules/layout";
+import { TabScreen, useScreenTop } from "@/components/modules/layout";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
@@ -18,6 +19,7 @@ import { DateStrip } from "./components/date-strip";
 import { DayRecord } from "./components/day-record";
 import { HomeHeader } from "./components/home-header";
 import { HomeMap } from "./components/home-map";
+import { HomeSkeleton } from "./components/home-skeleton";
 import { LocationIndicator, type LocationIndicatorState } from "./components/location-indicator";
 import { OrdersCard } from "./components/orders-card";
 import { useActiveOrders } from "./hooks/use-active-orders";
@@ -32,6 +34,10 @@ const MAP_MAX_HEIGHT = 360;
 // under the fold (the page scrolls to it), and the map fills the rest within these bounds.
 const DELIVERY_MAP_MIN_HEIGHT = 300;
 const DELIVERY_MAP_MAX_HEIGHT = 560;
+// The scroll content's bottom padding (`pb-4`), part of what has to fit with the map.
+const CONTENT_BOTTOM_PADDING = 16;
+// The longest the first-load skeleton stays up, whatever is still loading.
+const REVEAL_TIMEOUT_MS = 8000;
 
 /** What the header's location button shows; the one place that decides when each state appears. */
 function locationIndicatorState({
@@ -45,7 +51,9 @@ function locationIndicatorState({
 /** Signed-in only: the tabs layout redirects to /auth before this renders without a session. */
 export function HomeScreen() {
   const { token } = useAuthSession();
-  const { isDeliveryBoy } = useViewer();
+  const viewer = useViewer();
+  const { isDeliveryBoy } = viewer;
+  const screenTop = useScreenTop();
   const location = useLiveLocation(Boolean(token));
   const live = location.location;
   const home = useHomeAttendance(token, live);
@@ -63,21 +71,36 @@ export function HomeScreen() {
   // Bumped by a pull to refresh, which recenters the map.
   const [mapResetKey, setMapResetKey] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
-  // Content height minus the map: everything else on the page, which the map makes room for.
-  const [restHeight, setRestHeight] = useState(0);
+  // Everything else on the page, which the map makes room for: the greeting above it and the
+  // blocks below. Measured on their own (not from the scroll content), so the map's animated
+  // height never feeds back into its own size.
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [belowHeight, setBelowHeight] = useState(0);
   // The Orders card's height (with its margin), left out of what must fit on screen.
   const [ordersCardHeight, setOrdersCardHeight] = useState(0);
   const [minHeight, maxHeight] = isDeliveryBoy
     ? [DELIVERY_MAP_MIN_HEIGHT, DELIVERY_MAP_MAX_HEIGHT]
     : [MAP_MIN_HEIGHT, MAP_MAX_HEIGHT];
-  const onScreen = restHeight - (isDeliveryBoy ? ordersCardHeight : 0);
-  const mapHeight =
-    viewportHeight && restHeight
-      ? Math.min(maxHeight, Math.max(minHeight, viewportHeight - onScreen))
-      : maxHeight;
-  // The height the content was last laid out with, to subtract from its measured size.
-  const renderedMapHeight = useRef(mapHeight);
-  renderedMapHeight.current = mapHeight;
+  const measured = Boolean(viewportHeight && headerHeight && belowHeight);
+  const onScreen =
+    headerHeight + belowHeight + CONTENT_BOTTOM_PADDING - (isDeliveryBoy ? ordersCardHeight : 0);
+  const mapHeight = measured
+    ? Math.min(maxHeight, Math.max(minHeight, viewportHeight - onScreen))
+    : maxHeight;
+
+  // The skeleton covers the page until the member's role, today's status and the day's record
+  // have loaded and the page has measured itself; then it fades out over the settled page.
+  // Later changes (another day, a reload) happen in place, with the map's height easing.
+  const settled = viewer.isLoaded && home.settled && !day.loading && measured;
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    if (settled) setRevealed(true);
+  }, [settled]);
+  // A request that hangs rather than fails would keep the page hidden; past this, show it as is.
+  useEffect(() => {
+    const timer = setTimeout(() => setRevealed(true), REVEAL_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Coming back from the Orders tab drops the orders delivered meanwhile.
   const focusedBefore = useRef(false);
@@ -128,7 +151,6 @@ export function HomeScreen() {
       <ScrollView
         className="flex-1"
         contentContainerClassName="px-5 pb-4"
-        onContentSizeChange={(_, height) => setRestHeight(height - renderedMapHeight.current)}
         onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
         refreshControl={
           <RefreshControl
@@ -139,10 +161,16 @@ export function HomeScreen() {
           />
         }
       >
-        <HomeHeader identity={home.identity}>
-          <LocationIndicator onPress={location.resolve} state={locationIndicatorState(location)} />
-        </HomeHeader>
+        <View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
+          <HomeHeader identity={home.identity}>
+            <LocationIndicator
+              onPress={location.resolve}
+              state={locationIndicatorState(location)}
+            />
+          </HomeHeader>
+        </View>
         <HomeMap
+          animateHeight={revealed}
           checkIn={dayCheckIn}
           checkOut={dayCheckOut}
           deliveryBoy={isDeliveryBoy}
@@ -152,32 +180,34 @@ export function HomeScreen() {
           organization={home.organization}
           resetKey={mapResetKey}
         />
-        <DateStrip />
-        {/* A superadmin without Superadmin Attendance doesn't check in: the card leads to the
+        <View onLayout={(event) => setBelowHeight(event.nativeEvent.layout.height)}>
+          <DateStrip />
+          {/* A superadmin without Superadmin Attendance doesn't check in: the card leads to the
             organisation's attendance instead of their own day. */}
-        {home.selfAttendance ? (
-          <DayRecord
-            date={selectedDate}
-            failed={day.failed}
-            kind={day.kind}
-            loading={day.loading}
-            offDay={day.offDay}
-            onOpenPhoto={(side) => {
-              if (day.record) setPhoto({ date: selectedDate, id: day.record.id, side });
-            }}
-            record={day.record}
-          />
-        ) : (
-          <AttendanceCard />
-        )}
-        {/* Under the day's record; the page scrolls once the map is down to its smallest. */}
-        {isDeliveryBoy ? (
-          <View onLayout={(event) => setOrdersCardHeight(event.nativeEvent.layout.height)}>
-            <OrdersCard />
-          </View>
-        ) : null}
+          {home.selfAttendance ? (
+            <DayRecord
+              date={selectedDate}
+              failed={day.failed}
+              kind={day.kind}
+              loading={day.loading}
+              offDay={day.offDay}
+              onOpenPhoto={(side) => {
+                if (day.record) setPhoto({ date: selectedDate, id: day.record.id, side });
+              }}
+              record={day.record}
+            />
+          ) : (
+            <AttendanceCard />
+          )}
+          {/* Under the day's record; the page scrolls once the map is down to its smallest. */}
+          {isDeliveryBoy ? (
+            <View onLayout={(event) => setOrdersCardHeight(event.nativeEvent.layout.height)}>
+              <OrdersCard />
+            </View>
+          ) : null}
+        </View>
       </ScrollView>
-      {/* Pinned above the navigation; anything added below the calendar scrolls behind it. */}
+      {/* Below the scrolling page, just above the navigation; it never covers the content. */}
       {home.selfAttendance ? (
         <AttendanceAction
           attendedToday={home.attendedToday}
@@ -191,6 +221,17 @@ export function HomeScreen() {
           ready={home.statusLoaded}
         />
       ) : null}
+      {revealed ? null : (
+        <Animated.View
+          exiting={FadeOut.duration(260)}
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { paddingTop: screenTop }]}
+        >
+          <View className="flex-1 bg-background">
+            <HomeSkeleton />
+          </View>
+        </Animated.View>
+      )}
       {home.photoModal}
       <PhotoViewer onClose={() => setPhoto(null)} target={photo} token={token} />
     </TabScreen>

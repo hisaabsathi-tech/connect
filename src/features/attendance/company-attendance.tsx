@@ -7,8 +7,8 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "re
 import { type DateRange, SearchRangeToolbar } from "@/components/modules/date-range";
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
+import { CardSkeleton, ListPageSkeleton } from "@/components/modules/skeleton";
 import { StatCard } from "@/components/modules/stat-card";
-import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
@@ -172,7 +172,9 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
   );
 
   const footer = !roster.rows.length ? null : roster.loadingMore ? (
-    <Loader className="py-6" fullHeight={false} size="sm" transparent />
+    <View className="pt-3">
+      <CardSkeleton />
+    </View>
   ) : roster.moreFailed ? (
     <Pressable accessibilityRole="button" className="items-center py-6" onPress={roster.retryMore}>
       <Text className="text-sm text-primary">Couldn't load more. Tap to retry</Text>
@@ -183,7 +185,7 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
   if (roster.loading && !roster.totals)
     return (
       <TabScreen>
-        <Loader fullPage />
+        <ListPageSkeleton chips={false} />
       </TabScreen>
     );
 

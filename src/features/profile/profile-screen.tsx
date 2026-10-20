@@ -3,7 +3,6 @@ import { RefreshControl, ScrollView, View } from "react-native";
 
 import { TabScreen, useScrollFit } from "@/components/modules/layout";
 import { PhotoDialog } from "@/components/modules/photo";
-import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import { useAuthSession } from "@/lib/auth/session";
@@ -15,6 +14,7 @@ import { LogoutButton } from "./components/logout-button";
 import { ProfileCard } from "./components/profile-card";
 import { ProfileDetails } from "./components/profile-details";
 import { useProfilePhoto } from "./components/profile-photo";
+import { ProfileSkeleton } from "./components/profile-skeleton";
 import { useProfile } from "./hooks/use-profile";
 
 export function ProfileScreen() {
@@ -28,7 +28,7 @@ export function ProfileScreen() {
   return (
     <TabScreen>
       {loading ? (
-        <Loader fullPage size={"md"} />
+        <ProfileSkeleton />
       ) : (
         <ScrollView
           {...scrollFit}
