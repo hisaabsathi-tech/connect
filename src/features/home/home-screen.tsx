@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView } from "react-native";
 
 import { TabScreen } from "@/components/modules/layout";
@@ -19,6 +20,7 @@ import { HomeHeader } from "./components/home-header";
 import { HomeMap } from "./components/home-map";
 import { LocationIndicator, type LocationIndicatorState } from "./components/location-indicator";
 import { OrdersCard } from "./components/orders-card";
+import { useActiveOrders } from "./hooks/use-active-orders";
 import { useDayAttendance } from "./hooks/use-day-attendance";
 import { useHomeAttendance } from "./hooks/use-home-attendance";
 
@@ -50,6 +52,9 @@ export function HomeScreen() {
   // Stable per record: the map re-frames its camera whenever its pins change.
   const dayCheckIn = useMemo(() => checkInPointOf(day.record), [day.record]);
   const dayCheckOut = useMemo(() => checkOutPointOf(day.record), [day.record]);
+  // A delivery boy's orders still to deliver; while there are any, today's map shows them.
+  const deliveries = useActiveOrders(isDeliveryBoy ? token : null, today);
+  const showOrders = deliveries.active && selectedDate === today;
   const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
   const [viewportHeight, setViewportHeight] = useState(0);
   // Content height minus the map: everything else on the page, which the map makes room for.
@@ -62,10 +67,24 @@ export function HomeScreen() {
   const renderedMapHeight = useRef(mapHeight);
   renderedMapHeight.current = mapHeight;
 
+  // Coming back from the Orders tab drops the orders delivered meanwhile.
+  const focusedBefore = useRef(false);
+  const reloadDeliveries = deliveries.reload;
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedBefore.current) {
+        focusedBefore.current = true;
+        return;
+      }
+      void reloadDeliveries(true);
+    }, [reloadDeliveries]),
+  );
+
   const refresh = () => {
     resetToToday();
     void home.refresh();
     void day.reload();
+    void deliveries.reload(true);
   };
 
   const submit = async () => {
@@ -113,8 +132,10 @@ export function HomeScreen() {
         <HomeMap
           checkIn={dayCheckIn}
           checkOut={dayCheckOut}
+          deliveryBoy={isDeliveryBoy}
           height={mapHeight}
           live={live}
+          orders={showOrders ? deliveries.pins : null}
           organization={home.organization}
         />
         <DateStrip />
