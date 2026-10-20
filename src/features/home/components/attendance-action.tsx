@@ -17,7 +17,8 @@ interface AttendanceActionProps {
   located: boolean;
   /** The calendar's selected day kind; the swipe only ever acts on today. */
   kind: DayKind;
-  onSubmit: () => void;
+  /** The swipe holds at the end, spinning, until this settles. */
+  onSubmit: () => void | Promise<unknown>;
   /** Asks for whatever location is missing (permission, or switching it on). */
   onFixLocation: () => void;
 }

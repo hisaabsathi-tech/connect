@@ -1,5 +1,5 @@
 /** biome-ignore-all lint/correctness/useExhaustiveDependencies: <forced> */
-import { ArrowRight02Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
+import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -26,7 +26,8 @@ const NUDGE = 8;
 const HAPTIC_STEPS = 4;
 
 interface SwipeAttendanceProps {
-  action: () => void;
+  /** The thumb stays at the end, with a spinner, until the returned promise settles. */
+  action: () => void | Promise<unknown>;
   busy: boolean;
   disabled?: boolean;
   /** Replaces "Swipe to Check In/Out", e.g. to say why the button is disabled. */
@@ -39,30 +40,29 @@ export function SwipeAttendance({
   busy,
   disabled,
   label: override,
-  mode,
+  mode: currentMode,
 }: SwipeAttendanceProps) {
   const x = useRef(new Animated.Value(0)).current;
   const nudge = useRef(new Animated.Value(0)).current;
-  const [complete, setComplete] = useState(false);
+  // The mode the thumb was swiped in, while it is held at the end. A check in flips the parent
+  // to "out" before the action settles; the swipe keeps saying "Checking you in" until it does.
+  const [held, setHeld] = useState<SwipeAttendanceProps["mode"] | null>(null);
+  const mode = held ?? currentMode;
   const [dragging, setDragging] = useState(false);
   const [travel, setTravel] = useState(0);
   // The responder is created once, so it reads the latest props and track size through this ref.
-  const latest = useRef({ action, busy, disabled, travel });
+  const latest = useRef({ action, busy, disabled, mode, travel });
   // Last step ticked and whether the thumb sits at the end, so each fires once per crossing.
   const feel = useRef({ armed: false, step: 0 });
+  // From the moment the thumb lands at the end until the action has finished.
+  const working = busy || held !== null;
   useEffect(() => {
-    latest.current = { action, busy, disabled, travel };
-  }, [action, busy, disabled, travel]);
+    latest.current = { action, busy: working, disabled, mode, travel };
+  }, [action, working, disabled, mode, travel]);
   const accent = mode === "in" ? colors.primary : colors.checkOut;
   const label = override ?? (mode === "in" ? "Swipe to Check In" : "Swipe to Check Out");
   const reset = () => Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
-  useEffect(() => {
-    if (!busy && complete) {
-      setComplete(false);
-      reset();
-    }
-  }, [busy, complete]);
-  const idle = !(busy || disabled || complete || dragging) && travel > 0;
+  const idle = !(working || disabled || dragging) && travel > 0;
   useEffect(() => {
     if (!idle) {
       nudge.stopAnimation();
@@ -120,8 +120,14 @@ export function SwipeAttendance({
         const { travel: end } = latest.current;
         if (gesture.dx >= end - END_TOLERANCE) {
           Animated.timing(x, { duration: 120, toValue: end, useNativeDriver: true }).start(() => {
-            setComplete(true);
-            latest.current.action();
+            setHeld(latest.current.mode);
+            // Held at the end until the whole action (checks, photo, request) has finished.
+            void Promise.resolve(latest.current.action())
+              .catch(() => undefined)
+              .finally(() => {
+                setHeld(null);
+                reset();
+              });
           });
         } else {
           // Let go too early: a soft bump as the thumb springs back.
@@ -153,7 +159,7 @@ export function SwipeAttendance({
         style={{ left: THUMB + INSET, opacity: labelOpacity }}
       >
         <Text className="text-base text-white" numberOfLines={1}>
-          {busy ? (mode === "in" ? "Checking you in" : "Checking you out") : label}
+          {working ? (mode === "in" ? "Checking you in" : "Checking you out") : label}
         </Text>
       </Animated.View>
       <Animated.View
@@ -161,15 +167,10 @@ export function SwipeAttendance({
         className="items-center justify-center bg-white"
         style={{ height: THUMB, transform: [{ translateX: Animated.add(x, nudge) }], width: THUMB }}
       >
-        {busy ? (
+        {working ? (
           <ActivityIndicator color={accent} size="small" />
         ) : (
-          <HugeiconsIcon
-            color={accent}
-            icon={complete ? CheckmarkCircle02Icon : ArrowRight02Icon}
-            size={22}
-            strokeWidth={1.8}
-          />
+          <HugeiconsIcon color={accent} icon={ArrowRight02Icon} size={22} strokeWidth={1.8} />
         )}
       </Animated.View>
     </View>
