@@ -1,7 +1,6 @@
 /** biome-ignore-all lint/performance/noBarrelFile: public date facade */
 export {
   addDays,
-  dateOf,
   daysBetween,
   eachDay,
   endOfYear,

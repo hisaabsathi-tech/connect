@@ -24,15 +24,25 @@ export interface HapticButtonProps {
   kind: HapticKind;
   tone?: Tone;
   onPress?: () => void;
+  /** Dimmed, with no press or haptic. */
+  disabled?: boolean;
 }
 
 /** Button that fires its haptic on touch-down, so the feedback lands with the finger. */
-export function HapticButton({ label, kind, tone = "neutral", onPress }: HapticButtonProps) {
+export function HapticButton({
+  disabled = false,
+  label,
+  kind,
+  tone = "neutral",
+  onPress,
+}: HapticButtonProps) {
   const style = tones[tone];
   return (
     <Pressable
       accessibilityRole="button"
-      className={`h-12 flex-1 items-center justify-center rounded-2xl ${style.button}`}
+      accessibilityState={{ disabled }}
+      className={`h-12 flex-1 items-center justify-center rounded-2xl ${style.button} ${disabled ? "opacity-50" : ""}`}
+      disabled={disabled}
       onPress={onPress}
       onPressIn={() => haptic(kind)}
     >

@@ -1,6 +1,6 @@
 import type { AttendanceRange, AttendanceRecord } from "@/lib/api/attendance";
 import { type DayKind, dayKindOf, isWeeklyOff } from "@/lib/attendance/remarks";
-import { durationMs, eachDay, startOfMonth, startOfWeek } from "@/lib/date";
+import { daysBetween, durationMs, eachDay, startOfMonth, startOfWeek } from "@/lib/date";
 
 /** One calendar day in the list or table: its session, or why there is none. */
 export type AttendanceDayEntry = {
@@ -42,24 +42,39 @@ export function workedMs(record: AttendanceRecord, today: string, now = Date.now
   return durationMs(record.checkInAt, record.checkOutAt, now);
 }
 
+/**
+ * The top cards' numbers for a period: by default this month's days and this week's hours, or
+ * the applied date range for both.
+ */
 export type AttendanceSummary = {
-  /** Days attended this month. */
+  /** Days attended in the period: only days with a check-in. */
   presentDays: number;
-  /**
-   * Working days this month up to today: holidays and weekly offs from the organisation's
-   * attendance configuration are left out, unless the member worked that day anyway.
-   */
-  workingDays: number;
-  /** Time worked this week (Monday to today) in closed sessions. */
-  weekClosedMs: number;
-  /** Check-in time of today's session while it is still open, which keeps adding to the week. */
+  /** Every day in the period (31 for October), nothing subtracted. */
+  totalDays: number;
+  /** Time worked in the period's closed sessions. */
+  closedMs: number;
+  /** Check-in time of today's session while it is still open, which keeps adding to the time. */
   openSince: string | null;
 };
 
-/** This week's hours at `now`: the closed sessions plus today's open one so far. */
-export function weekWorkedMs(summary: AttendanceSummary, now = Date.now()) {
-  return summary.weekClosedMs + (summary.openSince ? durationMs(summary.openSince, null, now) : 0);
+/** The period's time worked at `now`: the closed sessions plus today's open one so far. */
+export function workedSoFarMs(summary: AttendanceSummary, now = Date.now()) {
+  return summary.closedMs + (summary.openSince ? durationMs(summary.openSince, null, now) : 0);
 }
+
+/** Today's session if it is still open, else undefined. */
+const openToday = (records: AttendanceRecord[], today: string) =>
+  records.find((record) => !record.checkOutAt && record.date === today);
+
+/** Total time of closed sessions, leaving out `open`. */
+const closedTime = (
+  records: AttendanceRecord[],
+  open: AttendanceRecord | undefined,
+  today: string,
+) =>
+  records
+    .filter((record) => record !== open)
+    .reduce((total, record) => total + workedMs(record, today), 0);
 
 /** The day that a summary's range has to start on to cover both this month and this week. */
 export function summaryStart(today: string) {
@@ -72,21 +87,35 @@ export function summaryStart(today: string) {
 export function summarize(range: AttendanceRange, today: string): AttendanceSummary {
   const monthStart = startOfMonth(today);
   const weekStart = startOfWeek(today);
-  const offDays = new Set(range.nonWorkingDays.map((day) => day.date));
   const attended = new Set(
     range.items.filter((item) => item.date >= monthStart).map((item) => item.date),
   );
   const week = range.items.filter((item) => item.date >= weekStart);
-  const open = week.find((item) => !item.checkOutAt && item.date === today);
+  const open = openToday(week, today);
   return {
+    closedMs: closedTime(week, open, today),
     openSince: open?.checkInAt ?? null,
     presentDays: attended.size,
-    weekClosedMs: week
-      .filter((item) => item !== open)
-      .reduce((total, item) => total + workedMs(item, today), 0),
-    workingDays: eachDay(monthStart, today).filter(
-      (date) => !offDays.has(date) || attended.has(date),
-    ).length,
+    // Day 0 of next month is this month's last day.
+    totalDays: new Date(
+      Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0),
+    ).getUTCDate(),
+  };
+}
+
+/** The top cards' numbers for an applied date range: its present days, all its days and hours. */
+export function summarizeRange(
+  days: AttendanceDayEntry[],
+  range: { from: string; to: string },
+  today: string,
+): AttendanceSummary {
+  const records = days.flatMap((day) => (day.record ? [day.record] : []));
+  const open = openToday(records, today);
+  return {
+    closedMs: closedTime(records, open, today),
+    openSince: open?.checkInAt ?? null,
+    presentDays: records.length,
+    totalDays: daysBetween(range.from, range.to) + 1,
   };
 }
 

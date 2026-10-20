@@ -47,8 +47,3 @@ const weekdayFormatter = new Intl.DateTimeFormat("en-IN", { timeZone: "UTC", wee
 export function weekdayOf(iso: string) {
   return weekdayFormatter.format(new Date(toMs(iso)));
 }
-
-/** Midnight UTC of the day, for date pickers that take a `Date`. */
-export function dateOf(iso: string) {
-  return new Date(toMs(iso));
-}

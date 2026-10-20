@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMyAttendanceRange } from "@/lib/api/attendance";
 
 import { type AttendanceDayEntry, buildDays } from "../lib/days";
+import { retryOnce } from "../lib/retry";
 
 /** Both days included, as `YYYY-MM-DD`. */
 export type DateRange = { from: string; to: string };
@@ -27,7 +28,7 @@ export function useAttendanceRange(token: string | null, range: DateRange | null
     }
     setLoading(true);
     try {
-      const result = await fetchMyAttendanceRange(token, from, to);
+      const result = await retryOnce(() => fetchMyAttendanceRange(token, from, to));
       if (request === latestRequest.current) setDays(buildDays(result, from, to, today, true));
     } catch {
       if (request === latestRequest.current) setFailed(true);

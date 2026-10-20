@@ -8,7 +8,7 @@ import { colors } from "@/config/colors";
 import { formatElapsed } from "@/lib/date";
 import { haptic } from "@/lib/haptics";
 
-import { type AttendanceSummary as Summary, weekWorkedMs } from "../lib/days";
+import { type AttendanceSummary as Summary, workedSoFarMs } from "../lib/days";
 
 /** Page title, with the Holiday List button when the organisation has holidays configured. */
 export function AttendanceHeader({ onOpenHolidays }: { onOpenHolidays?: () => void }) {
@@ -62,20 +62,28 @@ function useLiveNow(live: boolean) {
 }
 
 /**
- * Days present this month out of its working days so far, and the time worked this week as
- * hours:minutes:seconds, counting up live while today's session is open.
+ * Days present out of all the days, and the time worked as hours:minutes:seconds, counting up
+ * live while today's session is open. By default for this month and this week; with a range
+ * applied, both for that range.
  */
-export function AttendanceSummaryCards({ summary }: { summary: Summary | null }) {
+export function AttendanceSummaryCards({
+  ranged,
+  summary,
+}: {
+  /** A date range is applied: both cards describe it instead of this month and week. */
+  ranged: boolean;
+  summary: Summary | null;
+}) {
   const now = useLiveNow(Boolean(summary?.openSince));
   return (
     <View className="mt-5 flex-row gap-3">
       <Stat
         label="Present Days"
-        value={summary ? `${summary.presentDays}/${summary.workingDays}` : "--"}
+        value={summary ? `${summary.presentDays}/${summary.totalDays}` : "--"}
       />
       <Stat
-        label="Weekly Working Hrs"
-        value={summary ? formatElapsed(weekWorkedMs(summary, now)) : "--"}
+        label={ranged ? "Total Working Hrs" : "Weekly Working Hrs"}
+        value={summary ? formatElapsed(workedSoFarMs(summary, now)) : "--"}
       />
     </View>
   );

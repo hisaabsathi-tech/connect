@@ -80,11 +80,12 @@ export function isWeeklyOff(offDay: string) {
 }
 
 /**
- * Pills on an attendance list card: Present, then Late Entry, Overtime and Missed Checkout, or
- * Working while today's session is still open.
+ * Pills on an attendance list card: Late Entry, Overtime and Missed Checkout, or Working while
+ * today's session is still open. None for an on-time, closed day. There is no Present pill, since
+ * the list only has days that were attended.
  */
 export function attendedDayRemarks(record: AttendanceSession, kind: DayKind): Remark[] {
-  const remarks: Remark[] = [{ label: "Present", variant: "delivered" }];
+  const remarks: Remark[] = [];
   if (record.subStatuses?.includes("LATE_ENTRY")) remarks.push(SUB_STATUS.LATE_ENTRY);
   if (record.subStatuses?.includes("OVERTIME")) remarks.push(SUB_STATUS.OVERTIME);
   if (record.checkOutAt) {
