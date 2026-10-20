@@ -14,8 +14,10 @@ import { DateRangeSheet } from "./date-range-sheet";
 // The button's minimum share of the page width, so it reads as a proper filter field.
 const MIN_WIDTH_SHARE = 0.6;
 
-/** "1st - 15th Oct, 2026", "28th Sep - 4th Oct, 2026" or the full dates across years. */
+/** "1st - 15th Oct, 2026", "28th Sep - 4th Oct, 2026", the full dates across years, or one day. */
 export function rangeLabel({ from, to }: DateRange) {
+  // One day (Today, Yesterday, or the same day tapped twice): just that date.
+  if (from === to) return formatDayLabel(from);
   const [fromDay, fromMonth, fromYear] = formatDayLabel(from).replace(",", "").split(" ");
   const [toDay, toMonth, toYear] = formatDayLabel(to).replace(",", "").split(" ");
   if (fromYear !== toYear) return `${formatDayLabel(from)} - ${formatDayLabel(to)}`;

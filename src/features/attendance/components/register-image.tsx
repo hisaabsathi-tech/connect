@@ -39,6 +39,9 @@ function Cell({
       fontFamily="sans-serif"
       fontSize={font.size}
       fontWeight={font.weight}
+      // See REGISTER_FONTS: no font kerning on spaced (bold) text, just even gaps.
+      kerning={font.spacing ? 0 : undefined}
+      letterSpacing={font.spacing || undefined}
       textAnchor="middle"
       x={x + width / 2}
       y={y + height / 2 + font.size * 0.35}

@@ -137,6 +137,7 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
           onPress={() => void download()}
           onPressIn={() => haptic("light")}
         >
+          <Text className="text-sm font-medium text-primary-foreground">Download</Text>
           {downloading ? (
             <ActivityIndicator color={colors.primaryForeground} size="small" />
           ) : (
@@ -147,7 +148,6 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
               strokeWidth={1.8}
             />
           )}
-          <Text className="text-sm font-medium text-primary-foreground">Download</Text>
         </Pressable>
       </View>
       {tabs}

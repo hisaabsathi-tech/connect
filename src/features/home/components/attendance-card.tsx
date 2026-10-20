@@ -24,7 +24,7 @@ export function AttendanceCard() {
       <View className="flex-1">
         <Text className="text-lg font-semibold leading-6 text-[#2F5A1F]">Attendance</Text>
         <Text className="mt-1 text-sm leading-5 text-[#3E6B32]">
-          Manage your attendance records from here
+         Manage your employees' attendance and view their check-ins and check-outs.
         </Text>
       </View>
       <Image

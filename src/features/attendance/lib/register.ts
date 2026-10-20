@@ -22,12 +22,15 @@ export const REGISTER_STYLE = {
   titleFill: "#CCD3FF",
 } as const;
 
+// `spacing`: extra space between letters, in layout units. Android's SVG text layout applies the
+// font's kerning itself and pulls some bold pairs together until they touch ("I" and "L" in
+// DAILY), so bold text turns kerning off (register-image.tsx) and is spaced a little apart.
 export const REGISTER_FONTS = {
-  absent: { size: 14, weight: "bold" },
-  body: { size: 14, weight: "normal" },
-  header: { size: 13, weight: "bold" },
-  meta: { size: 14, weight: "bold" },
-  title: { size: 20, weight: "bold" },
+  absent: { size: 14, spacing: 0.8, weight: "bold" },
+  body: { size: 14, spacing: 0, weight: "normal" },
+  header: { size: 13, spacing: 0.8, weight: "bold" },
+  meta: { size: 14, spacing: 0.8, weight: "bold" },
+  title: { size: 20, spacing: 2, weight: "bold" },
 } as const;
 
 type Font = (typeof REGISTER_FONTS)[keyof typeof REGISTER_FONTS];
@@ -49,7 +52,7 @@ function textWidth(text: string, font: Font) {
     else if (char === " ") ems += 0.28;
     else ems += 0.36;
   }
-  return ems * font.size * (font.weight === "bold" ? 1.06 : 1);
+  return ems * font.size * (font.weight === "bold" ? 1.06 : 1) + font.spacing * text.length;
 }
 
 export type RegisterLine = {

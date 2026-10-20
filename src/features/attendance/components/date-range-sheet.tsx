@@ -47,7 +47,10 @@ function monthGrid(month: string) {
 
 function presetsFor(today: string): { label: string; range: DateRange }[] {
   const lastMonth = shiftMonth(startOfMonth(today), -1);
+  const yesterday = addDays(today, -1);
   return [
+    { label: "Today", range: { from: today, to: today } },
+    { label: "Yesterday", range: { from: yesterday, to: yesterday } },
     { label: "This Week", range: { from: startOfWeek(today), to: today } },
     { label: "This Month", range: { from: startOfMonth(today), to: today } },
     {
@@ -144,7 +147,9 @@ export function DateRangeSheet({
       </Text>
       <Text className="mt-0.5 text-sm text-muted-foreground">
         {draft.from
-          ? `${formatDayLabel(draft.from)} - ${draft.to ? formatDayLabel(draft.to) : "pick an end date"}`
+          ? draft.to === draft.from
+            ? formatDayLabel(draft.from)
+            : `${formatDayLabel(draft.from)} - ${draft.to ? formatDayLabel(draft.to) : "pick an end date"}`
           : "Pick a start date"}
       </Text>
 
