@@ -15,6 +15,8 @@ import { colors } from "@/config/colors";
 import { type AddressSuggestion, autocompleteAddress } from "@/lib/api/maps";
 import type { Profile } from "@/lib/api/profile";
 
+import { OrganizationSwitch } from "./organization-switch";
+
 function DetailRow({
   border = true,
   icon,
@@ -170,6 +172,7 @@ export function ProfileDetails({ onSave, profile, saving, token }: ProfileDetail
             {profile?.organizationName?.trim() || "—"}
           </Text>
         </View>
+        <OrganizationSwitch activeId={profile?.organizationId} />
       </View>
       <DetailRow icon={Mail01Icon} value={profile?.email ?? null} />
       {editing ? (

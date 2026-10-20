@@ -1,10 +1,11 @@
 import { Download02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
 
 import { TabScreen } from "@/components/modules/layout";
+import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
@@ -32,11 +33,12 @@ function Separator() {
 }
 
 /**
- * The member's attendance: this month's present days and this week's hours on top, then every
- * day from today backwards as cards (a week first, a month more on each scroll to the end). With
- * a date range applied, that range shows as a table instead, which can be exported as CSV.
+ * The member's own attendance: this month's present days and this week's hours on top, then
+ * every attended day from today backwards as cards (this month first, a month more on each
+ * scroll to the end). With a date range applied, that range shows as a table instead, which can
+ * be exported as CSV. `tabs` (Company / Own, for admins) sits under the title.
  */
-export function AttendanceScreen() {
+export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
   const { token } = useAuthSession();
   const { today } = useDateFilter();
   const toast = useToast();
@@ -115,6 +117,7 @@ export function AttendanceScreen() {
       <AttendanceHeader
         onOpenHolidays={holidays.length ? () => setHolidaysOpen(true) : undefined}
       />
+      {tabs}
       <AttendanceSummaryCards
         ranged={Boolean(range)}
         summary={range ? rangeSummary : summary.summary}
@@ -187,6 +190,14 @@ export function AttendanceScreen() {
   ) : list.done ? (
     <EmptyBlock description="Days you check in will show here." title="No attendance yet" />
   ) : null;
+
+  // The first load fills the page; later ones (refresh, older months) load inside the list.
+  if (list.loading && !list.days.length && !range)
+    return (
+      <TabScreen>
+        <Loader fullPage />
+      </TabScreen>
+    );
 
   return (
     <TabScreen>

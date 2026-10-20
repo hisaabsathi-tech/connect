@@ -15,6 +15,7 @@ import {
   checkOutPointOf,
   fetchMyAttendancePhotos,
 } from "@/lib/api/attendance";
+import { fetchRosterPhotos } from "@/lib/api/attendance-roster";
 import { formatClock, formatDayLabel } from "@/lib/date";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
@@ -47,7 +48,10 @@ export function hasAttendanceDetails(record: AttendanceRecord | null) {
 }
 
 /** Both photos' signed URLs for a record, fetched once when the sheet opens on it. */
-function usePhotos(token: string | null, record: AttendanceRecord | null) {
+/** Whose record it is: the member's own, or any employee's on the organisation's roster. */
+export type DetailScope = "mine" | "organization";
+
+function usePhotos(token: string | null, record: AttendanceRecord | null, scope: DetailScope) {
   const [photos, setPhotos] = useState<Record<Side, string | null> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const wanted = Boolean(record && (record.hasCheckInPhoto || record.hasCheckOutPhoto));
@@ -56,7 +60,8 @@ function usePhotos(token: string | null, record: AttendanceRecord | null) {
     setError(null);
     if (!(token && record && wanted)) return;
     let active = true;
-    fetchMyAttendancePhotos(token, record.id, record.date)
+    const fetchPhotos = scope === "organization" ? fetchRosterPhotos : fetchMyAttendancePhotos;
+    fetchPhotos(token, record.id, record.date)
       .then((next) => {
         if (active) setPhotos(next);
       })
@@ -66,7 +71,7 @@ function usePhotos(token: string | null, record: AttendanceRecord | null) {
     return () => {
       active = false;
     };
-  }, [record, token, wanted]);
+  }, [record, scope, token, wanted]);
   return { error, photos };
 }
 
@@ -76,13 +81,18 @@ function usePhotos(token: string | null, record: AttendanceRecord | null) {
  * with the pin and full address, or the photo (tap for full screen, pinch to zoom).
  */
 export function AttendanceDetailSheet({
+  heading,
   onClose,
   record,
+  scope = "mine",
   token,
 }: {
+  /** Shown above the date, e.g. the employee's name on the organisation's roster. */
+  heading?: string;
   onClose: () => void;
   /** The tapped day's session; null closes the sheet. */
   record: AttendanceRecord | null;
+  scope?: DetailScope;
   token: string | null;
 }) {
   const { height } = useWindowDimensions();
@@ -94,7 +104,10 @@ export function AttendanceDetailSheet({
     setShown(record);
     setSelected(null);
   }
-  const { error, photos } = usePhotos(token, shown);
+  const { error, photos } = usePhotos(token, shown, scope);
+  // Kept with the record, so the heading doesn't vanish while the sheet slides away.
+  const [shownHeading, setShownHeading] = useState(heading);
+  if (record && heading !== shownHeading) setShownHeading(heading);
   const options = useMemo(() => (shown ? optionsOf(shown) : []), [shown]);
   const option = options.find((item) => keyOf(item) === selected) ?? options[0];
   const checkIn = useMemo(() => (shown ? checkInPointOf(shown) : null), [shown]);
@@ -174,7 +187,18 @@ export function AttendanceDetailSheet({
       <BottomSheet dragHandleOnly onClose={onClose} visible={Boolean(record)}>
         {shown ? (
           <>
-            <Text className="mt-2 text-xl font-semibold leading-7 text-foreground">
+            {shownHeading ? (
+              <Text className="mt-2 text-xl font-semibold leading-7 text-foreground">
+                {shownHeading}
+              </Text>
+            ) : null}
+            <Text
+              className={
+                shownHeading
+                  ? "text-sm font-medium text-foreground"
+                  : "mt-2 text-xl font-semibold leading-7 text-foreground"
+              }
+            >
               {formatDayLabel(shown.date, "long")}
             </Text>
             <Text className="mt-0.5 text-sm text-muted-foreground">

@@ -12,7 +12,7 @@ import { haptic } from "@/lib/haptics";
 import type { AttendanceDayEntry } from "../lib/days";
 
 /** "Madhya Kalyanpur, Baruipur": the first two parts of a reverse-geocoded address. */
-function shortAddress(address: string | null | undefined) {
+export function shortAddress(address: string | null | undefined) {
   if (!address) return null;
   return address
     .split(",")
@@ -22,7 +22,7 @@ function shortAddress(address: string | null | undefined) {
     .join(", ");
 }
 
-function Side({
+export function TimeSide({
   address,
   align,
   hasPhoto,
@@ -87,7 +87,7 @@ export function AttendanceDayCard({
     >
       {record ? (
         <View className="mb-4 flex-row">
-          <Side
+          <TimeSide
             address={shortAddress(record.checkInAddress)}
             align="left"
             label="Check-In Time"
@@ -95,7 +95,7 @@ export function AttendanceDayCard({
             time={formatClock(record.checkInAt)}
           />
           <View className="mx-3 my-3 w-px bg-border" />
-          <Side
+          <TimeSide
             address={shortAddress(record.checkOutAddress)}
             align="right"
             label="Check-Out Time"

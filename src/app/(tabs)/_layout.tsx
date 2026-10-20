@@ -11,7 +11,7 @@ import { useAuthSession } from "@/lib/auth/session";
  */
 export default function TabsLayout() {
   const markStartupReady = useStartupReady();
-  const { isReady, token } = useAuthSession();
+  const { isReady, organizationKey, token } = useAuthSession();
 
   if (!isReady) return <Loader fullPage />;
   if (!token)
@@ -25,6 +25,8 @@ export default function TabsLayout() {
     <View className="flex-1 bg-background" onLayout={markStartupReady}>
       <Tabs
         backBehavior="history"
+        // A new active organisation starts every tab over with its data.
+        key={organizationKey}
         // `shift` preserves a horizontal, directional-feeling transition between tabs.
         screenOptions={{ animation: "shift", headerShown: false }}
         tabBar={(props) => <BottomNavigation {...props} />}

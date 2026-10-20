@@ -33,7 +33,7 @@ export function AttendanceHeader({ onOpenHolidays }: { onOpenHolidays?: () => vo
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+export function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-1 border border-border bg-card px-4 py-4">
       <Text className="text-xs font-medium uppercase tracking-[0.3px] text-muted-foreground">
@@ -77,11 +77,11 @@ export function AttendanceSummaryCards({
   const now = useLiveNow(Boolean(summary?.openSince));
   return (
     <View className="mt-5 flex-row gap-3">
-      <Stat
+      <StatCard
         label="Present Days"
         value={summary ? `${summary.presentDays}/${summary.totalDays}` : "--"}
       />
-      <Stat
+      <StatCard
         label={ranged ? "Total Working Hrs" : "Weekly Working Hrs"}
         value={summary ? formatElapsed(workedSoFarMs(summary, now)) : "--"}
       />

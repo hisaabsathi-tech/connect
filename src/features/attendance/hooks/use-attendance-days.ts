@@ -41,6 +41,8 @@ export function useAttendanceDays(token: string | null, today: string) {
     setFailed(false);
     setMoreFailed(false);
     setDone(false);
+    // A page still on its way belongs to the old list; its spinner goes too.
+    setLoadingMore(false);
     try {
       const range = await retryOnce(() => fetchMyAttendanceRange(token, firstFrom, today));
       if (current === generation.current) setDays(buildDays(range, firstFrom, today, today));

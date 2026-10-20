@@ -10,6 +10,8 @@ export type Profile = {
   name: string;
   phoneNumber: string | null;
   organizationName: string | null;
+  /** The active organisation, to mark it in the organisation switcher. */
+  organizationId: string | null;
   role: string | null;
 };
 
@@ -17,7 +19,7 @@ const PROFILE_QUERY = `
 query ConnectorProfile {
   me {
     orgRole { role }
-    organization { name }
+    organization { id name }
     user { id name email image phoneNumber address }
   }
 }`;
@@ -27,12 +29,13 @@ export async function fetchProfile(token: string): Promise<Profile> {
   const payload = await graphqlRequest<{
     me: {
       orgRole?: { role?: string | null } | null;
-      organization?: { name?: string | null } | null;
-      user: Omit<Profile, "organizationName" | "role">;
+      organization?: { id?: string | null; name?: string | null } | null;
+      user: Omit<Profile, "organizationId" | "organizationName" | "role">;
     };
   }>({ query: PROFILE_QUERY, token });
   return {
     ...payload.me.user,
+    organizationId: payload.me.organization?.id ?? null,
     organizationName: payload.me.organization?.name ?? null,
     role: payload.me.orgRole?.role ?? null,
   };

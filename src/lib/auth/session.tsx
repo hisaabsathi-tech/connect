@@ -28,6 +28,13 @@ type AuthSession = {
    * app back to sign in. `notice` explains why in a toast.
    */
   endSession: (notice?: { title: string; description: string }) => Promise<void>;
+  /** Makes another of the user's organisations the active one, without signing in again. */
+  switchOrganization: (organizationId: string) => Promise<void>;
+  /**
+   * Changes whenever the active organisation does. The token can stay the same across a switch,
+   * so the signed-in screens are keyed on this to start over with the new organisation's data.
+   */
+  organizationKey: number;
 };
 
 const AuthSessionContext = createContext<AuthSession | null>(null);
@@ -46,6 +53,7 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
   const toast = useToast();
   const [isReady, setReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  const [organizationKey, setOrganizationKey] = useState(0);
   // The latest token for callbacks registered once (rejected-token handler, app-state check).
   const current = useRef<string | null>(null);
   useEffect(() => {
@@ -131,6 +139,17 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     setToken(nextToken);
   }, []);
 
+  const switchOrganization = useCallback(async (organizationId: string) => {
+    const active = current.current;
+    if (!active) throw new Error("You are signed out. Please sign in again.");
+    const result = await authApi.setActiveOrganization(organizationId, active);
+    const nextToken = result.token ?? active;
+    await SecureStore.setItemAsync(TOKEN_KEY, nextToken);
+    current.current = nextToken;
+    setToken(nextToken);
+    setOrganizationKey((key) => key + 1);
+  }, []);
+
   const signOut = useCallback(async () => {
     const active = current.current;
     // Forget it first, so the sign-out request's own answer can't trigger "session ended".
@@ -147,8 +166,16 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
   }, []);
 
   const value = useMemo(
-    () => ({ completeSignIn, endSession, isReady, signOut, token }),
-    [completeSignIn, endSession, isReady, signOut, token],
+    () => ({
+      completeSignIn,
+      endSession,
+      isReady,
+      organizationKey,
+      signOut,
+      switchOrganization,
+      token,
+    }),
+    [completeSignIn, endSession, isReady, organizationKey, signOut, switchOrganization, token],
   );
   return <AuthSessionContext value={value}>{children}</AuthSessionContext>;
 }

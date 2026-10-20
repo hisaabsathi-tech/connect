@@ -12,7 +12,7 @@ import type { DateRange } from "../hooks/use-attendance-range";
 import { DateRangeSheet } from "./date-range-sheet";
 
 /** "1st - 15th Oct, 2026", "28th Sep - 4th Oct, 2026" or the full dates across years. */
-function rangeLabel({ from, to }: DateRange) {
+export function rangeLabel({ from, to }: DateRange) {
   const [fromDay, fromMonth, fromYear] = formatDayLabel(from).replace(",", "").split(" ");
   const [toDay, toMonth, toYear] = formatDayLabel(to).replace(",", "").split(" ");
   if (fromYear !== toYear) return `${formatDayLabel(from)} - ${formatDayLabel(to)}`;
