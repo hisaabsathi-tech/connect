@@ -105,7 +105,7 @@ export function DateStrip() {
   const first = days[start] ?? days[todayIndex - CENTER];
   const last = days[start + VISIBLE_DAYS - 1] ?? days[todayIndex + CENTER];
   return (
-    <View className="mt-4">
+    <View className="my-3">
       <Text className="mb-2.5 text-base font-medium text-muted-foreground">
         {rangeLabel(first, last)}
       </Text>
@@ -133,7 +133,7 @@ export function DateStrip() {
                   style={{ width: cell }}
                 >
                   <Text
-                    className={`text-xl font-medium leading-6 ${active ? "text-white" : "text-foreground"}`}
+                    className={`text-xl font-semibold leading-6 ${active ? "text-white" : "text-foreground"}`}
                   >
                     {item.date}
                   </Text>

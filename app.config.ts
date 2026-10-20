@@ -110,16 +110,16 @@ export default ({ config }: ConfigContext): ExpoConfig =>
                   {
                     fontFamily: "Satoshi",
                     fontDefinitions: [
-                      { path: "./assets/fonts/Satoshi-Regular.otf", weight: 400 },
-                      { path: "./assets/fonts/Satoshi-Medium.otf", weight: 500 },
-                      { path: "./assets/fonts/Satoshi-Medium.otf", weight: 600 },
-                      { path: "./assets/fonts/Satoshi-Medium.otf", weight: 700 },
+                      { path: "./assets/fonts/satoshi-regular.otf", weight: 400 },
+                      { path: "./assets/fonts/satoshi-medium.otf", weight: 500 },
+                      { path: "./assets/fonts/satoshi-medium.otf", weight: 600 },
+                      { path: "./assets/fonts/satoshi-medium.otf", weight: 700 },
                     ],
                   },
                 ],
               },
               ios: {
-                fonts: ["./assets/fonts/Satoshi-Regular.otf", "./assets/fonts/Satoshi-Medium.otf"],
+                fonts: ["./assets/fonts/satoshi-regular.otf", "./assets/fonts/satoshi-medium.otf"],
               },
             },
           ],

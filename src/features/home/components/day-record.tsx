@@ -17,8 +17,8 @@ interface DayRecordProps {
 
 const emptyMessages: Record<DayKind, string> = {
   future: "This day hasn't started yet.",
-  past: "No attendance recorded on this day.",
-  today: "You haven't checked in today.",
+  past: "No attendance recorded for this day.",
+  today: "Check in to start your day.",
 };
 
 function Badge({ label, tone }: { label: string; tone: "success" | "primary" | "warning" }) {
@@ -64,8 +64,8 @@ export function DayRecord({ failed, kind, loading, record }: DayRecordProps) {
     );
   if (!record)
     return (
-      <View className="mt-4 items-center justify-center border border-[#E6E9F8] bg-card px-4 py-6">
-        <Text className="text-sm text-muted-foreground">
+      <View className="mt-4 items-center justify-center border border-[#E6E9F8] bg-card px-4 py-12">
+        <Text className="text-md font-medium text-muted-foreground">
           {failed ? "Couldn't load attendance. Pull down to retry." : emptyMessages[kind]}
         </Text>
       </View>

@@ -11,7 +11,8 @@ const quotes = [
   "Ready when you are.",
   "One step at a time.",
   "Here’s to a productive day.",
-  "You’ve got this.",
+  "Your day is waiting for you.",
+  "Start your day with a smile.",
 ];
 
 function quoteForToday() {
