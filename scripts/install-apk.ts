@@ -12,8 +12,11 @@ const packageName = "in.hisaabsathi.connect";
 const command = "bun run android:device:install";
 const libPattern = /^\s*\d+\s+\S+\s+\S+\s+lib\/([^/]+)\//gm;
 
-/** `--apk <path>`, else this version's default build, else the newest APK in apks/android/. */
-function findApk(): string {
+/**
+ * `--apk <path>`, else this version's build for the phone's CPU (`…-v<version>.apk` for 64-bit,
+ * `…-v<version>-32bit.apk` for 32-bit), else the newest APK in apks/android/.
+ */
+function findApk(deviceAbis: string[]): string {
   const args = process.argv.slice(2);
   const index = args.indexOf("--apk");
   const explicit = args.find((arg) => arg.startsWith("--apk="))?.slice("--apk=".length);
@@ -25,8 +28,12 @@ function findApk(): string {
   }
 
   const { version } = JSON.parse(readFileSync(resolve(root, "version.json"), "utf8"));
-  const current = resolve(apkDir, `hisaabsathi-connect-v${version}.apk`);
-  if (existsSync(current)) return current;
+  const builds = ["", "-32bit"]
+    .map((suffix) => resolve(apkDir, `hisaabsathi-connect-v${version}${suffix}.apk`))
+    .filter((path) => existsSync(path));
+  const fitting = builds.find((path) => apkAbis(path).some((abi) => deviceAbis.includes(abi)));
+  const chosen = fitting ?? builds[0];
+  if (chosen) return chosen;
   const newest = (existsSync(apkDir) ? readdirSync(apkDir) : [])
     .filter((file) => file.endsWith(".apk"))
     .map((file) => resolve(apkDir, file))
@@ -50,7 +57,6 @@ function install(binary: string, id: string, apk: string) {
 }
 
 try {
-  const apk = findApk();
   const binary = findAdb();
   const device = await chooseDevice(binary, command);
   const name = device.model ?? device.id;
@@ -58,6 +64,7 @@ try {
   const deviceAbis = adb(binary, ["-s", device.id, "shell", "getprop", "ro.product.cpu.abilist"])
     .trim()
     .split(",");
+  const apk = findApk(deviceAbis);
   const abis = apkAbis(apk);
   if (abis.length > 0 && !abis.some((abi) => deviceAbis.includes(abi))) {
     throw new Error(

@@ -54,13 +54,13 @@ across the whole app, edit only `--radius`; it is currently `0px` to match the S
 Put production values in `.env.production` (gitignored), then:
 
 ```bash
-bun run android:apk:build              # build apks/android/hisaabsathi-connect-vX.Y.Z.apk
+bun run android:apk:build              # build apks/android/hisaabsathi-connect-vX.Y.Z(-32bit).apk
 bun run android:device:install   # install and open it on a USB-connected phone
 ```
 
-This builds a signed release APK using only `.env.production` and writes it to
-`apks/android/hisaabsathi-connect-vX.Y.Z.apk`, ready to install on any Android phone. It does not
-bump the version.
+This builds signed release APKs using only `.env.production`, one per CPU type:
+`apks/android/hisaabsathi-connect-vX.Y.Z.apk` for 64-bit phones and `…-32bit.apk` for older 32-bit
+ones. It does not bump the version.
 
 GitHub can build and publish the same APK: **Actions → Android APK → Run workflow** (`rebuild`
 replaces the current version's APK, `patch`/`minor`/`major` publishes a new release). Setup is in

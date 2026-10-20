@@ -10,15 +10,27 @@ import { assertApiReachable, productionEnv, signingEnv } from "./release-env";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const expo = resolve(root, "node_modules/.bin/expo");
-// Every real Android phone is ARM; 32-bit armeabi-v7a still covers budget phones. x86 is only for
-// emulators: pass `--abi armeabi-v7a,arm64-v8a,x86,x86_64` to include it, or `--abi arm64-v8a`
-// for the smallest APK that runs on 64-bit phones only.
+// Every real Android phone is ARM; 32-bit armeabi-v7a still covers budget phones. By default this
+// builds one APK per CPU type: `…-v<version>.apk` for 64-bit phones (almost all) and
+// `…-v<version>-32bit.apk` for the rest, since each phone only needs its own native code.
+// `--universal` makes a single APK that installs on both instead; `--abi arm64-v8a` builds just
+// that type, and x86 (emulators only) can be added the same way.
 const defaultAbis = "armeabi-v7a,arm64-v8a";
 // A warm Gradle daemon makes repeat local builds faster; CI runners are thrown away after one build.
 const daemonArgs = process.env.CI ? ["--no-daemon"] : [];
 const abiIndex = process.argv.indexOf("--abi");
 const abiArg = process.argv.find((arg) => arg.startsWith("--abi="))?.slice("--abi=".length);
 const abis = abiArg ?? (abiIndex >= 0 ? process.argv[abiIndex + 1] : undefined) ?? defaultAbis;
+const universal = process.argv.includes("--universal");
+// Several CPU types and not --universal: one APK each.
+const split = !universal && abis.includes(",");
+
+/** The file name suffix that tells people which phones an APK is for. */
+function abiSuffix(abi: string): string {
+  if (abi === "arm64-v8a") return "";
+  if (abi === "armeabi-v7a") return "-32bit";
+  return `-${abi}`;
+}
 
 function run(command: string, args: string[], env: NodeJS.ProcessEnv, cwd = root): void {
   const result = spawnSync(command, args, { cwd, env, stdio: "inherit" });
@@ -34,12 +46,28 @@ try {
   const buildEnv = { ...env, ...signingEnv(), ...production.env };
 
   const outDir = resolve(root, "apks/android");
-  const suffix = abis === defaultAbis ? "" : `-${abis.replaceAll(",", "-")}`;
-  const apk = resolve(outDir, `hisaabsathi-connect-v${version}${suffix}.apk`);
+  const releaseDir = resolve(root, "android/app/build/outputs/apk/release");
+  // Built APK → where it is copied.
+  const outputs = split
+    ? abis.split(",").map((abi) => ({
+        apk: resolve(outDir, `hisaabsathi-connect-v${version}${abiSuffix(abi)}.apk`),
+        built: resolve(releaseDir, `app-${abi}-release.apk`),
+      }))
+    : [
+        {
+          apk: resolve(
+            outDir,
+            `hisaabsathi-connect-v${version}${abis === defaultAbis ? "" : `-${abis.replaceAll(",", "-")}`}.apk`,
+          ),
+          built: resolve(releaseDir, "app-release.apk"),
+        },
+      ];
   // Remove the previous build of this version first, so a failed build never leaves a stale APK.
-  rmSync(apk, { force: true });
+  for (const { apk } of outputs) rmSync(apk, { force: true });
 
-  console.log(`Building production APK v${version} (${abis}) for ${production.apiUrl}`);
+  console.log(
+    `Building production APK${split ? "s" : ""} v${version} (${abis}${split ? ", one per CPU type" : ""}) for ${production.apiUrl}`,
+  );
   if (production.empty.length > 0) {
     console.warn(`Warning: empty in .env.production: ${production.empty.join(", ")}`);
   }
@@ -48,29 +76,34 @@ try {
   run("bun", ["scripts/configure-android-signing.ts"], buildEnv);
   run(
     "./gradlew",
-    ["assembleRelease", ...daemonArgs, `-PreactNativeArchitectures=${abis}`],
+    [
+      "assembleRelease",
+      ...daemonArgs,
+      `-PreactNativeArchitectures=${abis}`,
+      `-PsplitApksByAbi=${split}`,
+    ],
     buildEnv,
     resolve(root, "android"),
   );
 
-  const built = resolve(root, "android/app/build/outputs/apk/release/app-release.apk");
-  // Release bundles only contain EXPO_PUBLIC_ values read with a static key; a missing API URL
-  // means the app would crash on launch.
-  const bundle = spawnSync("unzip", ["-p", built, "assets/index.android.bundle"], {
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  if (bundle.status !== 0 || !bundle.stdout.includes(production.apiUrl)) {
-    throw new Error(
-      `The built JS bundle does not contain ${production.apiUrl}. Read env values as static ` +
-        "`process.env.EXPO_PUBLIC_*` keys, never `process.env[name]`.",
-    );
-  }
-
   mkdirSync(outDir, { recursive: true });
-  copyFileSync(built, apk);
-
-  const size = (statSync(apk).size / 1024 / 1024).toFixed(1);
-  console.log(`\nProduction APK ready (${size} MB): ${relative(root, apk)}`);
+  console.log("");
+  for (const { apk, built } of outputs) {
+    // Release bundles only contain EXPO_PUBLIC_ values read with a static key; a missing API URL
+    // means the app would crash on launch.
+    const bundle = spawnSync("unzip", ["-p", built, "assets/index.android.bundle"], {
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    if (bundle.status !== 0 || !bundle.stdout.includes(production.apiUrl)) {
+      throw new Error(
+        `The JS bundle in ${relative(root, built)} does not contain ${production.apiUrl}. Read env ` +
+          "values as static `process.env.EXPO_PUBLIC_*` keys, never `process.env[name]`.",
+      );
+    }
+    copyFileSync(built, apk);
+    const size = (statSync(apk).size / 1024 / 1024).toFixed(1);
+    console.log(`Production APK ready (${size} MB): ${relative(root, apk)}`);
+  }
   console.log("Install on a connected phone: bun run android:device:install");
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

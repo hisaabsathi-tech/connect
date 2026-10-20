@@ -40,7 +40,10 @@ env:
   EXPO_PUBLIC_AUTH_BASE_PATH: /api/auth
   EXPO_PUBLIC_API_PREFIX: /api/v1
   EXPO_PUBLIC_GRAPHQL_PATH: /graphql
+  # One APK per CPU type: 64-bit for almost every phone (the name the "latest" link has always
+  # used), and 32-bit for older ones.
   ASSET: hisaabsathi-connect.apk
+  ASSET_32BIT: hisaabsathi-connect-32bit.apk
 
 jobs:
   apk:
@@ -162,14 +165,21 @@ jobs:
       - name: Build production APK
         run: bun run android:apk:build
 
-      - name: Name the APK
-        run: cp "apks/android/hisaabsathi-connect-v${{ steps.version.outputs.version }}.apk" "$ASSET"
+      - name: Name the APKs
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cp "apks/android/hisaabsathi-connect-v$VERSION.apk" "$ASSET"
+          cp "apks/android/hisaabsathi-connect-v$VERSION-32bit.apk" "$ASSET_32BIT"
+          ls -l "$ASSET" "$ASSET_32BIT"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: hisaabsathi-connect-v${{ steps.version.outputs.version }}
-          path: ${{ env.ASSET }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET_32BIT }}
           if-no-files-found: error
           retention-days: 14
 
@@ -206,18 +216,21 @@ jobs:
           Built from $sha on $(date -u '+%Y-%m-%d %H:%M UTC'), for $EXPO_PUBLIC_API_URL.
 
           Download **$ASSET** below and open it on the phone; allow "Install unknown apps" when
-          Android asks. It installs over the previous Connector build and keeps the app's data.
+          Android asks. It installs over the previous build and keeps the app's data.
+
+          If Android says the app isn't compatible with the phone (some older or budget phones
+          run 32-bit Android), use **$ASSET_32BIT** instead.
           EOF
 
           if [[ "$RELEASE" == rebuild ]] && gh release view "$tag" >/dev/null 2>&1; then
             # Same version, new build: point the tag at this commit and replace the APK in place.
             git tag -f "$tag" "$sha"
             git push -f origin "refs/tags/$tag"
-            gh release upload "$tag" "$ASSET" --clobber
+            gh release upload "$tag" "$ASSET" "$ASSET_32BIT" --clobber
             gh release edit "$tag" --notes-file notes.md
-            echo "Replaced $ASSET on $tag."
+            echo "Replaced $ASSET and $ASSET_32BIT on $tag."
           else
-            gh release create "$tag" "$ASSET" --target "$sha" \
+            gh release create "$tag" "$ASSET" "$ASSET_32BIT" --target "$sha" \
               --title "Hisaab Sathi Connect $tag" --notes-file notes.md --latest
             echo "Published $tag."
           fi

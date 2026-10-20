@@ -187,37 +187,41 @@ Android phone. It:
 1. Reads and checks `.env.production`.
 2. Regenerates `android/` with `expo prebuild --clean`.
 3. Adds release signing with the upload keystore in `.keys/`.
-4. Runs `./gradlew assembleRelease` and copies the APK to
-   `apks/android/hisaabsathi-connect-vX.Y.Z.apk`.
+4. Runs `./gradlew assembleRelease` and copies one APK per CPU type to `apks/android/`:
+   `hisaabsathi-connect-vX.Y.Z.apk` for 64-bit phones (almost all of them) and
+   `hisaabsathi-connect-vX.Y.Z-32bit.apk` for older 32-bit ones.
 
-It does **not** change `version.json`. Building the same version again first deletes the old APK, then
-writes the new one in its place, so a failed build never leaves a stale file. After the build it
-checks that the production API URL is really inside the app bundle and fails if it is not.
+It does **not** change `version.json`. Building the same version again first deletes the old APKs,
+then writes the new ones in their place, so a failed build never leaves a stale file. After the build
+it checks that the production API URL is really inside each APK's app bundle and fails if it is not.
 
-The APK is size-optimized: R8 removes unused Java/Kotlin code, unused resources are dropped, native
-libraries are stored compressed (set in `app.config.ts`), and only ARM CPU code is included
-(`arm64-v8a` and `armeabi-v7a`), which covers every real Android phone, including 32-bit budget ones.
-For other targets:
+The APKs are size-optimized: R8 removes unused Java/Kotlin code, unused resources are dropped, native
+libraries are stored compressed, all set in `app.config.ts`. Only ARM CPU code is built (`arm64-v8a` and `armeabi-v7a`), which covers every
+real Android phone, and each APK carries just one of the two, so it is roughly a quarter smaller than
+an APK with both. For other targets:
 
 ```bash
-bun run android:apk:build --abi arm64-v8a                           # smallest: 64-bit phones only
-bun run android:apk:build --abi armeabi-v7a,arm64-v8a,x86,x86_64    # also runs on emulators
+bun run android:apk:build --universal                               # one APK for 64- and 32-bit phones
+bun run android:apk:build --abi arm64-v8a                           # 64-bit phones only
+bun run android:apk:build --abi armeabi-v7a,arm64-v8a,x86,x86_64    # one APK per type, also emulators
 ```
 
-Non-default `--abi` builds get the ABIs in the file name, e.g. `hisaabsathi-connect-v0.0.1-arm64-v8a.apk`. Copy the file to any phone and open it (allow "Install unknown apps" when asked), or install it over USB
-with `bun run android:device:install`. `apks/` is ignored by git.
+A `--universal` or single-type build gets the types in the file name, e.g.
+`hisaabsathi-connect-v0.0.1-arm64-v8a.apk`. Copy the right file to a phone and open it (allow
+"Install unknown apps" when asked), or install it over USB with `bun run android:device:install`.
+`apks/` is ignored by git.
 
 ## Install the APK on a phone: `bun run android:device:install`
 
 ```bash
 bun run android:device:install
-bun run android:device:install --apk apks/android/hisaabsathi-connect-v0.0.1-arm64-v8a.apk
+bun run android:device:install --apk apks/android/hisaabsathi-connect-v0.0.1-32bit.apk
 ```
 
 **Why:** Installs the production APK on a USB-connected phone and opens it. It:
 
-1. Picks this version's APK from `apks/android/` (or the newest APK there, or the one given with
-   `--apk`).
+1. Picks this version's APK for the phone's CPU type from `apks/android/` (64-bit or `-32bit`), or
+   the newest APK there, or the one given with `--apk`.
 2. Finds connected phones and asks which one if there is more than one. If none is ready, it explains
    how to enable USB debugging.
 3. Checks the phone's CPU type is in the APK, and tells you which `--abi` to build if not.
@@ -326,12 +330,14 @@ The build types:
 
 | Choice                    | What happens                                                                 |
 | ------------------------- | ---------------------------------------------------------------------------- |
-| `rebuild` (default)       | Builds the current `version.json` version again. Replaces `hisaabsathi-connect.apk` on that version's release and moves its tag to the rebuilt commit. Creates the release if the version has none. No version change. |
+| `rebuild` (default)       | Builds the current `version.json` version again. Replaces `hisaabsathi-connect.apk` and `hisaabsathi-connect-32bit.apk` on that version's release and moves its tag to the rebuilt commit. Creates the release if the version has none. No version change. |
 | `patch` / `minor` / `major` | Bumps `version.json` (and `versionCode`), builds, commits `Release vX.Y.Z` to `main`, and publishes a new `vX.Y.Z` release. Stops before building if that release already exists. |
 
 The workflow runs `bun run lint`, `bun run typecheck`, and then `bun run android:apk:build`, so it uses the
-same size optimizations and the same API-URL bundle check as a local build. It also keeps the APK as a
-workflow artifact for 14 days. The newest release's APK is always at:
+same size optimizations and the same API-URL bundle check as a local build. Each release has two APKs:
+`hisaabsathi-connect.apk` for 64-bit phones (almost all) and `hisaabsathi-connect-32bit.apk` for older
+32-bit ones; the release notes say so. Both are also kept as a workflow artifact for 14 days. The
+newest release's 64-bit APK is always at:
 
 ```
 https://github.com/hisaabsathi-tech/connect/releases/latest/download/hisaabsathi-connect.apk

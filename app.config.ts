@@ -88,6 +88,17 @@ android {
     lint {
         checkReleaseBuilds false
     }
+    // \`-PsplitApksByAbi=true\` (scripts/build-apk.ts) makes one APK per CPU type instead of one
+    // carrying every type's native code; each phone only needs its own. App bundles (AAB) ignore
+    // this, since Play already sends each phone only its own.
+    splits {
+        abi {
+            enable findProperty("splitApksByAbi") == "true"
+            reset()
+            include(*((findProperty("reactNativeArchitectures") ?: "armeabi-v7a,arm64-v8a").toString().split(",")))
+            universalApk false
+        }
+    }
 }
 `;
 
