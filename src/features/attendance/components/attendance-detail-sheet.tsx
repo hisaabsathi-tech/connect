@@ -2,10 +2,11 @@ import { Image02Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, useWindowDimensions, View } from "react-native";
+import { Pressable, useWindowDimensions, View } from "react-native";
 
 import { PhotoDialog } from "@/components/modules/photo";
 import { BottomSheet } from "@/components/modules/sheet";
+import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import { HomeMap } from "@/features/home/components/home-map";
@@ -167,7 +168,7 @@ export function AttendanceDetailSheet({
                 {error ?? "This photo is not available."}
               </Text>
             ) : (
-              <ActivityIndicator color={colors.primary} />
+              <Loader fullHeight={false} size="sm" transparent />
             )}
           </Pressable>
           <View className="mt-3 flex-row gap-2">

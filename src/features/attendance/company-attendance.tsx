@@ -233,9 +233,7 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
   );
 
   const footer = !roster.rows.length ? null : roster.loadingMore ? (
-    <View className="py-6">
-      <ActivityIndicator color={colors.primary} />
-    </View>
+    <Loader className="py-6" fullHeight={false} size="sm" transparent />
   ) : roster.moreFailed ? (
     <Pressable accessibilityRole="button" className="items-center py-6" onPress={roster.retryMore}>
       <Text className="text-sm text-primary">Couldn't load more. Tap to retry</Text>

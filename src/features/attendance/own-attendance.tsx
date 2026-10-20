@@ -34,7 +34,7 @@ function Separator() {
 
 /**
  * The member's own attendance: this month's present days and the last 7 days' hours on top, then
- * every attended day from today backwards as cards (this month first, a month more on each
+ * every attended day from today backwards as cards (the last 7 days first, a month more on each
  * scroll to the end). With a date range applied, that range shows as a table instead, which can
  * be exported as CSV. `tabs` (Company / Own, for admins) sits under the title.
  */
@@ -162,9 +162,7 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
   // With no cards yet, the empty block shows loading and errors instead.
   const footer =
     range || !attendedDays.length ? null : list.loadingMore ? (
-      <View className="py-6">
-        <ActivityIndicator color={colors.primary} />
-      </View>
+      <Loader className="py-6" fullHeight={false} size="sm" transparent />
     ) : list.moreFailed ? (
       <Pressable accessibilityRole="button" className="items-center py-6" onPress={list.retryMore}>
         <Text className="text-sm text-primary">Couldn't load earlier days. Tap to retry</Text>

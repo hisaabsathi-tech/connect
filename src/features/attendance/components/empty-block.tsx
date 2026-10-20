@@ -1,7 +1,9 @@
 import { ArchiveOff04Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
-import { ActivityIndicator, Pressable, useWindowDimensions, View } from "react-native";
+import { Pressable, useWindowDimensions, View } from "react-native";
+
+import { Loader } from "@/components/modules/system";
 
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -65,7 +67,7 @@ export function EmptyBlock({
           ) : null}
         </>
       ) : (
-        <ActivityIndicator color={colors.primary} />
+        <Loader fullHeight={false} transparent />
       )}
     </View>
   );

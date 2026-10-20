@@ -8,6 +8,8 @@ export interface LoaderProps {
   fullHeight?: boolean;
   fullPage?: boolean;
   size?: "sm" | "md" | "lg";
+  /** No background of its own, for a loader inside a card, sheet or list block. */
+  transparent?: boolean;
 }
 
 const sizes: Record<NonNullable<LoaderProps["size"]>, number> = {
@@ -21,6 +23,7 @@ export function Loader({
   fullHeight = true,
   fullPage = false,
   size = "md",
+  transparent = false,
 }: LoaderProps) {
   const progress = useRef(new Animated.Value(0)).current;
 
@@ -40,7 +43,8 @@ export function Loader({
 
   const dimension = sizes[size];
   const containerClasses = [
-    "items-center justify-center bg-background",
+    "items-center justify-center",
+    transparent ? "" : "bg-background",
     fullPage ? "absolute inset-0 z-50 flex-1" : "w-full",
     !fullPage && fullHeight ? "min-h-[80vh]" : "",
     className ?? "",

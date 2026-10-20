@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchMyAttendanceRange } from "@/lib/api/attendance";
-import { addDays, daysBetween, startOfMonth } from "@/lib/date";
+import { addDays, daysBetween } from "@/lib/date";
 
 import { type AttendanceDayEntry, buildDays } from "../lib/days";
 import { retryOnce } from "../lib/retry";
 
-// The list opens on this month (at least the last week); scrolling down adds a month at a time.
+// The list opens on the last 7 days; scrolling down adds a month at a time.
 const FIRST_PAGE_DAYS = 7;
 const PAGE_DAYS = 30;
 // Never reaches further back than this.
 const MAX_DAYS_BACK = 366;
 
 /**
- * Every day from today backwards, newest first (the screen shows the attended ones): this month
- * so far, or the last 7 days early in a month, so the cards match the Present Days count; then a
- * month more each time the list's end is reached. It stops after a month without any attendance
- * (the member had not started yet, or it is long past) or a year back.
+ * Every day from today backwards, newest first (the screen shows the attended ones): the last 7
+ * days, then a month more each time the list's end is reached. It stops after a month without any
+ * attendance (the member had not started yet, or it is long past) or a year back.
  */
 export function useAttendanceDays(token: string | null, today: string) {
   const [days, setDays] = useState<AttendanceDayEntry[]>([]);
@@ -28,9 +27,7 @@ export function useAttendanceDays(token: string | null, today: string) {
   // A reset starts a new generation; responses from an older one are dropped.
   const generation = useRef(0);
   const busy = useRef(false);
-  const lastWeek = addDays(today, -(FIRST_PAGE_DAYS - 1));
-  const monthStart = startOfMonth(today);
-  const firstFrom = monthStart < lastWeek ? monthStart : lastWeek;
+  const firstFrom = addDays(today, -(FIRST_PAGE_DAYS - 1));
 
   /** Back to the last week only, e.g. on pull to refresh or a new day. */
   const reset = useCallback(async () => {
