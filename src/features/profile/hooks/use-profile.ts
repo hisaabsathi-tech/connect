@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useToast } from "@/components/ui/toast";
+import { uploadProfilePhoto } from "@/lib/api/media";
 import { fetchProfile, type Profile, patchProfile } from "@/lib/api/profile";
 import { errorMessage } from "@/lib/errors";
 
@@ -52,5 +53,25 @@ export function useProfile(token: string | null) {
     [saving, toast, token],
   );
 
-  return { loading, profile, refresh, refreshing, save, saving };
+  /** Uploads a cropped photo and makes it the profile image. Resolves true once saved. */
+  const savePhoto = useCallback(
+    async (uri: string) => {
+      if (!token) return false;
+      try {
+        const uploaded = await uploadProfilePhoto(token, uri);
+        await patchProfile(token, { image: uploaded.objectKey });
+        // The presigned view URL shows the new photo at once; a reload resolves it again.
+        const image = uploaded.viewUrl ?? uri;
+        setProfile((current) => (current ? { ...current, image } : current));
+        toast.success("Profile photo updated");
+        return true;
+      } catch (error) {
+        toast.error("Could not update photo", errorMessage(error, "Please try again."));
+        return false;
+      }
+    },
+    [toast, token],
+  );
+
+  return { loading, profile, refresh, refreshing, save, savePhoto, saving };
 }

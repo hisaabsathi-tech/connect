@@ -82,6 +82,9 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          # Full history and tags, so the release notes can list the commits since the last release.
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -188,8 +191,17 @@ jobs:
           set -euo pipefail
           tag="v$VERSION"
           sha="$(git rev-parse HEAD)"
+          # What changed since the previous release tag (every commit on a first release), without
+          # the bot's version-bump commits or the [apk ...] build flags.
+          previous="$(git describe --tags --abbrev=0 --match 'v*' "$sha^" 2>/dev/null || true)"
+          changes="$(git log --no-merges --pretty='- %s' "${previous:+$previous..}$sha" \
+            | grep -v '^- Release v' | sed -E 's/ ?\[apk[^]]*\]//g' || true)"
           cat > notes.md <<EOF
           Hisaab Sathi Connect $tag (versionCode $CODE)
+
+          ## What's new${previous:+ since $previous}
+
+          ${changes:-- Maintenance build}
 
           Built from $sha on $(date -u '+%Y-%m-%d %H:%M UTC'), for $EXPO_PUBLIC_API_URL.
 

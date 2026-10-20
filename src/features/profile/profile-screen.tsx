@@ -8,13 +8,16 @@ import { useAuthSession } from "@/lib/auth/session";
 
 import { BrandFooter } from "./components/brand-footer";
 import { LogoutButton } from "./components/logout-button";
+
 import { ProfileCard } from "./components/profile-card";
 import { ProfileDetails } from "./components/profile-details";
+import { useProfilePhoto } from "./components/profile-photo";
 import { useProfile } from "./hooks/use-profile";
 
 export function ProfileScreen() {
   const { token } = useAuthSession();
-  const { loading, profile, refresh, refreshing, save, saving } = useProfile(token);
+  const { loading, profile, refresh, refreshing, save, savePhoto, saving } = useProfile(token);
+  const photo = useProfilePhoto(savePhoto);
 
   return (
     <TabScreen>
@@ -39,7 +42,7 @@ export function ProfileScreen() {
           <Text className="mt-0.5 text-sm text-muted-foreground">Manage your profile details</Text>
           <View className="flex-1 justify-between pt-2">
             <View>
-              <ProfileCard profile={profile} />
+              <ProfileCard onEditPhoto={photo.open} profile={profile} />
               <ProfileDetails onSave={save} profile={profile} saving={saving} token={token} />
               <LogoutButton />
             </View>
@@ -47,6 +50,7 @@ export function ProfileScreen() {
           </View>
         </ScrollView>
       )}
+      {photo.element}
     </TabScreen>
   );
 }

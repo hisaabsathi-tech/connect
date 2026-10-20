@@ -16,19 +16,37 @@ function putObject(uploadUrl: string, body: Blob, mimeType: string) {
   });
 }
 
-/**
- * Uploads a local JPEG (`file://…`) as an `attendance_photo` and returns its media id, which
- * check-in and check-out send as `media`.
- */
-export async function uploadAttendancePhoto(token: string, uri: string): Promise<string> {
+type MediaKind = "attendance_photo" | "user_image";
+
+export type UploadedMedia = {
+  mediaId: string;
+  /** Storage key; what profile fields such as the user image store. */
+  objectKey: string;
+  /** Presigned view URL, good for showing the upload right away. */
+  viewUrl?: string;
+};
+
+/** Uploads a local JPEG (`file://…`): presigned URL → PUT the bytes → confirm. */
+async function uploadJpeg(token: string, uri: string, kind: MediaKind): Promise<UploadedMedia> {
   const mimeType = "image/jpeg";
   const { mediaId, uploadUrl } = await apiRequest<{ mediaId: string; uploadUrl: string }>(
     "/media/upload-url",
     token,
-    { body: JSON.stringify({ kind: "attendance_photo", mimeType }), method: "POST" },
+    { body: JSON.stringify({ kind, mimeType }), method: "POST" },
   );
   const file = await fetch(uri).then((response) => response.blob());
   await putObject(uploadUrl, file, mimeType);
-  await apiRequest(`/media/${encodeURIComponent(mediaId)}/confirm`, token, { method: "POST" });
-  return mediaId;
+  return apiRequest<UploadedMedia>(`/media/${encodeURIComponent(mediaId)}/confirm`, token, {
+    method: "POST",
+  });
+}
+
+/** Uploads an `attendance_photo`; check-in and check-out send its media id as `media`. */
+export async function uploadAttendancePhoto(token: string, uri: string): Promise<string> {
+  return (await uploadJpeg(token, uri, "attendance_photo")).mediaId;
+}
+
+/** Uploads a profile photo (`user_image`). */
+export function uploadProfilePhoto(token: string, uri: string): Promise<UploadedMedia> {
+  return uploadJpeg(token, uri, "user_image");
 }

@@ -38,9 +38,10 @@ export async function fetchProfile(token: string): Promise<Profile> {
   };
 }
 
+/** Updates the signed-in user's own profile; `image` takes an uploaded photo's storage key. */
 export async function patchProfile(
   token: string,
-  input: Pick<Profile, "address" | "phoneNumber">,
+  input: Partial<Pick<Profile, "address" | "image" | "phoneNumber">>,
 ): Promise<Pick<Profile, "address" | "phoneNumber">> {
   const response = await fetch(`${env.apiUrl}${env.apiPrefix}/me`, {
     body: JSON.stringify(input),

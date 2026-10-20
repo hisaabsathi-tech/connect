@@ -3,13 +3,11 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Pressable, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-
+import { ZoomableImage } from "@/components/modules/photo";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import { fetchMyAttendancePhotos } from "@/lib/api/attendance";
 import { errorMessage } from "@/lib/errors";
-
-import { ZoomableImage } from "./zoomable-image";
 
 export type PhotoViewerTarget = {
   /** The attendance record's id. */

@@ -3,9 +3,8 @@ import { Modal } from "react-native";
 import ImageCropPicker from "react-native-image-crop-picker";
 
 import { useDialog } from "@/components/modules/dialog";
+import { PhotoConfirm } from "@/components/modules/photo";
 import { errorMessage } from "@/lib/errors";
-
-import { PhotoConfirm } from "./photo-confirm";
 
 function errorCode(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error
