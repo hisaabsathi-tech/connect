@@ -138,9 +138,10 @@ export function useAuthFlow() {
   };
 
   /**
-   * The app works inside one organisation. With only one it opens straight away; with several
-   * the user always picks (the one the server last had active is preselected), and with none
-   * sign-in can't continue.
+   * The app works inside one organisation. The server lists every company the user owns, and one
+   * per other owner (that owner's companies share synced employees). With one choice it opens
+   * straight away; with several the user always picks (the one the server last had active is
+   * preselected), and with none sign-in can't continue.
    */
   const enterOrganization = async (token: string) => {
     const session = await authApi.getSession(token);
@@ -151,8 +152,10 @@ export function useAuthFlow() {
       await authApi.signOut(current).catch(() => undefined);
       throw new Error(NO_ORGANIZATION_MESSAGE);
     }
+    // One choice (a member whose other companies are synced copies of the same employee): no
+    // picker. Keep the company the server already has active, which may be one of those copies.
     if (list.length === 1) {
-      if (active === list[0].id) return enter(current);
+      if (active) return enter(current);
       const activated = await authApi.setActiveOrganization(list[0].id, current);
       return enter(activated.token ?? current);
     }

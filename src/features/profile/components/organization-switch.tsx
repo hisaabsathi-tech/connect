@@ -1,4 +1,4 @@
-import { ArrowDataTransferHorizontalIcon } from "@hugeicons/core-free-icons";
+import { ArrowLeftRightIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
@@ -66,20 +66,16 @@ export function OrganizationSwitch({ activeId }: { activeId: string | null | und
       <Pressable
         accessibilityLabel="Switch organization"
         accessibilityRole="button"
-        className="h-9 flex-row items-center gap-1.5 border border-primary px-2.5 active:bg-accent"
+        // Same look as the Change password button.
+        className="flex-row items-center gap-1.5 bg-primary px-3 py-2.5 active:bg-primary-hover"
         onPress={() => {
           setPicked(activeId ?? null);
           setOpen(true);
         }}
         onPressIn={() => haptic("light")}
       >
-        <HugeiconsIcon
-          color={colors.primary}
-          icon={ArrowDataTransferHorizontalIcon}
-          size={16}
-          strokeWidth={1.8}
-        />
-        <Text className="text-sm font-medium text-primary">Switch</Text>
+        <Text className="text-sm font-semibold text-primary-foreground">Switch</Text>
+        <HugeiconsIcon color={colors.primaryForeground} icon={ArrowLeftRightIcon} size={18} />
       </Pressable>
       <BottomSheet
         dismissible={!switching}
