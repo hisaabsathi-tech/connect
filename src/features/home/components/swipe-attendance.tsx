@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/correctness/useExhaustiveDependencies: <forced> */
 import { ArrowRight02Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import {
 
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
+import { haptic } from "@/lib/haptics";
 
 // Square thumb inset evenly inside the track.
 const THUMB = 40;
@@ -20,6 +22,8 @@ const INSET = 6;
 const END_TOLERANCE = 6;
 // While idle the thumb nudges right this far, then rests, hinting that it should be dragged.
 const NUDGE = 8;
+// The drag ticks as the thumb crosses each of these steps along the track, like detents.
+const HAPTIC_STEPS = 4;
 
 interface SwipeAttendanceProps {
   action: () => void;
@@ -36,6 +40,8 @@ export function SwipeAttendance({ action, busy, disabled, mode }: SwipeAttendanc
   const [travel, setTravel] = useState(0);
   // The responder is created once, so it reads the latest props and track size through this ref.
   const latest = useRef({ action, busy, disabled, travel });
+  // Last step ticked and whether the thumb sits at the end, so each fires once per crossing.
+  const feel = useRef({ armed: false, step: 0 });
   useEffect(() => {
     latest.current = { action, busy, disabled, travel };
   }, [action, busy, disabled, travel]);
@@ -84,9 +90,23 @@ export function SwipeAttendance({ action, busy, disabled, mode }: SwipeAttendanc
         Math.abs(gesture.dx) > 4,
       // Keep the drag even if the page's ScrollView wants it.
       onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: () => setDragging(true),
-      onPanResponderMove: (_, gesture) =>
-        x.setValue(Math.max(0, Math.min(latest.current.travel, gesture.dx))),
+      onPanResponderGrant: () => {
+        feel.current = { armed: false, step: 0 };
+        haptic("light");
+        setDragging(true);
+      },
+      onPanResponderMove: (_, gesture) => {
+        const { travel: end } = latest.current;
+        const position = Math.max(0, Math.min(end, gesture.dx));
+        x.setValue(position);
+        const armed = gesture.dx >= end - END_TOLERANCE;
+        const step = Math.min(HAPTIC_STEPS - 1, Math.floor((position / end) * HAPTIC_STEPS));
+        // A firm click once the thumb reaches the end (letting go now submits); lighter ticks
+        // while it travels, in either direction.
+        if (armed && !feel.current.armed) haptic("heavy");
+        else if (!armed && step !== feel.current.step) haptic("selection");
+        feel.current = { armed, step };
+      },
       onPanResponderRelease: (_, gesture) => {
         setDragging(false);
         const { travel: end } = latest.current;
@@ -95,7 +115,11 @@ export function SwipeAttendance({ action, busy, disabled, mode }: SwipeAttendanc
             setComplete(true);
             latest.current.action();
           });
-        } else reset();
+        } else {
+          // Let go too early: a soft bump as the thumb springs back.
+          haptic("toggle-off");
+          reset();
+        }
       },
       onPanResponderTerminate: () => {
         setDragging(false);

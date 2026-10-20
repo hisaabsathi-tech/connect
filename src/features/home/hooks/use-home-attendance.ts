@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert } from "react-native";
 
+import { useDialog } from "@/components/modules/dialog";
 import {
   type AttendanceSession,
   checkIn,
@@ -11,8 +11,11 @@ import {
 import { fetchHomeIdentity, type HomeIdentity } from "@/lib/api/home";
 import { geocodeAddress } from "@/lib/api/maps";
 import { errorMessage } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
 import type { Coordinates } from "@/lib/maps/geo";
 import { reverseGeocodeAddress } from "@/lib/maps/ola-maps";
+
+import { useAttendanceSounds } from "./use-attendance-sounds";
 
 /**
  * The signed-in user, their organisation's location and today's check in/out state. The swipe
@@ -27,6 +30,8 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const dialog = useDialog();
+  const playSound = useAttendanceSounds();
 
   /** Fetches the identity, today's attendance and the organisation's position from the server. */
   const load = useCallback(async () => {
@@ -44,9 +49,13 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
       const place = address ? await geocodeAddress(address, token) : null;
       setOrganization(place ? { latitude: place.lat, longitude: place.lng } : null);
     } catch (error) {
-      Alert.alert("Could not load home", errorMessage(error, "Please try again."));
+      void dialog.alert({
+        description: errorMessage(error, "Please try again."),
+        title: "Could not load home",
+        tone: "danger",
+      });
     }
-  }, [token]);
+  }, [dialog, token]);
 
   useEffect(() => {
     void load();
@@ -74,14 +83,21 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
       const result = open ? await checkOut(token, point) : await checkIn(token, point);
       setOpen(open ? null : result.attendance);
       setAttendedToday(true);
+      haptic("success");
+      playSound(open ? "out" : "in");
       return result.attendance;
     } catch (error) {
-      Alert.alert("Attendance was not updated", errorMessage(error, "Please try again."));
+      haptic("error");
+      void dialog.alert({
+        description: errorMessage(error, "Please try again."),
+        title: "Attendance was not updated",
+        tone: "danger",
+      });
       return null;
     } finally {
       setBusy(false);
     }
-  }, [busy, live, open, token]);
+  }, [busy, dialog, live, open, playSound, token]);
 
   return {
     attendedToday,

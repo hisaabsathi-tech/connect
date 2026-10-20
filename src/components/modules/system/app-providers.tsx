@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { DialogProvider } from "@/components/modules/dialog";
 import { GluestackUIProvider } from "@/components/ui/gluestack-ui-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthSessionProvider } from "@/lib/auth/session";
@@ -13,7 +14,9 @@ export function AppProviders({ children }: PropsWithChildren) {
       <AuthSessionProvider>
         <DateFilterProvider>
           <GluestackUIProvider mode="light">
-            <ToastProvider>{children}</ToastProvider>
+            <ToastProvider>
+              <DialogProvider>{children}</DialogProvider>
+            </ToastProvider>
           </GluestackUIProvider>
         </DateFilterProvider>
       </AuthSessionProvider>
