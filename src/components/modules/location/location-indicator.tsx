@@ -14,6 +14,7 @@ import Animated, {
 import Svg, { Path } from "react-native-svg";
 
 import { colors } from "@/config/colors";
+import type { LiveLocation } from "@/hooks/use-live-location";
 import { haptic } from "@/lib/haptics";
 
 /**
@@ -129,4 +130,13 @@ export function LocationIndicator({
       )}
     </View>
   );
+}
+
+/** What the location button shows; the one place that decides when each state appears. */
+export function locationIndicatorState({
+  locating,
+  status,
+}: Pick<LiveLocation, "locating" | "status">): LocationIndicatorState {
+  if (status === "denied" || status === "blocked" || status === "disabled") return "off";
+  return locating || status === "checking" ? "active" : "on";
 }

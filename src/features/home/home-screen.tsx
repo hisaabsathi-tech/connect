@@ -4,10 +4,11 @@ import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { FadeOut } from "react-native-reanimated";
 
 import { TabScreen, useScreenTop } from "@/components/modules/layout";
+import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
-import { type LiveLocation, useLiveLocation } from "@/hooks/use-live-location";
+import { useLiveLocation } from "@/hooks/use-live-location";
 import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
 import { useViewer } from "@/lib/auth/viewer";
@@ -20,7 +21,6 @@ import { DayRecord } from "./components/day-record";
 import { HomeHeader } from "./components/home-header";
 import { HomeMap } from "./components/home-map";
 import { HomeSkeleton } from "./components/home-skeleton";
-import { LocationIndicator, type LocationIndicatorState } from "./components/location-indicator";
 import { OrdersCard } from "./components/orders-card";
 import { useActiveOrders } from "./hooks/use-active-orders";
 import { useDayAttendance } from "./hooks/use-day-attendance";
@@ -38,15 +38,6 @@ const DELIVERY_MAP_MAX_HEIGHT = 560;
 const CONTENT_BOTTOM_PADDING = 16;
 // The longest the first-load skeleton stays up, whatever is still loading.
 const REVEAL_TIMEOUT_MS = 8000;
-
-/** What the header's location button shows; the one place that decides when each state appears. */
-function locationIndicatorState({
-  locating,
-  status,
-}: Pick<LiveLocation, "locating" | "status">): LocationIndicatorState {
-  if (status === "denied" || status === "blocked" || status === "disabled") return "off";
-  return locating || status === "checking" ? "active" : "on";
-}
 
 /** Signed-in only: the tabs layout redirects to /auth before this renders without a session. */
 export function HomeScreen() {

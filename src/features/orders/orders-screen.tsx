@@ -4,6 +4,7 @@ import { FlatList, RefreshControl, View } from "react-native";
 
 import { type DateRange, rangeLabel, SearchRangeToolbar } from "@/components/modules/date-range";
 import { TabScreen } from "@/components/modules/layout";
+import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
 import {
   CardListSkeleton,
   ListPageSkeleton,
@@ -14,6 +15,7 @@ import { StatCard } from "@/components/modules/stat-card";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { useLiveLocation } from "@/hooks/use-live-location";
 import type { DrsSheet } from "@/lib/api/drs";
 import { useAuthSession } from "@/lib/auth/session";
 import { useViewer } from "@/lib/auth/viewer";
@@ -73,6 +75,8 @@ function matchesDrsSearch(sheet: DrsSheet, search: string) {
 export function OrdersScreen() {
   const { token } = useAuthSession();
   const viewer = useViewer();
+  // Deliveries are confirmed with the phone's location, so its state shows here as on Home.
+  const location = useLiveLocation(viewer.isDeliveryBoy);
   const { selectedDate, today } = useDateFilter();
   const [tab, setTab] = useState<PageTab>("orders");
   const [range, setRange] = useState<DateRange | null>(null);
@@ -229,10 +233,18 @@ export function OrdersScreen() {
 
   const header = (
     <View className="pb-4">
-      <Text className="text-2xl font-semibold leading-8 text-foreground">Manage Orders & DRS</Text>
-      <Text className="mt-0.5 text-sm text-muted-foreground">
-        Manage all your orders {period} at one place
-      </Text>
+      <View className="flex-row items-start gap-3">
+        <View className="flex-1">
+          <Text className="text-2xl font-semibold leading-8 text-foreground">
+            Manage Orders & DRS
+          </Text>
+          <Text className="mt-0.5 text-sm text-muted-foreground">
+            Manage all your orders {period} at one place
+          </Text>
+        </View>
+        {/* Home's location button: whether location is on, and a tap to fix it. */}
+        <LocationIndicator onPress={location.resolve} state={locationIndicatorState(location)} />
+      </View>
       <PageTabs onChange={changeTab} value={tab} />
       <View className="mt-5 flex-row gap-3">
         {data.loading ? (
@@ -273,9 +285,9 @@ export function OrdersScreen() {
         )}
       </View>
       {onOrders ? (
-        <FilterChips onChange={setOrderFilter} options={ORDER_FILTERS} value={orderFilter} />
+        <FilterChips onChange={toggleOrderFilter} options={ORDER_FILTERS} value={orderFilter} />
       ) : (
-        <FilterChips onChange={setDrsFilter} options={DRS_FILTERS} value={drsFilter} />
+        <FilterChips onChange={toggleDrsFilter} options={DRS_FILTERS} value={drsFilter} />
       )}
       <View className="mt-4">
         <SearchRangeToolbar
@@ -346,7 +358,7 @@ export function OrdersScreen() {
     <TabScreen>
       <FlatList<DrsOrder | DrsSheet>
         className="flex-1"
-        contentContainerClassName="px-5 pb-8"
+        contentContainerClassName="px-5 pb-8 pt-2"
         contentContainerStyle={{ flexGrow: 1 }}
         data={data.loading ? [] : onOrders ? orders : shownSheets}
         ItemSeparatorComponent={Separator}

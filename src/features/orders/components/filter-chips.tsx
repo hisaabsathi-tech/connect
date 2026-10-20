@@ -30,7 +30,6 @@ export function FilterChips<T extends string>({
             className={`h-10 justify-center border px-4 ${active ? "border-[#C7CFFF] bg-accent active:bg-accent" : "border-[#E6E8EE] bg-[#F5F6F8] active:bg-[#ECEEF2]"}`}
             key={option.id}
             onPress={() => {
-              if (active) return;
               haptic("selection");
               onChange(option.id);
             }}
