@@ -1,5 +1,7 @@
+import { Image02Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
 import { type ReactNode, useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -23,7 +25,11 @@ interface DayRecordProps {
   offDay: string | null;
   loading: boolean;
   failed: boolean;
+  /** Opens the record's check-in or check-out photo; only offered where one was taken. */
+  onOpenPhoto?: (side: PhotoSide) => void;
 }
+
+export type PhotoSide = "checkIn" | "checkOut";
 
 // Absent, holidays and the plain states (weekly off, upcoming, today) as in the design.
 const tones: Record<DayStateTone, { box: string; label: string; value: string }> = {
@@ -52,17 +58,39 @@ function StateBlock({ label, tone, value }: { label: string; tone: DayStateTone;
   );
 }
 
-function Stat({ label, remarks, value }: { label: string; remarks: Remark[]; value: string }) {
+function Stat({
+  label,
+  onPress,
+  remarks,
+  value,
+}: {
+  label: string;
+  /** Set when the card has a photo: the card opens it, and an image icon says so. */
+  onPress?: () => void;
+  remarks: Remark[];
+  value: string;
+}) {
   return (
-    <View className="flex-1 border border-[#E6E9F8] bg-card p-3">
-      <Text className="text-sm font-semibold text-muted-foreground">{label}</Text>
+    <Pressable
+      accessibilityHint={onPress ? "Shows the photo you took" : undefined}
+      accessibilityRole={onPress ? "button" : undefined}
+      className="flex-1 border border-[#E6E9F8] bg-card p-3 active:bg-[#F3F5FF]"
+      disabled={!onPress}
+      onPress={onPress}
+    >
+      <View className="flex-row items-center justify-between">
+        <Text className="text-sm font-semibold text-muted-foreground">{label}</Text>
+        {onPress ? (
+          <HugeiconsIcon color={colors.primary} icon={Image02Icon} size={18} strokeWidth={1.8} />
+        ) : null}
+      </View>
       <Text className="mt-1 text-xl font-medium text-foreground">{value}</Text>
       <View className="mt-2 flex-row flex-wrap gap-1.5">
         {remarks.map((remark) => (
           <RemarkBadge key={remark.label} {...remark} />
         ))}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -81,10 +109,12 @@ function useLiveNow(open: boolean) {
 function RecordCards({
   date,
   kind,
+  onOpenPhoto,
   record,
 }: {
   date: string;
   kind: DayKind;
+  onOpenPhoto?: (side: PhotoSide) => void;
   record: AttendanceSession;
 }) {
   // Still working today: the second card counts the hours live instead of a check-out time.
@@ -100,11 +130,15 @@ function RecordCards({
       <View className="flex-row gap-2">
         <Stat
           label="Check In"
+          onPress={onOpenPhoto && record.hasCheckInPhoto ? () => onOpenPhoto("checkIn") : undefined}
           remarks={checkInRemarks(record)}
           value={formatTime(record.checkInAt)}
         />
         <Stat
           label={working ? "Hours Worked" : "Check Out"}
+          onPress={
+            onOpenPhoto && record.hasCheckOutPhoto ? () => onOpenPhoto("checkOut") : undefined
+          }
           remarks={checkOutRemarks(record, kind)}
           value={checkOutValue}
         />
@@ -130,7 +164,15 @@ function RecordCards({
  * The selected day's attendance: check-in and check-out side by side (with the web table's
  * remarks) and the hours worked once closed, or a single block for a day without a record.
  */
-export function DayRecord({ date, failed, kind, loading, offDay, record }: DayRecordProps) {
+export function DayRecord({
+  date,
+  failed,
+  kind,
+  loading,
+  offDay,
+  onOpenPhoto,
+  record,
+}: DayRecordProps) {
   let content: ReactNode;
   if (loading)
     content = (
@@ -142,7 +184,8 @@ export function DayRecord({ date, failed, kind, loading, offDay, record }: DayRe
     content = (
       <StateBlock label="Couldn't load attendance" tone="plain" value="Pull down to retry" />
     );
-  else if (record) content = <RecordCards date={date} kind={kind} record={record} />;
+  else if (record)
+    content = <RecordCards date={date} kind={kind} onOpenPhoto={onOpenPhoto} record={record} />;
   else content = <StateBlock {...dayStateWithoutRecord(kind, offDay)} />;
   return <View className="mt-2">{content}</View>;
 }

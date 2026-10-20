@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView } from "react-native";
 import { TabScreen } from "@/components/modules/layout";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
@@ -34,6 +35,7 @@ export function HomeScreen() {
   // Stable per record: the map re-frames its camera whenever its pins change.
   const dayCheckIn = useMemo(() => checkInPointOf(day.record), [day.record]);
   const dayCheckOut = useMemo(() => checkOutPointOf(day.record), [day.record]);
+  const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
   const [viewportHeight, setViewportHeight] = useState(0);
   // Content height minus the map: everything else on the page, which the map makes room for.
   const [restHeight, setRestHeight] = useState(0);
@@ -103,6 +105,9 @@ export function HomeScreen() {
           kind={day.kind}
           loading={day.loading}
           offDay={day.offDay}
+          onOpenPhoto={(side) => {
+            if (day.record) setPhoto({ date: selectedDate, id: day.record.id, side });
+          }}
           record={day.record}
         />
       </ScrollView>
@@ -117,6 +122,7 @@ export function HomeScreen() {
         ready={home.statusLoaded}
       />
       {home.photoModal}
+      <PhotoViewer onClose={() => setPhoto(null)} target={photo} token={token} />
     </TabScreen>
   );
 }

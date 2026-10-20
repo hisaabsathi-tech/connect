@@ -21,6 +21,9 @@ export type AttendanceSession = {
   checkOutAddress?: string | null;
   /** Only on days read back from `myAttendances`. */
   subStatuses?: AttendanceSubStatus[];
+  /** A photo was taken (Image Confirmation module). Only on days read back from `myAttendances`. */
+  hasCheckInPhoto?: boolean;
+  hasCheckOutPhoto?: boolean;
 };
 
 export function checkInPointOf(session: AttendanceSession | null): Point | null {
@@ -54,7 +57,7 @@ const MY_ATTENDANCE_DAY_QUERY = `
 query ConnectorAttendanceDay($date: String!) {
   myAttendances(from: $date, to: $date) {
     items {
-      id checkInAt checkOutAt checkOutKind subStatuses
+      id checkInAt checkOutAt checkOutKind subStatuses hasCheckInPhoto hasCheckOutPhoto
       checkInAddress checkInLatitude checkInLongitude
       checkOutAddress checkOutLatitude checkOutLongitude
     }
@@ -99,4 +102,15 @@ export function checkOut(token: string, point: Point, media?: string) {
     token,
     { body: JSON.stringify({ ...point, media }), method: "POST" },
   );
+}
+
+/** Fresh signed URLs for the member's own photos on one record; null where none was taken. */
+export async function fetchMyAttendancePhotos(token: string, id: string, date: string) {
+  const { photos } = await apiRequest<{
+    photos: { checkIn: string | null; checkOut: string | null };
+  }>(
+    `/organizations/me/attendance/my/${encodeURIComponent(id)}/photos?date=${encodeURIComponent(date)}`,
+    token,
+  );
+  return photos;
 }
