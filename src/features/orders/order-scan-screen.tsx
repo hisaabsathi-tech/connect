@@ -16,6 +16,7 @@ import Animated, {
 import { TabScreen } from "@/components/modules/layout";
 import { Skeleton } from "@/components/modules/skeleton";
 import { Text } from "@/components/modules/typography";
+import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { haptic } from "@/lib/haptics";
 
@@ -102,6 +103,7 @@ export function OrderScanScreen() {
   const [torch, setTorch] = useState(false);
   const [focused, setFocused] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const matched = useRef(false);
   const lastCode = useRef({ at: 0, value: "" });
 
@@ -139,8 +141,9 @@ export function OrderScanScreen() {
       }
       haptic("error");
       setError(MISMATCH);
+      toast.error(MISMATCH);
     },
-    [order],
+    [order, toast],
   );
 
   const granted = Boolean(permission?.granted);
