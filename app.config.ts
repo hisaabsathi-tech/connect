@@ -1,6 +1,8 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 import {
+  AndroidConfig,
   type ConfigPlugin,
+  withAndroidManifest,
   withAndroidStyles,
   withAppBuildGradle,
   withGradleProperties,
@@ -23,6 +25,29 @@ const withTransparentAutofillHighlight: ConfigPlugin = (config) =>
         _: "@android:color/transparent",
       });
     }
+    return config;
+  });
+
+// Android 16 ignores `screenOrientation` on large screens (tablets, unfolded foldables) for apps
+// targeting SDK 36, so `orientation: "portrait"` alone would let those rotate. This property opts
+// out while targeting 36; Android 17 drops it, so revisit when targetSdk moves to 37.
+const RESTRICTED_RESIZABILITY = "android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY";
+
+// Expo's manifest types don't model `<property>` children of `<application>`.
+type ApplicationWithProperties = AndroidConfig.Manifest.ManifestApplication & {
+  property?: { $: { "android:name": string; "android:value": string } }[];
+};
+
+const withPortraitOnLargeScreens: ConfigPlugin = (config) =>
+  withAndroidManifest(config, (config) => {
+    const application: ApplicationWithProperties = AndroidConfig.Manifest.getMainApplicationOrThrow(
+      config.modResults,
+    );
+    const properties = (application.property ?? []).filter(
+      (property) => property.$["android:name"] !== RESTRICTED_RESIZABILITY,
+    );
+    properties.push({ $: { "android:name": RESTRICTED_RESIZABILITY, "android:value": "true" } });
+    application.property = properties;
     return config;
   });
 
@@ -75,79 +100,84 @@ const withReleaseBuildGradle: ConfigPlugin = (config) =>
   });
 
 export default ({ config }: ConfigContext): ExpoConfig =>
-  withReleaseBuildGradle(
-    withGradlePropertyOverrides(
-      withTransparentAutofillHighlight({
-        ...config,
-        name: "Hisaabsathi Connector",
-        slug: "hisaab-sathi-connect",
-        version: release.version,
-        orientation: "portrait",
-        icon: "./assets/logo/android/app.png",
-        scheme: "hisaabsathi-connect",
-        userInterfaceStyle: "light",
-        android: {
-          package: "in.hisaabsathi.connect",
-          versionCode: release.versionCode,
-          softwareKeyboardLayoutMode: "resize",
-          adaptiveIcon: {
-            backgroundColor: androidLogo.backgroundColor,
-            foregroundImage: "./assets/logo/android/adaptive-foreground.png",
-            backgroundImage: "./assets/logo/android/adaptive-background.png",
-            monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
+  withPortraitOnLargeScreens(
+    withReleaseBuildGradle(
+      withGradlePropertyOverrides(
+        withTransparentAutofillHighlight({
+          ...config,
+          name: "Hisaabsathi Connector",
+          slug: "hisaab-sathi-connect",
+          version: release.version,
+          orientation: "portrait",
+          icon: "./assets/logo/android/app.png",
+          scheme: "hisaabsathi-connect",
+          userInterfaceStyle: "light",
+          android: {
+            package: "in.hisaabsathi.connect",
+            versionCode: release.versionCode,
+            softwareKeyboardLayoutMode: "resize",
+            adaptiveIcon: {
+              backgroundColor: androidLogo.backgroundColor,
+              foregroundImage: "./assets/logo/android/adaptive-foreground.png",
+              backgroundImage: "./assets/logo/android/adaptive-background.png",
+              monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
+            },
+            predictiveBackGestureEnabled: true,
           },
-          predictiveBackGestureEnabled: true,
-        },
-        plugins: [
-          "expo-router",
-          // Satoshi ships only Regular and Medium. One native family maps every weight to a real
-          // face (500+ → Medium), so heavier classes never fall back to a synthesized bold.
-          [
-            "expo-font",
-            {
-              android: {
-                fonts: [
-                  {
-                    fontFamily: "Satoshi",
-                    fontDefinitions: [
-                      { path: "./assets/fonts/satoshi-regular.otf", weight: 400 },
-                      { path: "./assets/fonts/satoshi-medium.otf", weight: 500 },
-                      { path: "./assets/fonts/satoshi-medium.otf", weight: 600 },
-                      { path: "./assets/fonts/satoshi-medium.otf", weight: 700 },
-                    ],
-                  },
-                ],
+          plugins: [
+            "expo-router",
+            // Satoshi ships only Regular and Medium. One native family maps every weight to a real
+            // face (500+ → Medium), so heavier classes never fall back to a synthesized bold.
+            [
+              "expo-font",
+              {
+                android: {
+                  fonts: [
+                    {
+                      fontFamily: "Satoshi",
+                      fontDefinitions: [
+                        { path: "./assets/fonts/satoshi-regular.otf", weight: 400 },
+                        { path: "./assets/fonts/satoshi-medium.otf", weight: 500 },
+                        { path: "./assets/fonts/satoshi-medium.otf", weight: 600 },
+                        { path: "./assets/fonts/satoshi-medium.otf", weight: 700 },
+                      ],
+                    },
+                  ],
+                },
+                ios: {
+                  fonts: [
+                    "./assets/fonts/satoshi-regular.otf",
+                    "./assets/fonts/satoshi-medium.otf",
+                  ],
+                },
               },
-              ios: {
-                fonts: ["./assets/fonts/satoshi-regular.otf", "./assets/fonts/satoshi-medium.otf"],
+            ],
+            "expo-secure-store",
+            // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
+            // A development/release build is required; this is not available in Expo Go.
+            "@maplibre/maplibre-react-native",
+            [
+              "expo-location",
+              {
+                locationWhenInUsePermission:
+                  "Allow Hisaabsathi Connector to use your location for attendance.",
               },
-            },
+            ],
+            [
+              "expo-splash-screen",
+              {
+                backgroundColor: androidLogo.splashBackgroundColor,
+                image: "./assets/logo/splash/dark.png",
+                imageWidth: 288,
+                resizeMode: "contain",
+              },
+            ],
           ],
-          "expo-secure-store",
-          // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
-          // A development/release build is required; this is not available in Expo Go.
-          "@maplibre/maplibre-react-native",
-          [
-            "expo-location",
-            {
-              locationWhenInUsePermission:
-                "Allow Hisaabsathi Connector to use your location for attendance.",
-            },
-          ],
-          [
-            "expo-splash-screen",
-            {
-              backgroundColor: androidLogo.splashBackgroundColor,
-              image: "./assets/logo/splash/dark.png",
-              imageWidth: 288,
-              resizeMode: "contain",
-            },
-          ],
-        ],
-        experiments: {
-          typedRoutes: true,
-          reactCompiler: true,
-        },
-      }),
+          experiments: {
+            typedRoutes: true,
+            reactCompiler: true,
+          },
+        }),
+      ),
     ),
   );
