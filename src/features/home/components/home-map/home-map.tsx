@@ -258,7 +258,7 @@ export function HomeMap({ checkIn, checkOut, live, organization }: Props) {
   );
   return (
     <>
-      <View className="h-[380px] border border-border overflow-hidden rounded-2xl bg-accent">
+      <View className="h-[360px] border border-border overflow-hidden rounded-2xl bg-accent">
         <NativeOlaMap controlsTop={16} legendBottom={12} points={points}>
           <MapControl
             icon={FullScreenIcon}

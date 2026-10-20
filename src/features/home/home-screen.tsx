@@ -61,7 +61,7 @@ export function HomeScreen() {
     <TabScreen>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-5 pb-5 pt-5"
+        contentContainerClassName="px-5 pb-5"
         refreshControl={
           <RefreshControl
             colors={[colors.primary]}

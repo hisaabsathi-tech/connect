@@ -105,7 +105,7 @@ export function DateStrip() {
   const first = days[start] ?? days[todayIndex - CENTER];
   const last = days[start + VISIBLE_DAYS - 1] ?? days[todayIndex + CENTER];
   return (
-    <View className="my-3">
+    <View className="my-3.5">
       <Text className="mb-2.5 text-base font-medium text-muted-foreground">
         {rangeLabel(first, last)}
       </Text>

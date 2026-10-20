@@ -1,15 +1,13 @@
 import { Image } from "expo-image";
 import { View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** Brand bar below the status bar. */
+import { useScreenTop } from "@/components/modules/layout";
+
+/** Brand bar below the status bar, starting at the same height as the tab screens. */
 export function AuthHeader() {
-  const insets = useSafeAreaInsets();
+  const top = useScreenTop();
   return (
-    <View
-      className="flex-row items-center px-5"
-      style={{ height: insets.top + 58, paddingTop: insets.top }}
-    >
+    <View className="flex-row items-center px-5 pb-3" style={{ paddingTop: top }}>
       <Image
         accessibilityLabel="Hisaab Sathi"
         contentFit="contain"
