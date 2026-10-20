@@ -1,7 +1,7 @@
 # Connector Commands
 
 Every command for running, checking, and releasing the Connector Android app, with why you would use
-it. Run all commands from the `connector/` folder.
+it. Run all commands from the `connect/` folder.
 
 ## Quick reference
 
@@ -344,7 +344,7 @@ writes `.env.production` from them on the runner. Your local `.env.production` i
 ### One-time secrets setup
 
 The CI APK must be signed with the **same** upload key as local builds, or phones cannot update from
-one to the other. Add these repository secrets once (from `connector/`, with `gh` signed in):
+one to the other. Add these repository secrets once (from `connect/`, with `gh` signed in):
 
 ```bash
 base64 -i .keys/android-upload.jks | gh secret set ANDROID_KEYSTORE_BASE64

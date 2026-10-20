@@ -1,7 +1,7 @@
 # Connector Android Logo and Splash Sizes
 
 This document records the dimensions, aspect ratios, and scaling used by the Connector branding
-pipeline. Run commands from the `connector/` directory.
+pipeline. Run commands from the `connect/` directory.
 
 ## Editable source files
 
