@@ -27,7 +27,7 @@ const HAPTIC_STEPS = 4;
 
 interface SwipeAttendanceProps {
   /** The thumb stays at the end, with a spinner, until the returned promise settles. */
-  action: () => void | Promise<unknown>;
+  action: () => unknown;
   busy: boolean;
   disabled?: boolean;
   /** Replaces "Swipe to Check In/Out", e.g. to say why the button is disabled. */
@@ -153,15 +153,28 @@ export function SwipeAttendance({
       onLayout={onTrackLayout}
       style={{ backgroundColor: accent, paddingHorizontal: INSET }}
     >
-      <Animated.View
-        className="absolute inset-y-0 right-0 items-center justify-center px-2"
-        // Centred in the track to the right of the thumb, so long labels never run under it.
-        style={{ left: THUMB + INSET, opacity: labelOpacity }}
-      >
-        <Text className="text-base text-white" numberOfLines={1}>
-          {working ? (mode === "in" ? "Checking you in" : "Checking you out") : label}
-        </Text>
-      </Animated.View>
+      {/* Centred beside the thumb so long labels never run under it. */}
+      {working ? (
+        // Confirming: left of the held thumb, solid white. A separate plain view, because the
+        // animated one keeps its last natively-driven (faded) opacity even when given 1.
+        <View
+          className="absolute inset-y-0 items-center justify-center px-2"
+          style={{ left: INSET, right: THUMB + INSET }}
+        >
+          <Text className="text-base text-white" numberOfLines={1}>
+            {mode === "in" ? "Checking you in" : "Checking you out"}
+          </Text>
+        </View>
+      ) : (
+        <Animated.View
+          className="absolute inset-y-0 right-0 items-center justify-center px-2"
+          style={{ left: THUMB + INSET, opacity: labelOpacity }}
+        >
+          <Text className="text-base text-white" numberOfLines={1}>
+            {label}
+          </Text>
+        </Animated.View>
+      )}
       <Animated.View
         {...responder.panHandlers}
         className="items-center justify-center bg-white"
