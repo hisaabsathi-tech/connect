@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 
 import { Text } from "@/components/modules/typography";
@@ -7,7 +7,13 @@ import type { AttendanceSession } from "@/lib/api/attendance";
 import { formatDayLabel, formatDuration, formatTime } from "@/lib/date";
 
 import type { DayKind } from "../hooks/use-day-attendance";
-import { checkInRemarks, checkOutRemarks, type Remark } from "../lib/remarks";
+import {
+  checkInRemarks,
+  checkOutRemarks,
+  type DayStateTone,
+  dayStateWithoutRecord,
+  type Remark,
+} from "../lib/remarks";
 import { RemarkBadge } from "./remark-badge";
 
 interface DayRecordProps {
@@ -19,40 +25,60 @@ interface DayRecordProps {
   failed: boolean;
 }
 
-function Stat({
-  label,
-  loading,
-  remarks,
-  value,
-}: {
-  label: string;
-  loading: boolean;
-  remarks: Remark[];
-  value: string;
-}) {
+// Absent, holidays and the plain states (weekly off, upcoming, today) as in the design.
+const tones: Record<DayStateTone, { box: string; label: string; value: string }> = {
+  absent: {
+    box: "border-destructive bg-[#FFF1F2]",
+    label: "text-destructive",
+    value: "text-destructive",
+  },
+  holiday: {
+    box: "border-[#D97706] bg-[#FFF8ED]",
+    label: "text-[#C2410C]",
+    value: "text-[#C2410C]",
+  },
+  plain: { box: "border-border bg-card", label: "text-muted-foreground", value: "text-foreground" },
+};
+
+function StateBlock({ label, tone, value }: { label: string; tone: DayStateTone; value: string }) {
+  const style = tones[tone];
   return (
-    <View className="flex-1 p-4">
-      <Text className="text-sm text-muted-foreground">{label}</Text>
-      <View className="mt-2 h-8 justify-center">
-        {loading ? (
-          <ActivityIndicator className="self-start" color={colors.primary} size="small" />
-        ) : (
-          <Text className="text-2xl font-medium text-foreground">{value}</Text>
-        )}
-      </View>
-      {!loading && remarks.length ? (
-        <View className="mt-3 flex-row flex-wrap gap-1.5">
-          {remarks.map((remark) => (
-            <RemarkBadge key={remark.label} {...remark} />
-          ))}
-        </View>
-      ) : null}
+    // Full-width lines centred by text-align, not shrink-wrapped by `items-center`: Android
+    // measures a wrapped Satoshi line narrower than it draws and clips the end of it.
+    <View className={`border px-4 py-10 ${style.box}`}>
+      <Text className={`text-center text-md ${style.label}`}>{label}</Text>
+      <Text className={`mt-1 text-center text-xl font-semibold ${style.value}`}>{value}</Text>
     </View>
   );
 }
 
-/** Hours worked: a green "completed" box once checked out, a live blue one while working today. */
-function WorkedSummary({
+function Stat({ label, remarks, value }: { label: string; remarks: Remark[]; value: string }) {
+  return (
+    <View className="flex-1 border border-[#E6E9F8] bg-card p-3">
+      <Text className="text-sm font-semibold text-muted-foreground">{label}</Text>
+      <Text className="mt-1 text-xl font-medium text-foreground">{value}</Text>
+      <View className="mt-2 flex-row flex-wrap gap-1.5">
+        {remarks.map((remark) => (
+          <RemarkBadge key={remark.label} {...remark} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** Ticks every second while `open`, for a session that is still running. */
+function useLiveNow(open: boolean) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!open) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [open]);
+  return now;
+}
+
+function RecordCards({
   date,
   kind,
   record,
@@ -61,67 +87,62 @@ function WorkedSummary({
   kind: DayKind;
   record: AttendanceSession;
 }) {
-  const open = !record.checkOutAt;
-  // An open session's working time keeps counting, to the second.
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    if (!open) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [open]);
-
-  // The server closes forgotten sessions; an open one on another day has nothing live to show.
-  if (open && kind !== "today") return null;
-  const today = kind === "today";
+  // Still working today: the second card counts the hours live instead of a check-out time.
+  const working = !record.checkOutAt && kind === "today";
+  const now = useLiveNow(working);
+  const checkOutValue = working
+    ? formatDuration(record.checkInAt, null, now)
+    : record.checkOutAt
+      ? formatTime(record.checkOutAt)
+      : "—";
   return (
-    <View
-      className={`mt-6 items-center border px-4 py-5 ${open ? "border-primary bg-[#EFF2FF]" : "border-success bg-[#ECFDF5]"}`}
-    >
-      <Text className="text-center text-lg font-medium text-foreground">
-        {open
-          ? "You're checked in"
-          : `Attendance completed for ${today ? "today" : formatDayLabel(date)}`}
-      </Text>
-      <Text className={`mt-1 text-3xl font-medium ${open ? "text-primary" : "text-success"}`}>
-        {formatDuration(record.checkInAt, record.checkOutAt, now)}
-      </Text>
-      <Text className="mt-1 text-sm text-muted-foreground">
-        {open ? "hours worked so far" : today ? "hours worked today" : "hours worked"}
-      </Text>
-    </View>
+    <>
+      <View className="flex-row gap-2">
+        <Stat
+          label="Check In"
+          remarks={checkInRemarks(record)}
+          value={formatTime(record.checkInAt)}
+        />
+        <Stat
+          label={working ? "Hours Worked" : "Check Out"}
+          remarks={checkOutRemarks(record, kind)}
+          value={checkOutValue}
+        />
+      </View>
+      {record.checkOutAt ? (
+        <View className="mt-4 border border-success bg-[#ECFDF5] px-4 py-4">
+          <Text className="text-center text-base font-medium text-foreground">
+            Attendance completed for {kind === "today" ? "today" : formatDayLabel(date)}
+          </Text>
+          <Text className="text-center text-2xl font-medium text-success">
+            {formatDuration(record.checkInAt, record.checkOutAt)}
+          </Text>
+          <Text className="text-center text-xs text-muted-foreground">
+            {kind === "today" ? "hours worked today" : "hours worked"}
+          </Text>
+        </View>
+      ) : null}
+    </>
   );
 }
 
 /**
- * Check-in and check-out for the calendar's selected day, always as two cards ("—" without a
- * record), with the same remarks as the web attendance table, then the hours worked.
+ * The selected day's attendance: check-in and check-out side by side (with the web table's
+ * remarks) and the hours worked once closed, or a single block for a day without a record.
  */
 export function DayRecord({ date, failed, kind, loading, offDay, record }: DayRecordProps) {
-  const day = { kind, offDay, record };
-  return (
-    <View className="mt-4">
-      <View className="flex-row border border-[#E6E9F8] bg-card">
-        <Stat
-          label="Check In"
-          loading={loading}
-          remarks={failed ? [] : checkInRemarks(day)}
-          value={record ? formatTime(record.checkInAt) : "—"}
-        />
-        <View className="w-px bg-[#E6E9F8]" />
-        <Stat
-          label="Check Out"
-          loading={loading}
-          remarks={failed ? [] : checkOutRemarks(day)}
-          value={record?.checkOutAt ? formatTime(record.checkOutAt) : "—"}
-        />
+  let content: ReactNode;
+  if (loading)
+    content = (
+      <View className="h-[84px] items-center justify-center border border-[#E6E9F8] bg-card">
+        <ActivityIndicator color={colors.primary} />
       </View>
-      {failed ? (
-        <Text className="mt-3 text-center text-sm text-muted-foreground">
-          Couldn't load attendance. Pull down to retry.
-        </Text>
-      ) : null}
-      {record && !loading ? <WorkedSummary date={date} kind={kind} record={record} /> : null}
-    </View>
-  );
+    );
+  else if (failed)
+    content = (
+      <StateBlock label="Couldn't load attendance" tone="plain" value="Pull down to retry" />
+    );
+  else if (record) content = <RecordCards date={date} kind={kind} record={record} />;
+  else content = <StateBlock {...dayStateWithoutRecord(kind, offDay)} />;
+  return <View className="mt-2">{content}</View>;
 }

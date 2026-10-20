@@ -23,6 +23,8 @@ type Props = {
   checkOut: Point | null;
   organization: Coordinates | null;
   live: Coordinates | null;
+  /** Inline height; the home screen sizes the map to what the rest of the page leaves. */
+  height: number;
 };
 
 type MapPoint = Coordinates & { kind: "start" | "transit" | "destination" | "organization" };
@@ -243,7 +245,7 @@ function NativeOlaMap({ points, controlsTop, legendBottom, children }: NativeOla
   );
 }
 
-export function HomeMap({ checkIn, checkOut, live, organization }: Props) {
+export function HomeMap({ checkIn, checkOut, height, live, organization }: Props) {
   const [expanded, setExpanded] = useState(false);
   // Organisation: always. Before checking in: where the user is now. After: the check-in
   // point replaces the live position, and a check-out adds the destination pin.
@@ -258,7 +260,10 @@ export function HomeMap({ checkIn, checkOut, live, organization }: Props) {
   );
   return (
     <>
-      <View className="h-[360px] border border-border overflow-hidden rounded-2xl bg-accent">
+      <View
+        className="border border-border overflow-hidden rounded-2xl bg-accent"
+        style={{ height }}
+      >
         <NativeOlaMap controlsTop={16} legendBottom={12} points={points}>
           <MapControl
             icon={FullScreenIcon}

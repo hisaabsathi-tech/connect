@@ -1,7 +1,7 @@
-import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Pressable, View } from "react-native";
 
+import { Avatar } from "@/components/modules/avatar";
 import { Text } from "@/components/modules/typography";
 import type { HomeIdentity } from "@/lib/api/home";
 import { haptic } from "@/lib/haptics";
@@ -31,24 +31,18 @@ export function HomeHeader({ identity }: { identity: HomeIdentity | null }) {
     <Pressable
       accessibilityHint="Opens your profile"
       accessibilityRole="button"
-      className="mb-5 flex-row items-center gap-3"
+      className="mb-3 flex-row items-center gap-3"
       onPress={() => {
         haptic("light");
         router.push("/profile");
       }}
     >
-      <View className="h-14 w-14 overflow-hidden rounded-full bg-accent">
-        {identity?.image ? (
-          <Image
-            contentFit="cover"
-            source={{ uri: identity.image }}
-            style={{ height: "100%", width: "100%" }}
-          />
-        ) : null}
-      </View>
+      <Avatar image={identity?.image} name={identity?.name} round seed={identity?.id} size={52} />
       <View className="flex-1">
         <Text className="font-semibold text-lg text-foreground">Hi, {name}</Text>
-        <Text className="mt-0.5 text-muted-foreground text-sm">{quoteForToday()}</Text>
+        <Text className="mt-0.5 font-semibold text-muted-foreground text-sm">
+          {quoteForToday()}
+        </Text>
       </View>
     </Pressable>
   );

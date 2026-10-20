@@ -14,35 +14,19 @@ const SUB_STATUS: Record<AttendanceSubStatus, Remark> = {
   OVERTIME: { label: "Overtime", variant: "transit" },
 };
 
-const ABSENT: Remark = { label: "Absent", variant: "destructive" };
-const ON_TIME: Remark = { label: "On Time", variant: "delivered" };
-
-interface DayState {
-  kind: DayKind;
-  offDay: string | null;
-  record: AttendanceSession | null;
+/** Under "Check In": Late Entry past the organisation's start time, else On Time. */
+export function checkInRemarks(record: AttendanceSession): Remark[] {
+  return record.subStatuses?.includes("LATE_ENTRY")
+    ? [SUB_STATUS.LATE_ENTRY]
+    : [{ label: "On Time", variant: "delivered" }];
 }
 
 /**
- * Badges under "Check In". With a record: Late Entry, or On Time when the check-in was within the
- * organisation's start time. Without one, the roster's day status: the holiday or weekly off by
- * name, Absent for a working day up to today, nothing for a future working day.
- */
-export function checkInRemarks({ kind, offDay, record }: DayState): Remark[] {
-  if (record) {
-    return record.subStatuses?.includes("LATE_ENTRY") ? [SUB_STATUS.LATE_ENTRY] : [ON_TIME];
-  }
-  if (offDay) return [{ label: offDay, variant: "rescheduled" }];
-  return kind === "future" ? [] : [ABSENT];
-}
-
-/**
- * Badges under "Check Out": Missed Checkout for an auto-closed session, Overtime past the
- * organisation's end time (still working or checked out). Otherwise Working while open today,
+ * Under "Check Out" (or the live hours while working): Missed Checkout for an auto-closed
+ * session, Overtime past the organisation's end time. Otherwise Working while open today,
  * or Checked Out once closed.
  */
-export function checkOutRemarks({ kind, record }: DayState): Remark[] {
-  if (!record) return [];
+export function checkOutRemarks(record: AttendanceSession, kind: DayKind): Remark[] {
   const remarks = (["MISSED_CHECKOUT", "OVERTIME"] as const)
     .filter((status) => record.subStatuses?.includes(status))
     .map((status) => SUB_STATUS[status]);
@@ -51,4 +35,37 @@ export function checkOutRemarks({ kind, record }: DayState): Remark[] {
   return kind === "today"
     ? [{ label: "Working", variant: "transit" }]
     : [SUB_STATUS.MISSED_CHECKOUT];
+}
+
+export type DayStateTone = "absent" | "holiday" | "plain";
+
+export type DayState = { label: string; value: string; tone: DayStateTone };
+
+const WEEKDAYS = new Set([
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+]);
+
+/**
+ * The single block shown for a day without attendance, like the web roster's day status.
+ * The server names a weekly off by its weekday and a holiday by its own name.
+ */
+export function dayStateWithoutRecord(kind: DayKind, offDay: string | null): DayState {
+  if (offDay && WEEKDAYS.has(offDay)) {
+    const weekend = offDay === "Saturday" || offDay === "Sunday";
+    return {
+      label: "Weekly Off",
+      tone: "plain",
+      value: weekend ? "Weekend Holiday" : `${offDay} Off`,
+    };
+  }
+  if (offDay) return { label: "Public Holiday", tone: "holiday", value: offDay };
+  if (kind === "future") return { label: "Upcoming", tone: "plain", value: "Not Started" };
+  if (kind === "today") return { label: "Today", tone: "plain", value: "Not checked in yet" };
+  return { label: "Absent", tone: "absent", value: "No attendance" };
 }

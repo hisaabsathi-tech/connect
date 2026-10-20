@@ -21,7 +21,7 @@ export function RemarkBadge({ label, variant }: Remark) {
       style={{ backgroundColor: background }}
     >
       <View className="h-1.5 w-1.5" style={{ backgroundColor: color, borderRadius: 3 }} />
-      <Text className="text-[11px] font-medium uppercase tracking-wide" style={{ color }}>
+      <Text className="text-[10px] font-medium uppercase tracking-wide" style={{ color }}>
         {label}
       </Text>
     </View>

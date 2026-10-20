@@ -1,6 +1,8 @@
 import { graphqlRequest } from "@/lib/api/graphql";
 
 export type HomeIdentity = {
+  /** User id; seeds the generated avatar. */
+  id: string;
   name: string;
   image: string | null;
   roleSlug: string | null;
@@ -13,7 +15,7 @@ query ConnectorHome {
   me {
     menus
     orgRole { slug }
-    user { name image }
+    user { id name image }
     organization { name }
   }
   organization {
@@ -26,7 +28,7 @@ export async function fetchHomeIdentity(token: string): Promise<HomeIdentity> {
     me: {
       menus?: string[] | null;
       orgRole?: { slug?: string | null } | null;
-      user: { name: string; image?: string | null };
+      user: { id: string; name: string; image?: string | null };
       organization?: { name?: string | null } | null;
     };
     organization?: {
@@ -53,6 +55,7 @@ export async function fetchHomeIdentity(token: string): Promise<HomeIdentity> {
         .join(", ")
     : "";
   return {
+    id: payload.me.user.id,
     image: payload.me.user.image ?? null,
     menus: payload.me.menus ?? [],
     name: payload.me.user.name,

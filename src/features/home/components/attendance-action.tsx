@@ -1,4 +1,4 @@
-import { formatDayLabel } from "@/lib/date";
+import { View } from "react-native";
 
 import type { DayKind } from "../hooks/use-day-attendance";
 import { SwipeAttendance } from "./swipe-attendance";
@@ -11,42 +11,41 @@ interface AttendanceActionProps {
   ready: boolean;
   /** The live position is known. */
   located: boolean;
-  /** The calendar's selected day; the swipe only ever acts on today. */
-  date: string;
+  /** The calendar's selected day kind; the swipe only ever acts on today. */
   kind: DayKind;
   onSubmit: () => void;
 }
 
-/** Why the swipe can't be used right now, or null when it can. */
-function blockedLabel({
+/** Whether the swipe belongs on screen: only for today, until today's attendance is closed. */
+function showsAttendanceAction({
   attendedToday,
-  date,
   isCheckedIn,
   kind,
-  located,
-  ready,
-}: Omit<AttendanceActionProps, "busy" | "onSubmit">) {
-  if (kind === "future") return `Check-in opens on ${formatDayLabel(date)}`;
-  if (kind === "past") return `Check-in closed for ${formatDayLabel(date)}`;
-  if (!ready) return "Loading today's attendance";
-  if (attendedToday && !isCheckedIn) return "Attendance completed for today";
-  if (!located) return "Waiting for your location";
-  return null;
+}: Pick<AttendanceActionProps, "attendedToday" | "isCheckedIn" | "kind">) {
+  return kind === "today" && !(attendedToday && !isCheckedIn);
 }
 
 /**
- * Swipe to check in or out. On any other day than today, once today is done, or while the
- * status or location is still loading, the button stays disabled and says why.
+ * Swipe to check in or out, pinned above the navigation. Hidden on other days and once today
+ * is done (the day record says so); while today's status or location loads it stays disabled
+ * and says why.
  */
 export function AttendanceAction({ busy, onSubmit, ...state }: AttendanceActionProps) {
-  const blocked = blockedLabel(state);
+  if (!showsAttendanceAction(state)) return null;
+  const blocked = !state.ready
+    ? "Loading today's attendance"
+    : !state.located
+      ? "Waiting for your location"
+      : undefined;
   return (
-    <SwipeAttendance
-      action={onSubmit}
-      busy={busy}
-      disabled={Boolean(blocked)}
-      label={blocked ?? undefined}
-      mode={state.kind === "today" && state.isCheckedIn ? "out" : "in"}
-    />
+    <View className="bg-background px-5 py-3">
+      <SwipeAttendance
+        action={onSubmit}
+        busy={busy}
+        disabled={Boolean(blocked)}
+        label={blocked}
+        mode={state.isCheckedIn ? "out" : "in"}
+      />
+    </View>
   );
 }

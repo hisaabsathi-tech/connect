@@ -4,6 +4,8 @@ import { env } from "@/lib/env";
 export type Profile = {
   address: string | null;
   email: string;
+  /** User id; seeds the generated avatar. */
+  id: string;
   image: string | null;
   name: string;
   phoneNumber: string | null;
@@ -16,7 +18,7 @@ query ConnectorProfile {
   me {
     orgRole { role }
     organization { name }
-    user { name email image phoneNumber address }
+    user { id name email image phoneNumber address }
   }
 }`;
 

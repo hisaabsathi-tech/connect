@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { RefreshControl, ScrollView, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import { RefreshControl, ScrollView } from "react-native";
 
 import { TabScreen } from "@/components/modules/layout";
 import { useToast } from "@/components/ui/toast";
@@ -17,6 +17,11 @@ import { HomeMap } from "./components/home-map";
 import { useDayAttendance } from "./hooks/use-day-attendance";
 import { useHomeAttendance } from "./hooks/use-home-attendance";
 
+// The map takes whatever height the rest of the page leaves on screen, within these bounds, so
+// the day's record and the swipe usually fit without scrolling.
+const MAP_MIN_HEIGHT = 200;
+const MAP_MAX_HEIGHT = 360;
+
 /** Signed-in only: the tabs layout redirects to /auth before this renders without a session. */
 export function HomeScreen() {
   const { token } = useAuthSession();
@@ -29,6 +34,16 @@ export function HomeScreen() {
   // Stable per record: the map re-frames its camera whenever its pins change.
   const dayCheckIn = useMemo(() => checkInPointOf(day.record), [day.record]);
   const dayCheckOut = useMemo(() => checkOutPointOf(day.record), [day.record]);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  // Content height minus the map: everything else on the page, which the map makes room for.
+  const [restHeight, setRestHeight] = useState(0);
+  const mapHeight =
+    viewportHeight && restHeight
+      ? Math.min(MAP_MAX_HEIGHT, Math.max(MAP_MIN_HEIGHT, viewportHeight - restHeight))
+      : MAP_MAX_HEIGHT;
+  // The height the content was last laid out with, to subtract from its measured size.
+  const renderedMapHeight = useRef(mapHeight);
+  renderedMapHeight.current = mapHeight;
 
   const refresh = () => {
     resetToToday();
@@ -61,7 +76,9 @@ export function HomeScreen() {
     <TabScreen>
       <ScrollView
         className="flex-1"
-        contentContainerClassName="px-5 pb-5"
+        contentContainerClassName="px-5 pb-4"
+        onContentSizeChange={(_, height) => setRestHeight(height - renderedMapHeight.current)}
+        onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
         refreshControl={
           <RefreshControl
             colors={[colors.primary]}
@@ -75,6 +92,7 @@ export function HomeScreen() {
         <HomeMap
           checkIn={dayCheckIn}
           checkOut={dayCheckOut}
+          height={mapHeight}
           live={live}
           organization={home.organization}
         />
@@ -89,18 +107,15 @@ export function HomeScreen() {
         />
       </ScrollView>
       {/* Pinned above the navigation; anything added below the calendar scrolls behind it. */}
-      <View className="bg-background px-5 py-3">
-        <AttendanceAction
-          attendedToday={home.attendedToday}
-          busy={home.busy}
-          date={selectedDate}
-          isCheckedIn={home.isCheckedIn}
-          kind={day.kind}
-          located={Boolean(live)}
-          onSubmit={submit}
-          ready={home.statusLoaded}
-        />
-      </View>
+      <AttendanceAction
+        attendedToday={home.attendedToday}
+        busy={home.busy}
+        isCheckedIn={home.isCheckedIn}
+        kind={day.kind}
+        located={Boolean(live)}
+        onSubmit={submit}
+        ready={home.statusLoaded}
+      />
     </TabScreen>
   );
 }
