@@ -1,4 +1,4 @@
-import { Calendar01Icon, User02Icon } from "@hugeicons/core-free-icons";
+import { Calendar01Icon, Package04Icon, User02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
 import type { Tabs } from "expo-router";
@@ -8,17 +8,20 @@ import { SvgUri } from "react-native-svg";
 
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
+import { useViewer } from "@/lib/auth/viewer";
 import { type HapticKind, haptic } from "@/lib/haptics";
 
 type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
 const activeIcons = {
   attendance: NativeImage.resolveAssetSource(require("@/assets/mobile/nav/attendance.svg")),
+  orders: NativeImage.resolveAssetSource(require("@/assets/mobile/nav/package.svg")),
   profile: NativeImage.resolveAssetSource(require("@/assets/mobile/nav/profile.svg")),
 } as const;
 
 const items = {
   index: { icon: null, label: "Home" },
+  orders: { icon: Package04Icon, label: "Orders" },
   attendance: { icon: Calendar01Icon, label: "Attendance" },
   profile: { icon: User02Icon, label: "Profile" },
 } as const;
@@ -26,20 +29,25 @@ const items = {
 const pageHaptics: Record<keyof typeof items, HapticKind> = {
   attendance: "medium",
   index: "selection",
+  orders: "medium",
   profile: "light",
 };
 
-/** The current role baseline: every signed-in user gets these three destinations. */
+// Destinations only some roles get; everyone else never sees them in the bar.
+const DELIVERY_BOY_ONLY = new Set(["orders"]);
+
+/** Home, Attendance and Profile for every signed-in user; Orders for delivery boys too. */
 export function BottomNavigation({ insets, navigation, state }: BottomTabBarProps) {
+  const { isDeliveryBoy } = useViewer();
   return (
     <View className="flex-row bg-[#F0F2FF] px-5 pt-3" style={{ paddingBottom: insets.bottom + 8 }}>
       {state.routes.map((route, index) => {
         const item = items[route.name as keyof typeof items];
-        if (!item) return null;
+        if (!item || (DELIVERY_BOY_ONLY.has(route.name) && !isDeliveryBoy)) return null;
         const active = state.index === index;
         const color = active ? colors.primary : colors.foreground;
         const activeIcon =
-          route.name === "attendance" || route.name === "profile" ? route.name : null;
+          route.name in activeIcons ? (route.name as keyof typeof activeIcons) : null;
         const onPress = () => {
           const event = navigation.emit({
             canPreventDefault: true,

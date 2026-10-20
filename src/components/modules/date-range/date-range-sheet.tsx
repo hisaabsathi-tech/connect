@@ -10,7 +10,7 @@ import { colors } from "@/config/colors";
 import { addDays, formatDayLabel, startOfMonth, startOfWeek } from "@/lib/date";
 import { haptic } from "@/lib/haptics";
 
-import type { DateRange } from "../hooks/use-attendance-range";
+import type { DateRange } from "./range-label";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTHS = [

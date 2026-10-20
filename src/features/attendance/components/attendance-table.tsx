@@ -1,10 +1,8 @@
 import { View } from "react-native";
-
+import { EmptyBlock } from "@/components/modules/empty-state";
 import { Text } from "@/components/modules/typography";
 import { formatClock, formatDayLabel } from "@/lib/date";
-
 import type { AttendanceDayEntry } from "../lib/days";
-import { EmptyBlock } from "./empty-block";
 
 // Share of the row each column takes; three columns fit the screen without scrolling sideways.
 const COLUMNS = [

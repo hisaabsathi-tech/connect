@@ -1,0 +1,321 @@
+import { Redirect, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FlatList, RefreshControl, View } from "react-native";
+
+import { type DateRange, rangeLabel, SearchRangeToolbar } from "@/components/modules/date-range";
+import { TabScreen } from "@/components/modules/layout";
+import { StatCard } from "@/components/modules/stat-card";
+import { Loader } from "@/components/modules/system";
+import { Text } from "@/components/modules/typography";
+import { colors } from "@/config/colors";
+import type { DrsSheet } from "@/lib/api/drs";
+import { useAuthSession } from "@/lib/auth/session";
+import { useViewer } from "@/lib/auth/viewer";
+import { formatDayLabel, useDateFilter } from "@/lib/date";
+
+import { DrsCard } from "./components/drs-card";
+import { DrsPicker } from "./components/drs-picker";
+import { DrsStatusSheet } from "./components/drs-status-sheet";
+import { FilterChips } from "./components/filter-chips";
+import { ListEmpty } from "./components/list-empty";
+import { OrderRow } from "./components/order-row";
+import { type PageTab, PageTabs } from "./components/page-tabs";
+import { useDrsPrint } from "./hooks/use-drs-print";
+import { useDrsScan } from "./hooks/use-drs-scan";
+import { useDrsSheets } from "./hooks/use-drs-sheets";
+import {
+  DRS_FILTERS,
+  type DrsFilter,
+  drsAreas,
+  drsPincodes,
+  isDrsOngoing,
+  matchesDrsFilter,
+} from "./lib/drs";
+import {
+  type DrsOrder,
+  isDelivered,
+  isPending,
+  matchesOrderFilter,
+  matchesOrderSearch,
+  ORDER_FILTERS,
+  type OrderFilter,
+  ordersFromSheets,
+} from "./lib/orders";
+
+function Separator() {
+  return <View className="h-3" />;
+}
+
+/** The DRS id, areas or pincodes containing the search. */
+function matchesDrsSearch(sheet: DrsSheet, search: string) {
+  const needle = search.trim().toLowerCase();
+  if (!needle) return true;
+  return [sheet.id, ...drsAreas(sheet), ...drsPincodes(sheet)].some((value) =>
+    value.toLowerCase().includes(needle),
+  );
+}
+
+/**
+ * The delivery boy's Orders tab: their orders and their delivery run sheets (DRS) on one page,
+ * Orders first. Both work from the sheets issued on the day picked on Home, or a range picked
+ * here; the counts on top, the status chips and the search follow the tab. Tapping a DRS shows
+ * its orders, and the Orders tab narrows to one DRS with the picker under the search.
+ */
+export function OrdersScreen() {
+  const { token } = useAuthSession();
+  const viewer = useViewer();
+  const { selectedDate, today } = useDateFilter();
+  const [tab, setTab] = useState<PageTab>("orders");
+  const [range, setRange] = useState<DateRange | null>(null);
+  const [query, setQuery] = useState("");
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
+  const [drsFilter, setDrsFilter] = useState<DrsFilter>("all");
+  const [drsId, setDrsId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<DrsSheet | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const listRef = useRef<FlatList<DrsOrder | DrsSheet>>(null);
+
+  // A day picked on Home takes over from a range picked here.
+  useEffect(() => {
+    setRange(null);
+  }, [selectedDate]);
+
+  const from = range?.from ?? selectedDate;
+  const to = range?.to ?? selectedDate;
+  const data = useDrsSheets(viewer.isDeliveryBoy ? token : null, { from, to });
+  const { load, replace, sheets } = data;
+
+  const updated = useCallback(
+    (sheet: DrsSheet) => {
+      replace(sheet);
+      void load(true);
+    },
+    [load, replace],
+  );
+  const printer = useDrsPrint();
+  const scan = useDrsScan(updated);
+
+  // Coming back to the tab picks up deliveries made meanwhile, without a spinner.
+  const focusedBefore = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedBefore.current) {
+        focusedBefore.current = true;
+        return;
+      }
+      void load(true);
+    }, [load]),
+  );
+
+  // The chosen DRS only narrows the orders while it is among the range's sheets.
+  const activeDrsId = drsId && sheets.some((sheet) => sheet.id === drsId) ? drsId : null;
+
+  const scopedOrders = useMemo(() => ordersFromSheets(sheets, activeDrsId), [activeDrsId, sheets]);
+  const orders = useMemo(
+    () =>
+      scopedOrders.filter(
+        (order) => matchesOrderFilter(order, orderFilter) && matchesOrderSearch(order, query),
+      ),
+    [orderFilter, query, scopedOrders],
+  );
+  const shownSheets = useMemo(
+    () =>
+      sheets.filter(
+        (sheet) => matchesDrsFilter(sheet, drsFilter) && matchesDrsSearch(sheet, query),
+      ),
+    [drsFilter, query, sheets],
+  );
+
+  const openDrs = (sheet: DrsSheet) => {
+    setDrsId(sheet.id);
+    setOrderFilter("all");
+    setQuery("");
+    setTab("orders");
+    listRef.current?.scrollToOffset({ animated: false, offset: 0 });
+  };
+
+  // A stat card applies the filter for what it counts; tapping it again shows everything.
+  const toggleOrderFilter = (filter: OrderFilter) =>
+    setOrderFilter((current) => (current === filter ? "all" : filter));
+  const toggleDrsFilter = (filter: DrsFilter) =>
+    setDrsFilter((current) => (current === filter ? "all" : filter));
+
+  const changeTab = (next: PageTab) => {
+    setTab(next);
+    setQuery("");
+  };
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([load(true), viewer.reload()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  if (!viewer.isLoaded)
+    return (
+      <TabScreen>
+        <Loader fullPage />
+      </TabScreen>
+    );
+  if (!viewer.isDeliveryBoy) return <Redirect href="/" />;
+
+  const onOrders = tab === "orders";
+  const day = range
+    ? rangeLabel(range)
+    : selectedDate === today
+      ? "today"
+      : formatDayLabel(selectedDate);
+  const period = range || selectedDate !== today ? `for ${day}` : "for today";
+  const count = (value: number) => (data.loading ? "--" : String(value));
+
+  const header = (
+    <View className="pb-4">
+      <Text className="text-2xl font-semibold leading-8 text-foreground">Manage Orders & DRS</Text>
+      <Text className="mt-0.5 text-sm text-muted-foreground">
+        Manage all your orders {period} at one place
+      </Text>
+      <PageTabs onChange={changeTab} value={tab} />
+      <View className="mt-5 flex-row gap-3">
+        {onOrders ? (
+          <>
+            <StatCard
+              active={orderFilter === "pending"}
+              label="Pending Orders"
+              onPress={() => toggleOrderFilter("pending")}
+              value={count(scopedOrders.filter(isPending).length)}
+            />
+            <StatCard
+              active={orderFilter === "delivered"}
+              label="Orders Delivered"
+              onPress={() => toggleOrderFilter("delivered")}
+              value={count(scopedOrders.filter(isDelivered).length)}
+            />
+          </>
+        ) : (
+          <>
+            <StatCard
+              active={drsFilter === "ongoing"}
+              label="Ongoing DRS"
+              onPress={() => toggleDrsFilter("ongoing")}
+              value={count(sheets.filter(isDrsOngoing).length)}
+            />
+            <StatCard
+              active={drsFilter === "RESOLVED"}
+              label="Completed DRS"
+              onPress={() => toggleDrsFilter("RESOLVED")}
+              value={count(sheets.filter((sheet) => !isDrsOngoing(sheet)).length)}
+            />
+          </>
+        )}
+      </View>
+      {onOrders ? (
+        <FilterChips onChange={setOrderFilter} options={ORDER_FILTERS} value={orderFilter} />
+      ) : (
+        <FilterChips onChange={setDrsFilter} options={DRS_FILTERS} value={drsFilter} />
+      )}
+      <View className="mt-4">
+        <SearchRangeToolbar
+          autoCapitalize={onOrders ? "words" : "characters"}
+          onQueryChange={setQuery}
+          onRangeChange={setRange}
+          query={query}
+          range={range}
+          searchLabel={onOrders ? "Search orders" : "Search DRS"}
+          today={today}
+        />
+      </View>
+      {onOrders && sheets.length ? (
+        <DrsPicker onChange={setDrsId} sheets={sheets} value={activeDrsId} />
+      ) : null}
+    </View>
+  );
+
+  const searching = query.trim();
+  const empty = data.loading ? (
+    <ListEmpty />
+  ) : data.failed ? (
+    <ListEmpty
+      action={{ label: "Try again", onPress: () => void load() }}
+      description="Check your connection and try again."
+      title={onOrders ? "Couldn't load orders" : "Couldn't load DRS"}
+    />
+  ) : onOrders ? (
+    !scopedOrders.length ? (
+      <ListEmpty
+        description={
+          activeDrsId
+            ? `There are no orders on ${activeDrsId}.`
+            : "There are no orders yet.\nGenerate a DRS to see active orders here."
+        }
+        title={activeDrsId ? "No orders on this DRS" : `No orders ${period}`}
+      />
+    ) : (
+      <ListEmpty
+        description={
+          searching
+            ? `No order matches "${searching}".`
+            : "Try another filter to see the rest of your orders."
+        }
+        title="No orders found"
+      />
+    )
+  ) : !sheets.length ? (
+    <ListEmpty
+      description={"There are no DRS yet.\nDRS issued to you will show here."}
+      title={`No DRS ${period}`}
+    />
+  ) : (
+    <ListEmpty
+      description={
+        searching
+          ? `No DRS matches "${searching}".`
+          : "Try another filter to see the rest of your DRS."
+      }
+      title="No DRS found"
+    />
+  );
+
+  return (
+    <TabScreen>
+      <FlatList<DrsOrder | DrsSheet>
+        className="flex-1"
+        contentContainerClassName="px-5 pb-8"
+        contentContainerStyle={{ flexGrow: 1 }}
+        data={data.loading ? [] : onOrders ? orders : shownSheets}
+        ItemSeparatorComponent={Separator}
+        keyboardShouldPersistTaps="handled"
+        keyExtractor={(item) => ("orderId" in item ? `order-${item.orderId}` : `drs-${item.id}`)}
+        ListEmptyComponent={empty}
+        ListHeaderComponent={header}
+        ref={listRef}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void refresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        renderItem={({ item }) =>
+          "orderId" in item ? (
+            <OrderRow order={item} />
+          ) : (
+            <DrsCard
+              onEdit={() => setEditing(item)}
+              onOpen={() => openDrs(item)}
+              onPrint={() => void printer.print(item.id)}
+              onScan={() => scan.open(item)}
+              printing={printer.printing === item.id}
+              sheet={item}
+            />
+          )
+        }
+      />
+      <DrsStatusSheet onClose={() => setEditing(null)} onUpdated={updated} sheet={editing} />
+      {scan.element}
+    </TabScreen>
+  );
+}

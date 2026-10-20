@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchRoster, type Roster, type RosterRow } from "@/lib/api/attendance-roster";
 
-import { retryOnce } from "../lib/retry";
+import { retryOnce } from "@/lib/retry";
 
 const PAGE_SIZE = 20;
 

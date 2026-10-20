@@ -26,7 +26,9 @@ export function ActionButton({
   const color = outline ? colors.foreground : colors.primaryForeground;
   return (
     <Button
-      className="h-12 w-full"
+      // The kit's `data-[disabled]` dimming doesn't reach the native button, so it is set here; a
+      // loading button keeps its full colour behind the spinner.
+      className={`h-12 w-full ${disabled && !loading ? "opacity-40" : ""}`}
       disabled={disabled || loading}
       onPress={onPress}
       variant={outline ? "outline" : "default"}

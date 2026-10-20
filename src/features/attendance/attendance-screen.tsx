@@ -34,14 +34,17 @@ function ViewTabs({
   value: AttendanceView;
 }) {
   return (
-    <View accessibilityRole="tablist" className="mt-4 flex-row border border-border bg-card">
+    <View
+      accessibilityRole="tablist"
+      className="mt-4 flex-row gap-1.5 border border-border bg-card p-1"
+    >
       {TABS.map((tab) => {
         const active = tab.value === value;
         return (
           <Pressable
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            className={`h-10 flex-1 items-center justify-center ${active ? "bg-primary" : ""}`}
+            className={`h-9 flex-1 items-center justify-center ${active ? "bg-primary" : "active:bg-[#F7F8FF]"}`}
             key={tab.value}
             onPress={() => {
               if (active) return;

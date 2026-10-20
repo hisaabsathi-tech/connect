@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { DateRange } from "@/components/modules/date-range";
 import { fetchMyAttendanceRange } from "@/lib/api/attendance";
+import { retryOnce } from "@/lib/retry";
 
 import { type AttendanceDayEntry, buildDays } from "../lib/days";
-import { retryOnce } from "../lib/retry";
 
-/** Both days included, as `YYYY-MM-DD`. */
-export type DateRange = { from: string; to: string };
+export type { DateRange };
 
 /** Every day of the applied date range, oldest first, for the table and its export. */
 export function useAttendanceRange(token: string | null, range: DateRange | null, today: string) {

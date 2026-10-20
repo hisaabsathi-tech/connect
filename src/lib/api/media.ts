@@ -16,7 +16,7 @@ function putObject(uploadUrl: string, body: Blob, mimeType: string) {
   });
 }
 
-type MediaKind = "attendance_photo" | "user_image";
+type MediaKind = "attendance_photo" | "order_pod" | "user_image";
 
 export type UploadedMedia = {
   mediaId: string;
@@ -49,4 +49,9 @@ export async function uploadAttendancePhoto(token: string, uri: string): Promise
 /** Uploads a profile photo (`user_image`). */
 export function uploadProfilePhoto(token: string, uri: string): Promise<UploadedMedia> {
   return uploadJpeg(token, uri, "user_image");
+}
+
+/** Uploads the scan of a signed DRS (`order_pod`); the DRS stores its `objectKey`. */
+export function uploadDrsScan(token: string, uri: string): Promise<UploadedMedia> {
+  return uploadJpeg(token, uri, "order_pod");
 }

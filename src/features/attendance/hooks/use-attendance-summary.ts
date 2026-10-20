@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchMyAttendanceRange } from "@/lib/api/attendance";
-
+import { retryOnce } from "@/lib/retry";
 import { type AttendanceSummary, summarize, summaryStart } from "../lib/days";
-import { retryOnce } from "../lib/retry";
 
 /** The default top cards: days present this month out of all its days, and the last 7 days' hours. */
 export function useAttendanceSummary(token: string | null, today: string) {

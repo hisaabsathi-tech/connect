@@ -12,16 +12,26 @@ const variants: Record<RemarkVariant, { background: string; color: string }> = {
   transit: { background: "#EFF8FF", color: "#2563EB" },
 };
 
-/** A remark pill with a leading dot, like the web table's `<Badge showDot>`. */
-export function RemarkBadge({ label, variant }: Remark) {
+/**
+ * A remark pill with a leading dot, like the web table's `<Badge showDot>`. `md` is the larger
+ * pill for a form field, such as a status select.
+ */
+export function RemarkBadge({ label, size = "sm", variant }: Remark & { size?: "sm" | "md" }) {
   const { background, color } = variants[variant];
+  const md = size === "md";
   return (
     <View
-      className="flex-row items-center gap-1.5 self-start px-2 py-1"
+      className={`flex-row items-center self-start ${md ? "gap-2 px-2.5 py-1" : "gap-1.5 px-2 py-1"}`}
       style={{ backgroundColor: background }}
     >
-      <View className="h-1.5 w-1.5" style={{ backgroundColor: color, borderRadius: 3 }} />
-      <Text className="text-[10px] font-medium uppercase tracking-[0.25px]" style={{ color }}>
+      <View
+        className={md ? "h-2 w-2" : "h-1.5 w-1.5"}
+        style={{ backgroundColor: color, borderRadius: md ? 4 : 3 }}
+      />
+      <Text
+        className={`font-medium uppercase ${md ? "text-sm tracking-[0.3px]" : "text-[10px] tracking-[0.25px]"}`}
+        style={{ color }}
+      >
         {label}
       </Text>
     </View>

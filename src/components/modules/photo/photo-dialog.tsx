@@ -15,13 +15,15 @@ interface PhotoDialogProps {
   uri: string | null;
   error?: string | null;
   onClose: () => void;
+  /** A button along the bottom, such as Re-upload. */
+  action?: { label: string; onPress: () => void };
 }
 
 /**
  * A photo in a dialog covering 90% of the screen (pinch to zoom, drag, double tap), closed with
  * the round cross at the top right, the backdrop or the back button.
  */
-export function PhotoDialog({ error, onClose, title, uri, visible }: PhotoDialogProps) {
+export function PhotoDialog({ action, error, onClose, title, uri, visible }: PhotoDialogProps) {
   return (
     <Modal
       animationType="fade"
@@ -66,6 +68,17 @@ export function PhotoDialog({ error, onClose, title, uri, visible }: PhotoDialog
               <ActivityIndicator color="#FFFFFF" />
             )}
           </View>
+          {action ? (
+            <Pressable
+              accessibilityRole="button"
+              className="h-12 items-center justify-center bg-primary active:bg-primary-hover"
+              onPress={action.onPress}
+            >
+              <Text className="text-base font-semibold text-primary-foreground">
+                {action.label}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </GestureHandlerRootView>
     </Modal>

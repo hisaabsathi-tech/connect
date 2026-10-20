@@ -3,6 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
+import { StatCard } from "@/components/modules/stat-card";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import { formatElapsed } from "@/lib/date";
@@ -29,22 +30,6 @@ export function AttendanceHeader({ onOpenHolidays }: { onOpenHolidays?: () => vo
           <HugeiconsIcon color={colors.primary} icon={Calendar03Icon} size={18} strokeWidth={1.8} />
         </Pressable>
       ) : null}
-    </View>
-  );
-}
-
-export function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <View className="flex-1 border border-border bg-card px-4 py-4">
-      <Text className="text-xs font-medium uppercase tracking-[0.3px] text-muted-foreground">
-        {label}
-      </Text>
-      <Text
-        className="mt-1.5 text-[26px] font-semibold leading-9 text-foreground"
-        numberOfLines={1}
-      >
-        {value}
-      </Text>
     </View>
   );
 }

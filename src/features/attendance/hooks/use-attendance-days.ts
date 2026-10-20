@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchMyAttendanceRange } from "@/lib/api/attendance";
 import { addDays, daysBetween } from "@/lib/date";
-
+import { retryOnce } from "@/lib/retry";
 import { type AttendanceDayEntry, buildDays } from "../lib/days";
-import { retryOnce } from "../lib/retry";
 
 // The list opens on the last 7 days; scrolling down adds a month at a time.
 const FIRST_PAGE_DAYS = 7;

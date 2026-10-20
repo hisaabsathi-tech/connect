@@ -3,7 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useFocusEffect } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
-
+import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
@@ -13,13 +13,11 @@ import type { AttendanceRecord } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
 import { useDateFilter } from "@/lib/date";
 import { haptic } from "@/lib/haptics";
-
 import { AttendanceDayCard } from "./components/attendance-day-card";
 import { AttendanceDetailSheet, hasAttendanceDetails } from "./components/attendance-detail-sheet";
 import { AttendanceHeader, AttendanceSummaryCards } from "./components/attendance-summary";
 import { AttendanceTable } from "./components/attendance-table";
 import { DateRangeFilter } from "./components/date-range-filter";
-import { EmptyBlock } from "./components/empty-block";
 import { HolidaySheet } from "./components/holiday-sheet";
 import { useAttendanceDays } from "./hooks/use-attendance-days";
 import { type DateRange, useAttendanceRange } from "./hooks/use-attendance-range";

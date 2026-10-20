@@ -1,22 +1,13 @@
-import {
-  Calendar03Icon,
-  Cancel01Icon,
-  Download02Icon,
-  Search01Icon,
-} from "@hugeicons/core-free-icons";
+import { Download02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { useFocusEffect } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
 
+import { type DateRange, SearchRangeToolbar } from "@/components/modules/date-range";
+import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
+import { StatCard } from "@/components/modules/stat-card";
 import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
@@ -26,18 +17,13 @@ import type { RosterRow } from "@/lib/api/attendance-roster";
 import { useAuthSession } from "@/lib/auth/session";
 import { useDateFilter } from "@/lib/date";
 import { errorMessage } from "@/lib/errors";
+import { saveToDevice, shareFile } from "@/lib/files/device-files";
 import { haptic } from "@/lib/haptics";
 
 import { AttendanceDetailSheet, hasAttendanceDetails } from "./components/attendance-detail-sheet";
-import { StatCard } from "./components/attendance-summary";
-import { rangeLabel } from "./components/date-range-filter";
-import { DateRangeSheet } from "./components/date-range-sheet";
-import { EmptyBlock } from "./components/empty-block";
 import { RosterCard } from "./components/roster-card";
-import type { DateRange } from "./hooks/use-attendance-range";
 import { useRegisterDownload } from "./hooks/use-register-download";
 import { useRoster } from "./hooks/use-roster";
-import { saveToDevice, shareFile } from "./lib/device-files";
 import { recordOfRow } from "./lib/roster";
 
 // Typing pauses this long before the search runs.
@@ -58,7 +44,6 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
   const { today } = useDateFilter();
   const toast = useToast();
   const [range, setRange] = useState<DateRange | null>(null);
-  const [rangeOpen, setRangeOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const from = range?.from ?? today;
@@ -158,62 +143,16 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
           value={totals ? String(totals.present) : "--"}
         />
       </View>
-      <View className="mt-5 h-12 flex-row items-center border border-border bg-card">
-        <View className="pl-3">
-          <HugeiconsIcon color={colors.mutedForeground} icon={Search01Icon} size={20} />
-        </View>
-        <TextInput
-          accessibilityLabel="Search employees"
-          autoCapitalize="words"
-          autoCorrect={false}
-          className="h-full flex-1 px-3 font-sans text-base text-foreground"
-          onChangeText={setQuery}
-          placeholder="Search"
-          placeholderTextColor={colors.mutedForeground}
-          returnKeyType="search"
-          value={query}
+      <View className="mt-5">
+        <SearchRangeToolbar
+          onQueryChange={setQuery}
+          onRangeChange={setRange}
+          query={query}
+          range={range}
+          searchLabel="Search employees"
+          today={today}
         />
-        {query ? (
-          <Pressable
-            accessibilityLabel="Clear search"
-            accessibilityRole="button"
-            className="h-full w-10 items-center justify-center"
-            onPress={() => setQuery("")}
-          >
-            <HugeiconsIcon color={colors.mutedForeground} icon={Cancel01Icon} size={16} />
-          </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityLabel="Select date range"
-          accessibilityRole="button"
-          className={`h-full w-12 items-center justify-center border-border border-l ${range ? "bg-accent" : ""}`}
-          onPress={() => setRangeOpen(true)}
-          onPressIn={() => haptic("light")}
-        >
-          <HugeiconsIcon
-            color={range ? colors.primary : colors.foreground}
-            icon={Calendar03Icon}
-            size={20}
-            strokeWidth={1.8}
-          />
-        </Pressable>
       </View>
-      {range ? (
-        <View className="mt-3 h-9 flex-row items-center self-start border border-primary bg-accent">
-          <Text className="px-3 text-sm text-primary">{rangeLabel(range)}</Text>
-          <Pressable
-            accessibilityLabel="Clear date range"
-            accessibilityRole="button"
-            className="h-full w-9 items-center justify-center border-primary border-l"
-            onPress={() => {
-              haptic("light");
-              setRange(null);
-            }}
-          >
-            <HugeiconsIcon color={colors.primary} icon={Cancel01Icon} size={14} />
-          </Pressable>
-        </View>
-      ) : null}
     </View>
   );
 
@@ -281,16 +220,6 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
             />
           );
         }}
-      />
-      <DateRangeSheet
-        onApply={(next) => {
-          setRangeOpen(false);
-          setRange(next);
-        }}
-        onClose={() => setRangeOpen(false)}
-        range={range}
-        today={today}
-        visible={rangeOpen}
       />
       <AttendanceDetailSheet
         heading={detail?.name}

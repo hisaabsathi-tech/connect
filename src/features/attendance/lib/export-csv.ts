@@ -1,9 +1,8 @@
 import { attendedDayRemarks, unattendedDayRemark } from "@/lib/attendance/remarks";
 import { formatClock, formatDayLabel, formatDuration, weekdayOf } from "@/lib/date";
-
+import { type ExportFile, saveToDevice, shareFile } from "@/lib/files/device-files";
 import type { DateRange } from "../hooks/use-attendance-range";
 import { type AttendanceDayEntry, workedMs } from "./days";
-import { type ExportFile, saveToDevice, shareFile } from "./device-files";
 
 const COLUMNS = ["Date", "Day", "Status", "Check In", "Check Out", "Hours Worked", "Remarks"];
 
