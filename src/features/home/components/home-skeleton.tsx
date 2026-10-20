@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { Skeleton } from "@/components/modules/skeleton";
 
 // Day cells of the date strip, as many as it shows across the screen.
-const STRIP_DAYS = 7;
+const STRIP_DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 /**
  * Home on its first load, in the page's own layout: the greeting, the map, the date strip, the
@@ -27,9 +27,8 @@ export function HomeSkeleton() {
         <View className="mt-3.5 mb-2">
           <Skeleton className="mb-2" height={16} width={120} />
           <View className="h-16 flex-row gap-px">
-            {Array.from({ length: STRIP_DAYS }, (_, index) => (
-              // Fixed placeholders that never reorder, so the index is a stable key.
-              <Skeleton className="flex-1" height={64} key={index} />
+            {STRIP_DAYS.map((day) => (
+              <Skeleton className="flex-1" height={64} key={day} />
             ))}
           </View>
         </View>

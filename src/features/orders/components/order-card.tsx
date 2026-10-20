@@ -1,5 +1,6 @@
 import { Call02Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import type { ReactNode } from "react";
 import { ActivityIndicator, Linking, Pressable, View } from "react-native";
 
 import { RemarkBadge } from "@/components/modules/remark-badge";
@@ -10,7 +11,7 @@ import { haptic } from "@/lib/haptics";
 import { dialUrl, formatMobile } from "@/lib/phone";
 
 import { orderAddress } from "../lib/order-place";
-import type { DrsOrder } from "../lib/orders";
+import { type DrsOrder, isDelivered } from "../lib/orders";
 
 const payment = (order: DrsOrder) => order.paymentType?.trim().toUpperCase() ?? "";
 
@@ -85,6 +86,8 @@ function Label({ children }: { children: string }) {
  * collect for COD and To Pay. With `onPress` the card opens the order's scan and update.
  */
 export function OrderCard({
+  address: fullAddress,
+  children,
   locating,
   onPress,
   onViewMap,
@@ -95,13 +98,20 @@ export function OrderCard({
   onViewMap: () => void;
   /** Opens the order to scan and update it; without it the card isn't tappable. */
   onPress?: () => void;
+  /** More of the order, shown in the card under the address (the update page's details). */
+  children?: ReactNode;
+  /** The receiver's complete address when known (the update page), in place of the DRS's. */
+  address?: string | null;
   order: DrsOrder;
 }) {
-  const badge = paymentBadge(order);
+  // A delivered order says so in the corner; until then the corner shows how it is paid.
+  const badge: Remark | null = isDelivered(order)
+    ? { label: "Delivered", variant: "delivered" }
+    : paymentBadge(order);
   const name = order.receiverName?.trim() || order.customerName?.trim() || "—";
   const mobile = order.customerMobile?.trim() || null;
   const dial = dialUrl(mobile);
-  const address = orderAddress(order);
+  const address = fullAddress?.trim() || orderAddress(order);
   const amount = collectable(order);
   return (
     <Pressable
@@ -124,9 +134,7 @@ export function OrderCard({
 
       <View className="mt-4 flex-row items-center justify-between gap-3">
         <View className="flex-1">
-          <Text className="text-2xl font-semibold leading-8 text-foreground" numberOfLines={2}>
-            {name}
-          </Text>
+          <Text className="text-2xl font-semibold leading-8 text-foreground">{name}</Text>
           {mobile ? (
             <View className="mt-0.5 flex-row items-center gap-1.5">
               <HugeiconsIcon
@@ -165,6 +173,8 @@ export function OrderCard({
         <Label>Address</Label>
         <Text className="mt-1 text-base leading-6 text-foreground">{address || "—"}</Text>
       </View>
+
+      {children}
 
       {amount ? (
         <View className="mt-4 bg-success-soft px-4 py-3">

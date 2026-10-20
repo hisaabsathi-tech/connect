@@ -11,9 +11,11 @@ export type ShipmentStatusInput = {
   otp?: string;
   /** Storage key of the proof-of-delivery photo. */
   scanCopy?: string;
-  /** Where the update was made, when the phone knows. */
+  /** Where the update was made, when the phone knows (always for a delivery). */
   latitude?: number;
   longitude?: number;
+  /** That spot's street address, when it resolved. */
+  address?: string;
 };
 
 /** Records the order's last-mile outcome; the delivery boy on its DRS may do this. */

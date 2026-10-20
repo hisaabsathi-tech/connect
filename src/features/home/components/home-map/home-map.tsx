@@ -36,7 +36,12 @@ import { fetchRoute, type RoadRoute } from "@/lib/api/maps";
 import { useAuthSession } from "@/lib/auth/session";
 import { type Coordinates, distanceInMetres } from "@/lib/maps/geo";
 import { googleMapsDirectionsUrl, googleMapsPlaceUrl } from "@/lib/maps/google-maps";
-import { loadOlaMapStyle, OLA_MAPS_API_BASE, olaMapsKey } from "@/lib/maps/ola-maps";
+import {
+  loadOlaMapStyle,
+  OLA_MAPS_API_BASE,
+  olaMapsKey,
+  reverseGeocodeAddress,
+} from "@/lib/maps/ola-maps";
 import { dialUrl, formatMobile } from "@/lib/phone";
 
 /** An order still to deliver; `exact` when its street address was found, else its area. */
@@ -75,6 +80,7 @@ type Props = {
 };
 
 type PinKind =
+  | "delivered-at"
   | "start"
   | "transit"
   | "destination"
@@ -94,9 +100,12 @@ type MapPoint = Coordinates & {
     receiver: string | null;
     mobile: string | null;
   };
+  /** A place's pin (where an order was delivered): tapping it shows this card along the bottom. */
+  info?: { title: string; address: string | null };
 };
 
 const pins: Record<PinKind, number> = {
+  "delivered-at": require("@/assets/map-pin/fallback.webp"),
   destination: require("@/assets/map-pin/destination.webp"),
   order: require("@/assets/map-pin/destination.webp"),
   "order-area": require("@/assets/map-pin/transit.webp"),
@@ -113,6 +122,7 @@ const RIDER_SIZE = { height: 48, width: 32 };
 
 // The user's own position needs no key; every other pin is named in the legend.
 const pinLabels: Partial<Record<PinKind, string>> = {
+  "delivered-at": "Delivered Location",
   destination: "Check-out",
   order: "Order Delivery Location",
   "order-area": "Approx. area",
@@ -194,6 +204,37 @@ function samePlaceOffsets(points: MapPoint[]) {
   return offsets;
 }
 
+// Room kept between the framed pins and the map's edges (pins are drawn above their point).
+const PIN_ROOM = 56;
+// The kept room never takes more than this share of the map's height (or width), so the pins
+// always have space left to fit in.
+const MAX_PADDING_SHARE = 0.7;
+
+/**
+ * The room to keep around framed pins, scaled down evenly when it wouldn't leave the pins enough
+ * of the map (a small map with a card open).
+ */
+function fitPadding(
+  size: { height: number; width: number },
+  wanted: { bottom: number; side: number; top: number },
+) {
+  const vertical = wanted.top + wanted.bottom;
+  const verticalScale =
+    size.height && vertical > size.height * MAX_PADDING_SHARE
+      ? (size.height * MAX_PADDING_SHARE) / vertical
+      : 1;
+  const horizontalScale =
+    size.width && wanted.side * 2 > size.width * MAX_PADDING_SHARE
+      ? (size.width * MAX_PADDING_SHARE) / (wanted.side * 2)
+      : 1;
+  return {
+    bottom: Math.round(wanted.bottom * verticalScale),
+    left: Math.round(wanted.side * horizontalScale),
+    right: Math.round(wanted.side * horizontalScale),
+    top: Math.round(wanted.top * verticalScale),
+  };
+}
+
 // Pins all within this many degrees of each other (a few metres) are framed as one place.
 const SAME_SPOT_DEGREES = 0.0002;
 
@@ -236,11 +277,19 @@ function ExternalMapButton({
 
 /**
  * Who receives the order, on its own row: their name and mobile, with a call button that opens
- * the phone's dialer on the number. Nothing when the order has neither.
+ * the phone's dialer on the number (unless `callable` is off). Nothing when the order has neither.
  */
-function Receiver({ mobile, name }: { mobile: string | null; name: string | null }) {
+function Receiver({
+  callable,
+  mobile,
+  name,
+}: {
+  callable: boolean;
+  mobile: string | null;
+  name: string | null;
+}) {
   if (!(name || mobile)) return null;
-  const dial = dialUrl(mobile);
+  const dial = callable ? dialUrl(mobile) : null;
   return (
     <View className="mt-1.5 flex-row items-center gap-3">
       <View className="flex-1">
@@ -274,8 +323,93 @@ function Receiver({ mobile, name }: { mobile: string | null; name: string | null
  * Google Maps) and Directions (from where the user is) links. An exact pin goes by its coordinates;
  * one placed only in the area lets Google Maps find the written address itself.
  */
+/**
+ * A place's card along the bottom of the map (where an order was handed over): its full address,
+ * as saved with it or, for an older record without one, looked up from the point, with View
+ * Location and Directions for the spot.
+ */
+function PlaceCard({
+  bottom,
+  onClose,
+  onHeight,
+  origin,
+  point,
+}: {
+  bottom: number;
+  onClose: () => void;
+  onHeight: (height: number) => void;
+  /** Where the user is, for directions. */
+  origin: Coordinates | null;
+  point: MapPoint & { info: NonNullable<MapPoint["info"]> };
+}) {
+  const saved = point.info.address;
+  const [found, setFound] = useState<string | null>(null);
+  const [looking, setLooking] = useState(!saved);
+  const { latitude, longitude } = point;
+  useEffect(() => {
+    if (saved) return;
+    let current = true;
+    setLooking(true);
+    void reverseGeocodeAddress({ latitude, longitude }).then((address) => {
+      if (!current) return;
+      setFound(address);
+      setLooking(false);
+    });
+    return () => {
+      current = false;
+    };
+  }, [latitude, longitude, saved]);
+  const address = saved ?? found;
+  const spot = { latitude, longitude };
+  return (
+    <View
+      className="absolute right-3 left-3 bg-white pt-3 pr-2 pb-3 pl-3"
+      onLayout={(event) => onHeight(event.nativeEvent.layout.height)}
+      style={{ bottom, elevation: 4 }}
+    >
+      <View className="flex-row items-start gap-3">
+        <Image contentFit="contain" source={pins[point.kind]} style={{ height: 24, width: 20 }} />
+        <View className="flex-1">
+          <Text className="text-[11px] font-medium uppercase tracking-[0.3px] text-muted-foreground">
+            {point.info.title}
+          </Text>
+          <Text className="mt-1 text-sm leading-5 text-foreground" selectable>
+            {address ??
+              (looking
+                ? "Finding the address…"
+                : `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`)}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityLabel="Close the address"
+          accessibilityRole="button"
+          className="h-8 w-8 items-center justify-center"
+          hitSlop={6}
+          onPress={onClose}
+        >
+          <HugeiconsIcon color={colors.mutedForeground} icon={Cancel01Icon} size={16} />
+        </Pressable>
+      </View>
+      {/* The spot itself, by its coordinates (the same buttons as an order's card). */}
+      <View className="mt-3 flex-row gap-2 pr-1">
+        <ExternalMapButton
+          icon={MapsLocation01Icon}
+          label="View Location"
+          url={googleMapsPlaceUrl({ address: address ?? "", point: spot })}
+        />
+        <ExternalMapButton
+          icon={Route01Icon}
+          label="Directions"
+          url={googleMapsDirectionsUrl({ address: address ?? "", destination: spot, origin })}
+        />
+      </View>
+    </View>
+  );
+}
+
 function PinDetail({
   bottom,
+  callable,
   onClose,
   onHeight,
   origin,
@@ -283,6 +417,8 @@ function PinDetail({
   trip,
 }: {
   bottom: number;
+  /** The receiver row's call button; off where the page already has one. */
+  callable: boolean;
   onClose: () => void;
   onHeight: (height: number) => void;
   origin: Coordinates | null;
@@ -308,7 +444,7 @@ function PinDetail({
             {point.detail.title}
             {trip ? <Text className="font-normal text-primary"> · {trip}</Text> : null}
           </Text>
-          <Receiver mobile={point.detail.mobile} name={point.detail.receiver} />
+          <Receiver callable={callable} mobile={point.detail.mobile} name={point.detail.receiver} />
           <Text className="mt-1 text-xs leading-4 text-muted-foreground" numberOfLines={3}>
             {point.detail.address}
           </Text>
@@ -396,6 +532,8 @@ interface NativeOlaMapProps {
    * the card), as on an order's own map. True (Home): the camera zooms in on it.
    */
   zoomOnFocus?: boolean;
+  /** An order card's call button (off on an order's own map, whose page has one). */
+  callable?: boolean;
   /** Distance of the control row from the top edge. */
   controlsTop: number;
   /** Distance of the pin legend from the bottom edge. */
@@ -418,6 +556,7 @@ function NativeOlaMap({
   showLegend,
   trip = null,
   zoomOnFocus = true,
+  callable = true,
 }: NativeOlaMapProps) {
   const camera = useRef<CameraRef>(null);
   // Camera commands only apply once the map has loaded; earlier ones find no native view.
@@ -442,7 +581,19 @@ function NativeOlaMap({
   focusRef.current = zoomOnFocus ? focus : null;
   // An open card covers the bottom of the map; an overview framed behind it leaves it room.
   const [cardHeight, setCardHeight] = useState(0);
-  const cardRoom = !zoomOnFocus && focus?.detail ? cardHeight + legendBottom : 0;
+  const cardRoom = !zoomOnFocus && (focus?.detail || focus?.info) ? cardHeight + legendBottom : 0;
+  // The map's own size: the room kept around the pins is capped to it, or a small map (the
+  // update page's) with its card open would have no space left and the fit would miss the pins.
+  const [size, setSize] = useState({ height: 0, width: 0 });
+  const padding = useMemo(
+    () =>
+      fitPadding(size, {
+        bottom: PIN_ROOM + cardRoom,
+        side: PIN_ROOM,
+        top: PIN_ROOM + controlsTop,
+      }),
+    [cardRoom, controlsTop, size],
+  );
 
   /**
    * The overview, undoing any drag or zoom: zoomed in on the anchor when there is one, else
@@ -455,7 +606,7 @@ function NativeOlaMap({
         bounds && !anchored
           ? camera.current?.fitBounds(bounds, {
               duration,
-              padding: { bottom: 56 + cardRoom, left: 56, right: 56, top: 56 + controlsTop },
+              padding,
             })
           : camera.current?.easeTo({
               center: [center.longitude, center.latitude],
@@ -464,7 +615,7 @@ function NativeOlaMap({
             }),
       );
     },
-    [anchored, bounds, cardRoom, center.latitude, center.longitude, controlsTop],
+    [anchored, bounds, center.latitude, center.longitude, padding],
   );
 
   /** Zooms in on the focused pin. */
@@ -517,7 +668,15 @@ function NativeOlaMap({
   );
 
   return (
-    <View className="flex-1">
+    <View
+      className="flex-1"
+      onLayout={(event) => {
+        const { height, width } = event.nativeEvent.layout;
+        setSize((previous) =>
+          previous.height === height && previous.width === width ? previous : { height, width },
+        );
+      }}
+    >
       {olaMapsApiKey && style ? (
         <Map
           // A TextureView draws inside the normal view tree. The default GLSurfaceView sits in
@@ -599,7 +758,7 @@ function NativeOlaMap({
           ))}
         </Map>
       ) : null}
-      {/* An order's card takes the legend's place while it is open. */}
+      {/* An order's (or a place's) card takes the legend's place while it is open. */}
       {focus?.detail ? (
         <PinDetail
           bottom={legendBottom}
@@ -607,7 +766,16 @@ function NativeOlaMap({
           onHeight={setCardHeight}
           origin={origin}
           point={{ ...focus, detail: focus.detail }}
+          callable={callable}
           trip={trip}
+        />
+      ) : focus?.info ? (
+        <PlaceCard
+          bottom={legendBottom}
+          onClose={() => onFocus(null)}
+          onHeight={setCardHeight}
+          origin={origin}
+          point={{ ...focus, info: focus.info }}
         />
       ) : showLegend ? (
         <MapLegend bottom={legendBottom} points={points} />
@@ -793,6 +961,39 @@ function useRoadRoute(from: Coordinates | null, to: Coordinates | null) {
 }
 
 /**
+ * A delivered order is shown as it ended: its address (the destination pin) and the spot where
+ * it was handed over (from Confirm Delivery). One still to deliver: the delivery boy and the
+ * order, with the road between them.
+ */
+export type OrderMapState = {
+  delivered: boolean;
+  /** Where it was handed over, with the address saved then (null for older deliveries). */
+  deliveredAt: (Coordinates & { address?: string | null }) | null;
+};
+
+function useOrderMapView(live: Coordinates | null, order: OrderPoint | null, state: OrderMapState) {
+  const point = useMemo(() => (order ? orderMapPoint(order) : null), [order]);
+  const { delivered, deliveredAt } = state;
+  const route = useRoadRoute(delivered ? null : live, delivered ? null : order);
+  const handedOver = delivered && deliveredAt ? deliveredAt : null;
+  const points = useMemo(
+    () =>
+      [
+        delivered ? null : live ? at(live, "here", "rider") : null,
+        point,
+        handedOver
+          ? {
+              ...at(handedOver, "delivered-at", "delivered-at"),
+              info: { address: handedOver.address ?? null, title: "Delivered Location" },
+            }
+          : null,
+      ].filter((item): item is MapPoint => item !== null),
+    [delivered, handedOver, live, point],
+  );
+  return { point, points, route: delivered ? null : route };
+}
+
+/**
  * One order on the full-screen map (an order card's View on Map): the delivery boy and the
  * order's pin with the best road route between them highlighted, all framed together. The
  * order's card (receiver, call, the distance and drive time, View Location and Directions) is
@@ -803,25 +1004,19 @@ export function OrderLocationMap({
   live,
   onClose,
   order,
+  state = { delivered: false, deliveredAt: null },
 }: {
   live: Coordinates | null;
   onClose: () => void;
   order: OrderPoint | null;
+  state?: OrderMapState;
 }) {
-  const point = useMemo(() => (order ? orderMapPoint(order) : null), [order]);
+  const { point, points, route } = useOrderMapView(live, order, state);
   const [focusId, setFocusId] = useState<string | null>(null);
   // Every order opens with its card showing.
   useEffect(() => {
     setFocusId(point?.id ?? null);
   }, [point?.id]);
-  const route = useRoadRoute(live, order);
-  const points = useMemo(
-    () =>
-      [live ? at(live, "here", "rider") : null, point].filter(
-        (item): item is MapPoint => item !== null,
-      ),
-    [live, point],
-  );
   return (
     <Modal animationType="fade" onRequestClose={onClose} visible={order !== null}>
       <View className="flex-1 bg-accent">
@@ -838,6 +1033,7 @@ export function OrderLocationMap({
             route={route?.coordinates ?? null}
             showLegend
             trip={route ? tripLabel(route) : null}
+            callable={false}
             zoomOnFocus={false}
           >
             <MapControl icon={Cancel01Icon} label="Close map" onPress={onClose} />
@@ -845,5 +1041,59 @@ export function OrderLocationMap({
         ) : null}
       </View>
     </Modal>
+  );
+}
+
+/**
+ * One order on a map in the page (the update page's bottom block): the delivery boy, the order's
+ * pin and the road between them, framed together, with the legend and the trip's distance and
+ * drive time; a delivered order shows its address and where it was handed over instead (see
+ * `OrderMapState`). Maximize opens the full-screen map.
+ */
+export function OrderRouteMap({
+  height,
+  live,
+  onExpand,
+  order,
+  state = { delivered: false, deliveredAt: null },
+}: {
+  height: number;
+  live: Coordinates | null;
+  onExpand: () => void;
+  order: OrderPoint;
+  state?: OrderMapState;
+}) {
+  const { points, route } = useOrderMapView(live, order, state);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const trip = route ? tripLabel(route) : null;
+  return (
+    <View className="overflow-hidden border border-border bg-accent" style={{ height }}>
+      <NativeOlaMap
+        anchorId={null}
+        controlsTop={12}
+        focusId={focusId}
+        legendBottom={12}
+        onFocus={(next) => setFocusId(next?.id ?? null)}
+        origin={live}
+        points={points}
+        resetKey={0}
+        route={route?.coordinates ?? null}
+        showLegend
+        trip={trip}
+        callable={false}
+        zoomOnFocus={false}
+      >
+        <MapControl icon={FullScreenIcon} label="Maximize map" onPress={onExpand} />
+      </NativeOlaMap>
+      {trip ? (
+        <View
+          className="absolute top-3 right-3 bg-white px-2.5 py-1.5"
+          pointerEvents="none"
+          style={{ elevation: 3 }}
+        >
+          <Text className="text-xs font-medium text-primary">{trip}</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }

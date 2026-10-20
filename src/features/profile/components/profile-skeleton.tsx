@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { Skeleton } from "@/components/modules/skeleton";
 
 // The detail rows under the profile card (phone, email, organisations…).
-const DETAIL_ROWS = 4;
+const DETAIL_ROWS = ["phone", "email", "organization", "role"];
 
 /** The profile page on its first load: title, the photo card and the detail rows, in place. */
 export function ProfileSkeleton() {
@@ -19,9 +19,8 @@ export function ProfileSkeleton() {
         </View>
       </View>
       <View className="mt-3 border border-border bg-[#FAFBFF] px-3">
-        {Array.from({ length: DETAIL_ROWS }, (_, index) => (
-          // Fixed placeholders that never reorder, so the index is a stable key.
-          <View className="flex-row items-center gap-3 border-border border-b py-4" key={index}>
+        {DETAIL_ROWS.map((row) => (
+          <View className="flex-row items-center gap-3 border-border border-b py-4" key={row}>
             <Skeleton height={20} width={20} />
             <View className="flex-1 gap-2">
               <Skeleton height={10} width="28%" />

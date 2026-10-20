@@ -16,7 +16,7 @@ import { resendDeliveryOtp, setShipmentStatus } from "@/lib/api/order-tracking";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
-import { lastPosition } from "@/lib/maps/last-position";
+import { handoverSpot } from "@/lib/maps/last-position";
 
 import type { DrsOrder } from "../lib/orders";
 
@@ -47,7 +47,8 @@ function SourceButton({
 
 /**
  * "Confirm delivery", as in Connector v1: the receiver's delivery OTP when the order asks for one
- * (with Resend), an optional proof-of-delivery photo, then Confirm marks the order delivered.
+ * (with Resend), an optional proof-of-delivery photo, then Confirm marks the order delivered at
+ * the spot the phone is at that moment (required).
  * An OTP, once entered, must be all 6 digits; the server checks it.
  */
 export function ConfirmDeliverySheet({
@@ -111,18 +112,24 @@ export function ConfirmDeliverySheet({
     setSaving(true);
     setMessage(null);
     try {
+      // The spot where it is handed over, taken now: the delivery isn't saved without it, and its
+      // map shows it later. Taken first, so a location problem stops before any upload.
+      const spot = await handoverSpot();
       const scanCopy = photo ? (await uploadOrderPod(token, photo)).objectKey : undefined;
       await setShipmentStatus(token, order.orderId, {
+        address: spot.address ?? undefined,
+        latitude: spot.latitude,
+        longitude: spot.longitude,
         otp: code || undefined,
         scanCopy,
         shipmentStatus: "DELIVERED",
-        ...(await lastPosition()),
       });
       haptic("success");
       toast.success("Order delivered", `${order.awbNo} is marked delivered.`);
       onDelivered();
     } catch (error) {
       haptic("error");
+      // A location problem's message says what to do (allow it, turn on GPS, step outside).
       setMessage(errorMessage(error, "Couldn't confirm this delivery. Please try again."));
     } finally {
       setSaving(false);

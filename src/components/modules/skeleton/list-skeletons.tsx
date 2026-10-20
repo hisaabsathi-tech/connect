@@ -38,9 +38,8 @@ export function CardSkeleton() {
 export function CardListSkeleton({ count = 3 }: { count?: number }) {
   return (
     <View className="gap-3">
-      {Array.from({ length: count }, (_, index) => (
-        // Fixed placeholders that never reorder, so the index is a stable key.
-        <CardSkeleton key={index} />
+      {Array.from({ length: count }, (_, index) => `card-${index + 1}`).map((key) => (
+        <CardSkeleton key={key} />
       ))}
     </View>
   );

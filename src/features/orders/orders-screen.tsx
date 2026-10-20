@@ -114,14 +114,12 @@ export function OrdersScreen() {
   };
 
   // Tapping an order scans its parcel, then updates it. A DRS still issued is set out for
-  // delivery first; an order already delivered, returned or cancelled has nothing to update.
+  // delivery first; an order already delivered, returned or cancelled opens its details.
   const openOrder = (order: DrsOrder) => {
+    // A finished order has nothing to scan for: its details open straight away.
     if (!isPending(order)) {
-      toast.show({
-        description: `${order.awbNo} has no update left to make.`,
-        title: isDelivered(order) ? "Already delivered" : "Already updated",
-        type: "info",
-      });
+      rememberOrder(order);
+      router.push({ params: { orderId: order.orderId }, pathname: "/orders/update" });
       return;
     }
     if (drsOnTheRoad(order)) {

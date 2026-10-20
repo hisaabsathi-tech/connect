@@ -1,12 +1,12 @@
 import { useCallback, useState } from "react";
 
 import { useToast } from "@/components/ui/toast";
-import { OrderLocationMap } from "@/features/home/components/home-map";
+import { OrderLocationMap, type OrderMapState } from "@/features/home/components/home-map";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { useAuthSession } from "@/lib/auth/session";
 
 import { type OrderPin, placeOrder } from "../lib/order-place";
-import type { DrsOrder } from "../lib/orders";
+import { type DrsOrder, isDelivered } from "../lib/orders";
 
 /**
  * An order card's View on Map: finds the order's address, then opens the full-screen map on it
@@ -18,16 +18,21 @@ export function useOrderMap() {
   const toast = useToast();
   const [locating, setLocating] = useState<string | null>(null);
   const [shown, setShown] = useState<OrderPin | null>(null);
-  const live = useLiveLocation(shown !== null);
+  const [state, setState] = useState<OrderMapState>({ delivered: false, deliveredAt: null });
+  // A delivered order's map shows where it went, not where the delivery boy is now.
+  const live = useLiveLocation(shown !== null && !state.delivered);
 
+  /** `deliveredAt`: where a delivered order was handed over, when known (the update page). */
   const open = useCallback(
-    async (order: DrsOrder) => {
+    async (order: DrsOrder, deliveredAt: OrderMapState["deliveredAt"] = null) => {
       if (!token || locating) return;
       setLocating(order.orderId);
       try {
         const pin = await placeOrder(token, order);
-        if (pin) setShown(pin);
-        else
+        if (pin) {
+          setState({ delivered: isDelivered(order), deliveredAt });
+          setShown(pin);
+        } else
           toast.error(
             "Address not found on the map",
             "Use the address on the card, or call the receiver.",
@@ -40,7 +45,12 @@ export function useOrderMap() {
   );
 
   const element = (
-    <OrderLocationMap live={live.location} onClose={() => setShown(null)} order={shown} />
+    <OrderLocationMap
+      live={live.location}
+      onClose={() => setShown(null)}
+      order={shown}
+      state={state}
+    />
   );
 
   return { element, locating, open };
