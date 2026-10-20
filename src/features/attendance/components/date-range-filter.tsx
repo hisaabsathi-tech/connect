@@ -40,7 +40,7 @@ export function DateRangeFilter({
         <Pressable
           accessibilityLabel={range ? "Change date range" : "Select date range"}
           accessibilityRole="button"
-          className="h-full flex-row items-center gap-2 px-3"
+          className="h-full flex-row items-center gap-3 px-4"
           onPress={() => setOpen(true)}
           onPressIn={() => haptic("light")}
         >
