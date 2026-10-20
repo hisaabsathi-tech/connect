@@ -82,16 +82,19 @@ function Label({ children }: { children: string }) {
 /**
  * An order on the delivery boy's run, as the Figma lays it out: the AWB with its payment pill,
  * the receiver with View on Map and Call buttons, the delivery address, and the amount to
- * collect for COD and To Pay. The card itself isn't tappable yet; delivering from it comes later.
+ * collect for COD and To Pay. With `onPress` the card opens the order's scan and update.
  */
 export function OrderCard({
   locating,
+  onPress,
   onViewMap,
   order,
 }: {
   /** View on Map is finding the address. */
   locating: boolean;
   onViewMap: () => void;
+  /** Opens the order to scan and update it; without it the card isn't tappable. */
+  onPress?: () => void;
   order: DrsOrder;
 }) {
   const badge = paymentBadge(order);
@@ -101,7 +104,14 @@ export function OrderCard({
   const address = orderAddress(order);
   const amount = collectable(order);
   return (
-    <View className="border border-[#EEF0F6] bg-card p-4">
+    <Pressable
+      accessibilityHint={onPress ? "Scan the parcel to update this order" : undefined}
+      accessibilityRole={onPress ? "button" : undefined}
+      className={`border border-[#EEF0F6] bg-card p-4 ${onPress ? "active:bg-[#F7F8FF]" : ""}`}
+      disabled={!onPress}
+      onPress={onPress}
+      onPressIn={onPress ? () => haptic("light") : undefined}
+    >
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
           <Label>AWB Number</Label>
@@ -164,6 +174,6 @@ export function OrderCard({
           </Text>
         </View>
       ) : null}
-    </View>
+    </Pressable>
   );
 }

@@ -44,7 +44,7 @@ function ViewTabs({
           <Pressable
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            className={`h-9 flex-1 items-center justify-center ${active ? "bg-primary" : "active:bg-[#F7F8FF]"}`}
+            className={`h-9 flex-1 items-center justify-center ${active ? "bg-primary active:bg-primary" : "active:bg-[#F7F8FF]"}`}
             key={tab.value}
             onPress={() => {
               if (active) return;

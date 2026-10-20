@@ -12,7 +12,8 @@ import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { PhotoConfirm } from "./photo-confirm";
 
-type Source = "camera" | "gallery";
+export type PhotoSource = "camera" | "gallery";
+type Source = PhotoSource;
 
 /**
  * `square` crops to a 1:1 box resized to 512px a side (a profile photo, a few tens of kilobytes).
@@ -37,12 +38,20 @@ function errorCode(error: unknown) {
     : "";
 }
 
+/** What to tell the member when the camera or gallery couldn't open. */
+export function photoPickError(error: unknown) {
+  return (
+    PERMISSION_ERRORS[errorCode(error)] ??
+    errorMessage(error, "Could not open the photo. Please try again.")
+  );
+}
+
 /**
  * Camera or gallery, then the native cropper with only the crop box (pinch and drag; no zoom
  * slider, rotate or scale panel). Returns the cropped JPEG as a `file://` URI, or null when
  * cancelled. The gallery uses Android's photo picker, which needs no storage permission.
  */
-async function pickPhoto(
+export async function pickPhoto(
   source: Source,
   { crop, frontCamera }: { crop: PhotoCrop; frontCamera: boolean },
 ): Promise<string | null> {
@@ -127,9 +136,7 @@ export function usePhotoPicker(
       return await pickPhoto(next, { crop, frontCamera });
     } catch (error) {
       void dialog.alert({
-        description:
-          PERMISSION_ERRORS[errorCode(error)] ??
-          errorMessage(error, "Could not open the photo. Please try again."),
+        description: photoPickError(error),
         title: next === "camera" ? "Camera unavailable" : "Gallery unavailable",
         tone: "danger",
       });

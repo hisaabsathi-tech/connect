@@ -3,4 +3,6 @@ export { useDrsSheets } from "./hooks/use-drs-sheets";
 export { isDrsOngoing } from "./lib/drs";
 export { type OrderPin, placeOrder } from "./lib/order-place";
 export { type DrsOrder, isPending, ordersFromSheets } from "./lib/orders";
+export { OrderScanScreen } from "./order-scan-screen";
+export { OrderUpdateScreen } from "./order-update-screen";
 export { OrdersScreen } from "./orders-screen";

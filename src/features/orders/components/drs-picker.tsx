@@ -34,7 +34,7 @@ function Option({
     <Pressable
       accessibilityRole="menuitem"
       accessibilityState={{ selected }}
-      className={`flex-row items-center gap-3 border-border border-b px-1 py-3 ${selected ? "bg-accent" : "active:bg-[#F7F8FF]"}`}
+      className={`flex-row items-center gap-3 border-border border-b px-1 py-3 ${selected ? "bg-accent active:bg-accent" : "active:bg-[#F7F8FF]"}`}
       onPress={onPress}
     >
       <View className="flex-1 pl-2">

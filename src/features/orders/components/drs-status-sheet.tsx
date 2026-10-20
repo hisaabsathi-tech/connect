@@ -1,6 +1,5 @@
 import { ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import * as Location from "expo-location";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -14,6 +13,7 @@ import { type DrsSheet, type DrsStatus, patchDrs } from "@/lib/api/drs";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
+import { lastPosition } from "@/lib/maps/last-position";
 
 import { drsBadge, drsNextStatuses } from "../lib/drs";
 
@@ -25,20 +25,6 @@ function StatusPill({ status }: { status: DrsStatus }) {
       <RemarkBadge label={status} size="md" variant={drsBadge(status).variant} />
     </View>
   );
-}
-
-/** Where the phone last was, if location is already allowed; the server notes it with the change. */
-async function lastPosition() {
-  try {
-    const permission = await Location.getForegroundPermissionsAsync();
-    if (!permission.granted) return {};
-    const position = await Location.getLastKnownPositionAsync();
-    return position
-      ? { latitude: position.coords.latitude, longitude: position.coords.longitude }
-      : {};
-  } catch {
-    return {};
-  }
 }
 
 /**

@@ -520,6 +520,9 @@ function NativeOlaMap({
     <View className="flex-1">
       {olaMapsApiKey && style ? (
         <Map
+          // A TextureView draws inside the normal view tree. The default GLSurfaceView sits in
+          // its own window layer, so it showed through screens sliding in over it (the scanner).
+          androidView="texture"
           attribution={false}
           compass={false}
           // Set explicitly: only then does the Android map view stop the page's ScrollView and

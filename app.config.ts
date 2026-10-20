@@ -169,6 +169,16 @@ export default ({ config }: ConfigContext): ExpoConfig =>
             // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
             // A development/release build is required; this is not available in Expo Go.
             "@maplibre/maplibre-react-native",
+            // Scans the parcel label's barcode before an order is updated. Video is never
+            // recorded, so no microphone permission is added.
+            [
+              "expo-camera",
+              {
+                cameraPermission:
+                  "Allow Hisaab Sathi Connect to use the camera to scan parcel barcodes.",
+                recordAudioAndroid: false,
+              },
+            ],
             [
               "expo-location",
               {

@@ -85,10 +85,20 @@ export function matchesOrderSearch(order: DrsOrder, search: string) {
   ].some((value) => value?.toLowerCase().includes(needle));
 }
 
-/** Where an order sorts: still to deliver first, then returned or cancelled, delivered last. */
-const deliveryRank = (order: DrsOrder) => (isPending(order) ? 0 : isDelivered(order) ? 2 : 1);
+/** The order's DRS is out on the road (out for delivery, or delivering orders). */
+const onTheRoad = (order: DrsOrder) =>
+  order.drsStatus === "OUT FOR DELIVERY" || order.drsStatus === "DELIVERING ORDERS";
 
-/** The orders with those still to deliver on top; each group keeps its own order. */
+/**
+ * Where an order sorts: still to deliver on a DRS that is out on the road first, then still to
+ * deliver on one not yet out, then returned or cancelled, delivered last.
+ */
+function deliveryRank(order: DrsOrder) {
+  if (isPending(order)) return onTheRoad(order) ? 0 : 1;
+  return isDelivered(order) ? 3 : 2;
+}
+
+/** The orders with those to deliver now on top (see `deliveryRank`); each group keeps its order. */
 export const pendingFirst = (orders: DrsOrder[]) =>
   orders
     .map((order, index) => ({ index, order, rank: deliveryRank(order) }))

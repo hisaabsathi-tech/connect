@@ -1,4 +1,4 @@
-import { Redirect, useFocusEffect } from "expo-router";
+import { Redirect, router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 
@@ -12,6 +12,7 @@ import {
 } from "@/components/modules/skeleton";
 import { StatCard } from "@/components/modules/stat-card";
 import { Text } from "@/components/modules/typography";
+import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import type { DrsSheet } from "@/lib/api/drs";
 import { useAuthSession } from "@/lib/auth/session";
@@ -29,6 +30,7 @@ import { useDrsPrint } from "./hooks/use-drs-print";
 import { useDrsScan } from "./hooks/use-drs-scan";
 import { useDrsSheets } from "./hooks/use-drs-sheets";
 import { useOrderMap } from "./hooks/use-order-map";
+import { drsOnTheRoad, rememberOrder } from "./lib/active-order";
 import {
   DRS_FILTERS,
   type DrsFilter,
@@ -102,6 +104,52 @@ export function OrdersScreen() {
   const printer = useDrsPrint();
   const scan = useDrsScan(updated);
   const orderMap = useOrderMap();
+  const toast = useToast();
+  // An order tapped while its DRS was still issued: once the DRS is out, its scan opens.
+  const [scanAfterStart, setScanAfterStart] = useState<DrsOrder | null>(null);
+
+  const scanOrder = (order: DrsOrder) => {
+    rememberOrder(order);
+    router.push({ params: { orderId: order.orderId }, pathname: "/orders/scan" });
+  };
+
+  // Tapping an order scans its parcel, then updates it. A DRS still issued is set out for
+  // delivery first; an order already delivered, returned or cancelled has nothing to update.
+  const openOrder = (order: DrsOrder) => {
+    if (!isPending(order)) {
+      toast.show({
+        description: `${order.awbNo} has no update left to make.`,
+        title: isDelivered(order) ? "Already delivered" : "Already updated",
+        type: "info",
+      });
+      return;
+    }
+    if (drsOnTheRoad(order)) {
+      scanOrder(order);
+      return;
+    }
+    const sheet = sheets.find((item) => item.id === order.drsId);
+    if (!sheet) return;
+    toast.show({
+      description: `Set ${sheet.id} out for delivery to scan its orders.`,
+      title: "Start this DRS first",
+      type: "info",
+    });
+    setScanAfterStart(order);
+    setEditing(sheet);
+  };
+
+  const statusUpdated = (sheet: DrsSheet) => {
+    updated(sheet);
+    const order = scanAfterStart;
+    if (
+      order &&
+      sheet.id === order.drsId &&
+      sheet.status !== "ISSUED" &&
+      sheet.status !== "RESOLVED"
+    )
+      scanOrder({ ...order, drsStatus: sheet.status });
+  };
 
   // Coming back to the tab picks up deliveries made meanwhile, without a spinner.
   const focusedBefore = useRef(false);
@@ -321,6 +369,7 @@ export function OrdersScreen() {
           "orderId" in item ? (
             <OrderCard
               locating={orderMap.locating === item.orderId}
+              onPress={() => openOrder(item)}
               onViewMap={() => void orderMap.open(item)}
               order={item}
             />
@@ -336,7 +385,14 @@ export function OrdersScreen() {
           )
         }
       />
-      <DrsStatusSheet onClose={() => setEditing(null)} onUpdated={updated} sheet={editing} />
+      <DrsStatusSheet
+        onClose={() => {
+          setEditing(null);
+          setScanAfterStart(null);
+        }}
+        onUpdated={statusUpdated}
+        sheet={editing}
+      />
       {scan.element}
       {orderMap.element}
     </TabScreen>

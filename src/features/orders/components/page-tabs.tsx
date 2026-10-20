@@ -29,7 +29,7 @@ export function PageTabs({
           <Pressable
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
-            className={`flex-1 items-center justify-center ${active ? "bg-primary" : "active:bg-[#F7F8FF]"}`}
+            className={`flex-1 items-center justify-center ${active ? "bg-primary active:bg-primary" : "active:bg-[#F7F8FF]"}`}
             key={tab.id}
             onPress={() => {
               if (active) return;

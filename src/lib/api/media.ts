@@ -55,3 +55,8 @@ export function uploadProfilePhoto(token: string, uri: string): Promise<Uploaded
 export function uploadDrsScan(token: string, uri: string): Promise<UploadedMedia> {
   return uploadJpeg(token, uri, "order_pod");
 }
+
+/** Uploads an order's proof-of-delivery photo (`order_pod`); the update sends its `objectKey`. */
+export function uploadOrderPod(token: string, uri: string): Promise<UploadedMedia> {
+  return uploadJpeg(token, uri, "order_pod");
+}

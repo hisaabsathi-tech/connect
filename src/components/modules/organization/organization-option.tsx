@@ -21,7 +21,7 @@ export function OrganizationOption({
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
-      className={`flex-row items-center gap-3 border px-3 py-3 ${selected ? "border-primary bg-accent" : "border-border bg-card active:bg-muted"}`}
+      className={`flex-row items-center gap-3 border px-3 py-3 ${selected ? "border-primary bg-accent active:bg-accent" : "border-border bg-card active:bg-muted"}`}
       onPress={onPress}
     >
       {organization.logo ? (
