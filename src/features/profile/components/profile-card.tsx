@@ -13,7 +13,7 @@ export function ProfileCard({ profile }: { profile: Profile | null }) {
         <Text className="text-lg font-semibold text-foreground" numberOfLines={1}>
           {profile?.name || "—"}
         </Text>
-        <Text className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Text className="mt-1 text-xs font-medium uppercase tracking-[0.3px] text-muted-foreground">
           {profile?.role || "Employee"}
         </Text>
       </View>

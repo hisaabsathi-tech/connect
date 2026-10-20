@@ -43,7 +43,11 @@ export function Avatar({ image, name, round = false, seed, size }: AvatarProps) 
       className={`items-center justify-center overflow-hidden bg-[#DBE4FF] ${round ? "rounded-full" : ""}`}
       style={{ height: size, width: size }}
     >
-      <Text className="font-semibold text-primary" style={{ fontSize: Math.round(size * 0.36) }}>
+      <Text
+        className="font-semibold text-primary"
+        // Android rejects a zero font size, so keep it at least 1 whatever `size` is.
+        style={{ fontSize: Math.max(1, Math.round(size * 0.36)) }}
+      >
         {initialsFromName(name ?? "")}
       </Text>
       {uri ? (
