@@ -42,10 +42,12 @@ export function checkOutPointOf(session: AttendanceSession | null): Point | null
 }
 
 export function fetchOpenAttendance(token: string) {
-  return apiRequest<{ attendance: AttendanceSession | null; attendedToday: boolean }>(
-    "/organizations/me/attendance/open",
-    token,
-  );
+  return apiRequest<{
+    attendance: AttendanceSession | null;
+    attendedToday: boolean;
+    /** The organisation's Image Confirmation module: a photo is required to check in or out. */
+    imageConfirmation?: boolean;
+  }>("/organizations/me/attendance/open", token);
 }
 
 const MY_ATTENDANCE_DAY_QUERY = `
@@ -82,18 +84,19 @@ export async function fetchMyAttendanceOn(token: string, date: string): Promise<
   };
 }
 
-export function checkIn(token: string, point: Point) {
+/** `media` is the uploaded photo's id, required when Image Confirmation is on. */
+export function checkIn(token: string, point: Point, media?: string) {
   return apiRequest<{ attendance: AttendanceSession }>(
     "/organizations/me/attendance/check-in",
     token,
-    { body: JSON.stringify(point), method: "POST" },
+    { body: JSON.stringify({ ...point, media }), method: "POST" },
   );
 }
 
-export function checkOut(token: string, point: Point) {
+export function checkOut(token: string, point: Point, media?: string) {
   return apiRequest<{ attendance: AttendanceSession }>(
     "/organizations/me/attendance/check-out",
     token,
-    { body: JSON.stringify(point), method: "POST" },
+    { body: JSON.stringify({ ...point, media }), method: "POST" },
   );
 }

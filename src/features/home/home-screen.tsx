@@ -116,6 +116,7 @@ export function HomeScreen() {
         onSubmit={submit}
         ready={home.statusLoaded}
       />
+      {home.photoModal}
     </TabScreen>
   );
 }

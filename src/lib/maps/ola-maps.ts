@@ -72,10 +72,13 @@ export async function reverseGeocodeAddress(point: Coordinates) {
   const response = await reverseGeocode({ lat: point.latitude, lng: point.longitude }).catch(
     () => null,
   );
-  return response &&
-    typeof response === "object" &&
-    "formatted_address" in response &&
-    typeof response.formatted_address === "string"
-    ? response.formatted_address
-    : null;
+  // Ola answers `{ results: [{ formatted_address, … }] }`, nearest place first.
+  const results =
+    response && typeof response === "object" && "results" in response ? response.results : null;
+  const first: unknown = Array.isArray(results) ? results[0] : null;
+  const address =
+    first && typeof first === "object" && "formatted_address" in first
+      ? first.formatted_address
+      : null;
+  return typeof address === "string" && address.trim() ? address.trim() : null;
 }

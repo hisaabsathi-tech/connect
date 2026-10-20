@@ -123,6 +123,8 @@ export default ({ config }: ConfigContext): ExpoConfig =>
               monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
             },
             predictiveBackGestureEnabled: true,
+            // Attendance photos (Image Confirmation module) open the phone's camera app.
+            permissions: ["android.permission.CAMERA"],
           },
           plugins: [
             "expo-router",

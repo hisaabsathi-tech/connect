@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useDialog } from "@/components/modules/dialog";
+import { useAttendancePhoto } from "@/features/attendance-photo";
 import {
   type AttendanceSession,
   checkIn,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/api/attendance";
 import { fetchHomeIdentity, type HomeIdentity } from "@/lib/api/home";
 import { geocodeAddress } from "@/lib/api/maps";
+import { uploadAttendancePhoto } from "@/lib/api/media";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import type { Coordinates } from "@/lib/maps/geo";
@@ -26,6 +28,9 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   const [organization, setOrganization] = useState<Coordinates | null>(null);
   const [open, setOpen] = useState<AttendanceSession | null>(null);
   const [attendedToday, setAttendedToday] = useState(false);
+  // The organisation's Image Confirmation module: a photo is taken before every check in/out.
+  const [imageConfirmation, setImageConfirmation] = useState(false);
+  const photo = useAttendancePhoto();
   // Until today's status arrives the button can't know whether to check in or out.
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,13 +42,12 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      const [nextIdentity, { attendance, attendedToday: attended }] = await Promise.all([
-        fetchHomeIdentity(token),
-        fetchOpenAttendance(token),
-      ]);
+      const [nextIdentity, { attendance, attendedToday: attended, imageConfirmation: photos }] =
+        await Promise.all([fetchHomeIdentity(token), fetchOpenAttendance(token)]);
       setIdentity(nextIdentity);
       setOpen(attendance);
       setAttendedToday(attended);
+      setImageConfirmation(Boolean(photos));
       setStatusLoaded(true);
       const address = nextIdentity?.organization?.address;
       const place = address ? await geocodeAddress(address, token) : null;
@@ -72,15 +76,24 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   }, [load]);
 
   /**
-   * Checks in, or out when a session is open, at the live position. Resolves to the saved
-   * session (server times), or null when nothing was saved.
+   * Checks in, or out when a session is open, at the live position. With Image Confirmation on,
+   * the photo flow runs first and its upload goes with the request. Resolves to the saved
+   * session (server times), or null when nothing was saved (including a cancelled photo).
    */
   const submit = useCallback(async (): Promise<AttendanceSession | null> => {
     if (!(token && live) || busy) return null;
     setBusy(true);
     try {
-      const point: Point = { ...live, address: await reverseGeocodeAddress(live) };
-      const result = open ? await checkOut(token, point) : await checkIn(token, point);
+      const uri = imageConfirmation ? await photo.capture() : null;
+      if (imageConfirmation && !uri) return null;
+      const [address, media] = await Promise.all([
+        reverseGeocodeAddress(live),
+        uri ? uploadAttendancePhoto(token, uri) : undefined,
+      ]);
+      const point: Point = { ...live, address };
+      const result = open
+        ? await checkOut(token, point, media)
+        : await checkIn(token, point, media);
       setOpen(open ? null : result.attendance);
       setAttendedToday(true);
       haptic("success");
@@ -97,7 +110,7 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
     } finally {
       setBusy(false);
     }
-  }, [busy, dialog, live, open, playSound, token]);
+  }, [busy, dialog, imageConfirmation, live, open, photo.capture, playSound, token]);
 
   return {
     attendedToday,
@@ -105,6 +118,8 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
     identity,
     isCheckedIn: Boolean(open),
     organization,
+    /** The camera / confirm screens; render once on the page. */
+    photoModal: photo.modal,
     refresh,
     refreshing,
     statusLoaded,
