@@ -8,6 +8,7 @@ import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo
 import { type LiveLocation, useLiveLocation } from "@/hooks/use-live-location";
 import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
+import { useViewer } from "@/lib/auth/viewer";
 import { formatDuration, formatTime, useDateFilter } from "@/lib/date";
 
 import { AttendanceAction } from "./components/attendance-action";
@@ -17,6 +18,7 @@ import { DayRecord } from "./components/day-record";
 import { HomeHeader } from "./components/home-header";
 import { HomeMap } from "./components/home-map";
 import { LocationIndicator, type LocationIndicatorState } from "./components/location-indicator";
+import { OrdersCard } from "./components/orders-card";
 import { useDayAttendance } from "./hooks/use-day-attendance";
 import { useHomeAttendance } from "./hooks/use-home-attendance";
 
@@ -37,6 +39,7 @@ function locationIndicatorState({
 /** Signed-in only: the tabs layout redirects to /auth before this renders without a session. */
 export function HomeScreen() {
   const { token } = useAuthSession();
+  const { isDeliveryBoy } = useViewer();
   const location = useLiveLocation(Boolean(token));
   const live = location.location;
   const home = useHomeAttendance(token, live);
@@ -132,6 +135,8 @@ export function HomeScreen() {
         ) : (
           <AttendanceCard />
         )}
+        {/* Under the day's record; the page scrolls once the map is down to its smallest. */}
+        {isDeliveryBoy ? <OrdersCard /> : null}
       </ScrollView>
       {/* Pinned above the navigation; anything added below the calendar scrolls behind it. */}
       {home.selfAttendance ? (
