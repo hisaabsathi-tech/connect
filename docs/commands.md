@@ -334,7 +334,7 @@ same size optimizations and the same API-URL bundle check as a local build. It a
 workflow artifact for 14 days. The newest release's APK is always at:
 
 ```
-https://github.com/hisaabsathi-tech/connector/releases/latest/download/hisaabsathi-connect.apk
+https://github.com/hisaabsathi-tech/connect/releases/latest/download/hisaabsathi-connect.apk
 ```
 
 **Production values:** the public values (`EXPO_PUBLIC_API_URL=https://server.hisaabsathi.in`, auth
