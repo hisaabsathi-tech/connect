@@ -6,14 +6,22 @@ export type Release = { version: string; versionCode: number };
 export type BumpKind = "patch" | "minor" | "major";
 
 export const bumpKinds: BumpKind[] = ["patch", "minor", "major"];
-const versionPath = resolve(dirname(fileURLToPath(import.meta.url)), "../version.json");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const versionPath = resolve(root, "version.json");
+const packagePath = resolve(root, "package.json");
 
 export function readVersion(): Release {
   return JSON.parse(readFileSync(versionPath, "utf8"));
 }
 
+/** Writes version.json and keeps package.json's `version` the same, so both always agree. */
 export function writeVersion(release: Release): void {
   writeFileSync(versionPath, `${JSON.stringify(release, null, 2)}\n`);
+  const pkg = readFileSync(packagePath, "utf8");
+  writeFileSync(
+    packagePath,
+    pkg.replace(/^(\s*"version":\s*")[^"]*(")/m, `$1${release.version}$2`),
+  );
 }
 
 export function bump(version: string, kind: string): string {
