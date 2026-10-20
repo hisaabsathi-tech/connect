@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/client";
+import type { Coordinates } from "@/lib/maps/geo";
 
 export type AddressSuggestion = {
   description: string;
@@ -35,4 +36,24 @@ export async function geocodeAddress(address: string, token: string) {
     `/maps/places/geocode?address=${encodeURIComponent(address)}`,
     token,
   );
+}
+
+export type RoadRoute = {
+  /** The road path as `[longitude, latitude]` pairs, simplified by the server. */
+  coordinates: [number, number][];
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+};
+
+/** Server-proxied driving route between two points (Ola Maps); null when none is found. */
+export async function fetchRoute(
+  token: string,
+  from: Coordinates,
+  to: Coordinates,
+): Promise<RoadRoute | null> {
+  const result = await apiRequest<RoadRoute | null>(
+    `/maps/places/route?from=${from.latitude},${from.longitude}&to=${to.latitude},${to.longitude}`,
+    token,
+  );
+  return result && result.coordinates?.length > 1 ? result : null;
 }

@@ -1,5 +1,6 @@
 import type { DrsSheet } from "@/lib/api/drs";
 import type { ViewerOrganization } from "@/lib/api/viewer";
+import { formatMobile } from "@/lib/phone";
 
 /** One order line of the printed sheet. */
 export type DrsPrintRow = {
@@ -53,20 +54,6 @@ function issuedLabels(iso: string) {
   };
 }
 
-/** "+91 98765 43210" for an Indian number; anything else as entered. */
-function formatMobile(value: string | null) {
-  const raw = value?.trim() ?? "";
-  if (!raw) return null;
-  const digits = raw.replace(/\D/g, "");
-  const local =
-    digits.length === 12 && digits.startsWith("91")
-      ? digits.slice(2)
-      : digits.length === 10
-        ? digits
-        : null;
-  return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : raw;
-}
-
 /** The web app's `drsClassicTemplateData`: the sheet, its organisation and delivery boy. */
 export function drsPrintData(
   sheet: DrsSheet,
@@ -89,7 +76,7 @@ export function drsPrintData(
     drsNumber: sheet.id,
     rows: sheet.orders.map((order) => ({
       center: order.center?.trim() || "—",
-      customerMobile: formatMobile(order.customerMobile),
+      customerMobile: order.customerMobile?.trim() ? formatMobile(order.customerMobile) : null,
       customerName: order.customerName?.trim() || "—",
       documentNumber: order.awbNo,
       id: order.orderId,

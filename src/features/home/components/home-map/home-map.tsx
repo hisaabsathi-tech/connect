@@ -11,6 +11,8 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import {
   Camera,
   type CameraRef,
+  GeoJSONSource,
+  Layer,
   LogManager,
   Map,
   Marker,
@@ -30,9 +32,12 @@ import Animated, {
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import type { Point } from "@/lib/api/attendance";
+import { fetchRoute, type RoadRoute } from "@/lib/api/maps";
+import { useAuthSession } from "@/lib/auth/session";
 import { type Coordinates, distanceInMetres } from "@/lib/maps/geo";
 import { googleMapsDirectionsUrl, googleMapsPlaceUrl } from "@/lib/maps/google-maps";
 import { loadOlaMapStyle, OLA_MAPS_API_BASE, olaMapsKey } from "@/lib/maps/ola-maps";
+import { dialUrl, formatMobile } from "@/lib/phone";
 
 /** An order still to deliver; `exact` when its street address was found, else its area. */
 export type OrderPoint = Coordinates & {
@@ -192,7 +197,7 @@ function samePlaceOffsets(points: MapPoint[]) {
 // Pins all within this many degrees of each other (a few metres) are framed as one place.
 const SAME_SPOT_DEGREES = 0.0002;
 
-function boundsFor(points: MapPoint[]): [number, number, number, number] | null {
+function boundsFor(points: Coordinates[]): [number, number, number, number] | null {
   if (points.length < 2) return null;
   const bounds = points.reduce<[number, number, number, number]>(
     ([west, south, east, north], point) => [
@@ -229,25 +234,13 @@ function ExternalMapButton({
   );
 }
 
-/** "+91 98765 43210" for an Indian number; anything else as entered. */
-function displayMobile(value: string) {
-  const digits = value.replace(/\D/g, "");
-  const local =
-    digits.length === 12 && digits.startsWith("91")
-      ? digits.slice(2)
-      : digits.length === 10
-        ? digits
-        : null;
-  return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : value;
-}
-
 /**
  * Who receives the order, on its own row: their name and mobile, with a call button that opens
  * the phone's dialer on the number. Nothing when the order has neither.
  */
 function Receiver({ mobile, name }: { mobile: string | null; name: string | null }) {
   if (!(name || mobile)) return null;
-  const dial = mobile?.replace(/[^\d+]/g, "") ?? "";
+  const dial = dialUrl(mobile);
   return (
     <View className="mt-1.5 flex-row items-center gap-3">
       <View className="flex-1">
@@ -258,16 +251,16 @@ function Receiver({ mobile, name }: { mobile: string | null; name: string | null
         ) : null}
         {mobile ? (
           <Text className="text-xs text-muted-foreground" numberOfLines={1}>
-            {displayMobile(mobile)}
+            {formatMobile(mobile)}
           </Text>
         ) : null}
       </View>
       {dial ? (
         <Pressable
-          accessibilityLabel={`Call ${name ?? displayMobile(mobile ?? "")}`}
+          accessibilityLabel={`Call ${name ?? formatMobile(mobile ?? "")}`}
           accessibilityRole="button"
           className="h-10 w-10 items-center justify-center bg-[#CDD4FF] active:opacity-80"
-          onPress={() => void Linking.openURL(`tel:${dial}`).catch(() => undefined)}
+          onPress={() => void Linking.openURL(dial).catch(() => undefined)}
         >
           <HugeiconsIcon color={colors.primary} icon={Call02Icon} size={18} strokeWidth={1.8} />
         </Pressable>
@@ -284,19 +277,25 @@ function Receiver({ mobile, name }: { mobile: string | null; name: string | null
 function PinDetail({
   bottom,
   onClose,
+  onHeight,
   origin,
   point,
+  trip,
 }: {
   bottom: number;
   onClose: () => void;
+  onHeight: (height: number) => void;
   origin: Coordinates | null;
   point: MapPoint & { detail: NonNullable<MapPoint["detail"]> };
+  /** The road distance and drive time from the user, when a route is drawn. */
+  trip: string | null;
 }) {
   const { address, exact } = point.detail;
   const destination = exact ? point : null;
   return (
     <View
       className="absolute right-3 left-3 bg-white pt-2.5 pr-2 pb-3 pl-3"
+      onLayout={(event) => onHeight(event.nativeEvent.layout.height)}
       style={{ bottom, elevation: 4 }}
     >
       <View className="flex-row items-start gap-3">
@@ -307,6 +306,7 @@ function PinDetail({
           </Text>
           <Text className="mt-0.5 text-sm font-semibold text-foreground" numberOfLines={1}>
             {point.detail.title}
+            {trip ? <Text className="font-normal text-primary"> · {trip}</Text> : null}
           </Text>
           <Receiver mobile={point.detail.mobile} name={point.detail.receiver} />
           <Text className="mt-1 text-xs leading-4 text-muted-foreground" numberOfLines={3}>
@@ -387,6 +387,15 @@ interface NativeOlaMapProps {
   anchorId: string | null;
   /** Changes when the page reloads; the overview is shown again. */
   resetKey: number;
+  /** A road path (`[longitude, latitude]` pairs) drawn under the pins and framed with them. */
+  route?: [number, number][] | null;
+  /** Shown on an order's card: the route's distance and drive time. */
+  trip?: string | null;
+  /**
+   * False: a focused pin only opens its card and the camera keeps the overview (framed above
+   * the card), as on an order's own map. True (Home): the camera zooms in on it.
+   */
+  zoomOnFocus?: boolean;
   /** Distance of the control row from the top edge. */
   controlsTop: number;
   /** Distance of the pin legend from the bottom edge. */
@@ -405,21 +414,35 @@ function NativeOlaMap({
   origin,
   points,
   resetKey,
+  route = null,
   showLegend,
+  trip = null,
+  zoomOnFocus = true,
 }: NativeOlaMapProps) {
   const camera = useRef<CameraRef>(null);
   // Camera commands only apply once the map has loaded; earlier ones find no native view.
   const loaded = useRef(false);
   const style = useOlaMapStyle();
-  const bounds = useMemo(() => boundsFor(points), [points]);
+  const bounds = useMemo(
+    () =>
+      boundsFor([
+        ...points,
+        ...(route ?? []).map(([longitude, latitude]) => ({ latitude, longitude })),
+      ]),
+    [points, route],
+  );
   const offsets = useMemo(() => samePlaceOffsets(points), [points]);
   const anchor = points.find((point) => point.id === anchorId) ?? null;
   const anchored = anchor !== null;
   const center = anchor ?? points[0] ?? { latitude: 22.9734, longitude: 78.6569 };
   // While a pin is focused, a moving live position doesn't reframe the map away from it.
   const focus = points.find((point) => point.id === focusId) ?? null;
+  // The pin the camera keeps to; none when focusing only opens the card.
   const focusRef = useRef(focus);
-  focusRef.current = focus;
+  focusRef.current = zoomOnFocus ? focus : null;
+  // An open card covers the bottom of the map; an overview framed behind it leaves it room.
+  const [cardHeight, setCardHeight] = useState(0);
+  const cardRoom = !zoomOnFocus && focus?.detail ? cardHeight + legendBottom : 0;
 
   /**
    * The overview, undoing any drag or zoom: zoomed in on the anchor when there is one, else
@@ -432,7 +455,7 @@ function NativeOlaMap({
         bounds && !anchored
           ? camera.current?.fitBounds(bounds, {
               duration,
-              padding: { bottom: 56, left: 56, right: 56, top: 56 },
+              padding: { bottom: 56 + cardRoom, left: 56, right: 56, top: 56 + controlsTop },
             })
           : camera.current?.easeTo({
               center: [center.longitude, center.latitude],
@@ -441,7 +464,7 @@ function NativeOlaMap({
             }),
       );
     },
-    [anchored, bounds, center.latitude, center.longitude],
+    [anchored, bounds, cardRoom, center.latitude, center.longitude, controlsTop],
   );
 
   /** Zooms in on the focused pin. */
@@ -468,7 +491,8 @@ function NativeOlaMap({
       if (changed) showFocus(500);
       return;
     }
-    fitCamera(changed ? 500 : 0);
+    // Other reframes (the user moving, a card's height, a new route) ease too, never snap.
+    fitCamera(changed ? 500 : 300);
   }, [fitCamera, focusId, showFocus]);
 
   // A page reload shows the overview again (the page has already cleared any focus).
@@ -479,9 +503,10 @@ function NativeOlaMap({
     if (!focusRef.current) fitCamera(500);
   }, [fitCamera, resetKey]);
 
-  // Clearing the focus reframes through the effect; with nothing focused, reframe here.
+  // Clearing a zoomed-in focus reframes through the effect; otherwise reframe here (a card
+  // that doesn't zoom stays open).
   const recenter = () => {
-    if (focusId) onFocus(null);
+    if (focusRef.current) onFocus(null);
     else fitCamera(500);
   };
   useEffect(
@@ -516,7 +541,7 @@ function NativeOlaMap({
         >
           <Camera
             initialViewState={
-              focus
+              focus && zoomOnFocus
                 ? { center: [focus.longitude, focus.latitude], zoom: PIN_FOCUS_ZOOM }
                 : {
                     center: [center.longitude, center.latitude],
@@ -525,6 +550,30 @@ function NativeOlaMap({
             }
             ref={camera}
           />
+          {route ? (
+            <GeoJSONSource
+              data={{
+                geometry: { coordinates: route, type: "LineString" },
+                properties: {},
+                type: "Feature",
+              }}
+              id="route"
+            >
+              {/* A white casing under the brand-blue line keeps it clear over busy streets. */}
+              <Layer
+                id="route-casing"
+                layout={{ "line-cap": "round", "line-join": "round" }}
+                paint={{ "line-color": "#FFFFFF", "line-width": 9 }}
+                type="line"
+              />
+              <Layer
+                id="route-line"
+                layout={{ "line-cap": "round", "line-join": "round" }}
+                paint={{ "line-color": colors.primary, "line-width": 5 }}
+                type="line"
+              />
+            </GeoJSONSource>
+          ) : null}
           {points.map((point) => (
             <Marker
               anchor={point.kind === "rider" ? "center" : "bottom"}
@@ -534,7 +583,7 @@ function NativeOlaMap({
               offset={offsets[point.id]}
               onPress={() => {
                 // Tapped again: the effect won't see a change, so zoom back in here.
-                if (point.id === focusId) showFocus(500);
+                if (point.id === focusId && zoomOnFocus) showFocus(500);
                 onFocus(point);
               }}
             >
@@ -552,8 +601,10 @@ function NativeOlaMap({
         <PinDetail
           bottom={legendBottom}
           onClose={() => onFocus(null)}
+          onHeight={setCardHeight}
           origin={origin}
           point={{ ...focus, detail: focus.detail }}
+          trip={trip}
         />
       ) : showLegend ? (
         <MapLegend bottom={legendBottom} points={points} />
@@ -565,6 +616,25 @@ function NativeOlaMap({
     </View>
   );
 }
+
+const at = (place: Coordinates, id: string, kind: PinKind): MapPoint => ({
+  id,
+  kind,
+  latitude: place.latitude,
+  longitude: place.longitude,
+});
+
+/** An order's pin, with the card its tap opens (receiver, call, address and map links). */
+const orderMapPoint = (order: OrderPoint): MapPoint => ({
+  ...at(order, `order-${order.orderId}`, order.exact ? "order" : "order-area"),
+  detail: {
+    address: order.address,
+    exact: order.exact,
+    mobile: order.mobile,
+    receiver: order.receiver,
+    title: order.awbNo,
+  },
+});
 
 export function HomeMap({
   checkIn,
@@ -608,27 +678,9 @@ export function HomeMap({
   // checking in: where the user is now; after, the check-in point replaces it, and a check-out
   // adds the destination pin.
   const points = useMemo(() => {
-    const at = (place: Coordinates, id: string, kind: PinKind): MapPoint => ({
-      id,
-      kind,
-      latitude: place.latitude,
-      longitude: place.longitude,
-    });
     const here = live ? at(live, "here", deliveryBoy ? "rider" : "start") : null;
     const day: (MapPoint | null)[] = orders
-      ? [
-          here,
-          ...orders.map((order) => ({
-            ...at(order, `order-${order.orderId}`, order.exact ? "order" : "order-area"),
-            detail: {
-              address: order.address,
-              exact: order.exact,
-              mobile: order.mobile,
-              receiver: order.receiver,
-              title: order.awbNo,
-            },
-          })),
-        ]
+      ? [here, ...orders.map(orderMapPoint)]
       : [
           // A delivery boy stays on the map after checking in, beside the day's pins.
           checkIn ? at(checkIn, "check-in", "transit") : deliveryBoy ? null : here,
@@ -680,5 +732,115 @@ export function HomeMap({
         </View>
       </Modal>
     </>
+  );
+}
+
+// The route is fetched again only once the user has moved about this far (≈ 100 m).
+const ROUTE_GRID_DEGREES = 0.001;
+
+/** "850 m", "12.4 km"; "6 min", "1 hr 5 min". */
+function tripLabel({ distanceMeters, durationSeconds }: RoadRoute) {
+  const distance =
+    distanceMeters == null
+      ? null
+      : distanceMeters < 1000
+        ? `${Math.round(distanceMeters)} m`
+        : `${(distanceMeters / 1000).toFixed(distanceMeters < 10000 ? 1 : 0)} km`;
+  const minutes = durationSeconds == null ? null : Math.max(1, Math.round(durationSeconds / 60));
+  const duration =
+    minutes == null
+      ? null
+      : minutes < 60
+        ? `${minutes} min`
+        : `${Math.floor(minutes / 60)} hr${minutes % 60 ? ` ${minutes % 60} min` : ""}`;
+  return [distance, duration].filter(Boolean).join(" · ") || null;
+}
+
+/** The road route from the user to the order, refetched as they move on (not on every step). */
+function useRoadRoute(from: Coordinates | null, to: Coordinates | null) {
+  const { token } = useAuthSession();
+  const [route, setRoute] = useState<RoadRoute | null>(null);
+  const snap = (value: number) => Math.round(value / ROUTE_GRID_DEGREES) * ROUTE_GRID_DEGREES;
+  const fromLat = from ? snap(from.latitude) : null;
+  const fromLng = from ? snap(from.longitude) : null;
+  const toLat = to?.latitude ?? null;
+  const toLng = to?.longitude ?? null;
+  useEffect(() => {
+    if (!token || fromLat == null || fromLng == null || toLat == null || toLng == null) {
+      setRoute(null);
+      return;
+    }
+    let current = true;
+    fetchRoute(
+      token,
+      { latitude: fromLat, longitude: fromLng },
+      { latitude: toLat, longitude: toLng },
+    )
+      .then((next) => {
+        if (current) setRoute(next);
+      })
+      .catch(() => {
+        if (current) setRoute(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [fromLat, fromLng, toLat, toLng, token]);
+  return route;
+}
+
+/**
+ * One order on the full-screen map (an order card's View on Map): the delivery boy and the
+ * order's pin with the best road route between them highlighted, all framed together. The
+ * order's card (receiver, call, the distance and drive time, View Location and Directions) is
+ * open from the start in the legend's place; closing it brings the legend back. Shown while
+ * `order` is set.
+ */
+export function OrderLocationMap({
+  live,
+  onClose,
+  order,
+}: {
+  live: Coordinates | null;
+  onClose: () => void;
+  order: OrderPoint | null;
+}) {
+  const point = useMemo(() => (order ? orderMapPoint(order) : null), [order]);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  // Every order opens with its card showing.
+  useEffect(() => {
+    setFocusId(point?.id ?? null);
+  }, [point?.id]);
+  const route = useRoadRoute(live, order);
+  const points = useMemo(
+    () =>
+      [live ? at(live, "here", "rider") : null, point].filter(
+        (item): item is MapPoint => item !== null,
+      ),
+    [live, point],
+  );
+  return (
+    <Modal animationType="fade" onRequestClose={onClose} visible={order !== null}>
+      <View className="flex-1 bg-accent">
+        {order ? (
+          <NativeOlaMap
+            anchorId={null}
+            controlsTop={56}
+            focusId={focusId}
+            legendBottom={40}
+            onFocus={(next) => setFocusId(next?.id ?? null)}
+            origin={live}
+            points={points}
+            resetKey={0}
+            route={route?.coordinates ?? null}
+            showLegend
+            trip={route ? tripLabel(route) : null}
+            zoomOnFocus={false}
+          >
+            <MapControl icon={Cancel01Icon} label="Close map" onPress={onClose} />
+          </NativeOlaMap>
+        ) : null}
+      </View>
+    </Modal>
   );
 }

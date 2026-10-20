@@ -23,11 +23,12 @@ import { DrsPicker } from "./components/drs-picker";
 import { DrsStatusSheet } from "./components/drs-status-sheet";
 import { FilterChips } from "./components/filter-chips";
 import { ListEmpty } from "./components/list-empty";
-import { OrderRow } from "./components/order-row";
+import { OrderCard } from "./components/order-card";
 import { type PageTab, PageTabs } from "./components/page-tabs";
 import { useDrsPrint } from "./hooks/use-drs-print";
 import { useDrsScan } from "./hooks/use-drs-scan";
 import { useDrsSheets } from "./hooks/use-drs-sheets";
+import { useOrderMap } from "./hooks/use-order-map";
 import {
   DRS_FILTERS,
   type DrsFilter,
@@ -99,6 +100,7 @@ export function OrdersScreen() {
   );
   const printer = useDrsPrint();
   const scan = useDrsScan(updated);
+  const orderMap = useOrderMap();
 
   // Coming back to the tab picks up deliveries made meanwhile, without a spinner.
   const focusedBefore = useRef(false);
@@ -313,7 +315,11 @@ export function OrdersScreen() {
         }
         renderItem={({ item }) =>
           "orderId" in item ? (
-            <OrderRow order={item} />
+            <OrderCard
+              locating={orderMap.locating === item.orderId}
+              onViewMap={() => void orderMap.open(item)}
+              order={item}
+            />
           ) : (
             <DrsCard
               onEdit={() => setEditing(item)}
@@ -328,6 +334,7 @@ export function OrdersScreen() {
       />
       <DrsStatusSheet onClose={() => setEditing(null)} onUpdated={updated} sheet={editing} />
       {scan.element}
+      {orderMap.element}
     </TabScreen>
   );
 }
