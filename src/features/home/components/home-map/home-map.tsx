@@ -81,6 +81,8 @@ if (olaMapsApiKey) {
 // (Android map markers ignore transforms, so the pins can't be tilted instead.)
 const SAME_PLACE_METRES = 30;
 const SAME_PLACE_SHIFT = 10;
+// Tapping a pin zooms in this close to it; "Recenter map" returns to the overview.
+const PIN_FOCUS_ZOOM = 17;
 
 /** Horizontal pixel offset per pin; a pin alone at its place stays centred. */
 function samePlaceOffsets(points: MapPoint[]) {
@@ -219,6 +221,13 @@ function NativeOlaMap({ points, controlsTop, legendBottom, children }: NativeOla
               key={point.kind}
               lngLat={[point.longitude, point.latitude]}
               offset={offsets[point.kind]}
+              onPress={() =>
+                camera.current?.easeTo({
+                  center: [point.longitude, point.latitude],
+                  duration: 500,
+                  zoom: PIN_FOCUS_ZOOM,
+                })
+              }
             >
               <Image contentFit="contain" source={pins[point.kind]} style={PIN_SIZE} />
             </Marker>
