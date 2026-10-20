@@ -77,7 +77,7 @@ export function OrdersScreen() {
   const viewer = useViewer();
   // Deliveries are confirmed with the phone's location, so its state shows here as on Home.
   const location = useLiveLocation(viewer.isDeliveryBoy);
-  const { selectedDate, today } = useDateFilter();
+  const { resetToToday, selectedDate, today } = useDateFilter();
   const [tab, setTab] = useState<PageTab>("orders");
   const [range, setRange] = useState<DateRange | null>(null);
   const [query, setQuery] = useState("");
@@ -293,10 +293,12 @@ export function OrdersScreen() {
         <SearchRangeToolbar
           autoCapitalize={onOrders ? "words" : "characters"}
           onQueryChange={setQuery}
+          onSelectedDateClear={resetToToday}
           onRangeChange={setRange}
           query={query}
           range={range}
           searchLabel={onOrders ? "Search orders" : "Search DRS"}
+          selectedDate={selectedDate === today ? null : selectedDate}
           today={today}
         />
       </View>

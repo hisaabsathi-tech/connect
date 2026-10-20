@@ -38,13 +38,21 @@ function Separator() {
  */
 export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
   const { token } = useAuthSession();
-  const { today } = useDateFilter();
+  const { resetToToday, selectedDate, today } = useDateFilter();
   const toast = useToast();
   const summary = useAttendanceSummary(token, today);
   const { holidays, reload: reloadHolidays } = useHolidays(token, today);
   const list = useAttendanceDays(token, today);
   const [range, setRange] = useState<DateRange | null>(null);
-  const table = useAttendanceRange(token, range, today);
+  // A day chosen on Home is a one-day attendance filter. A range picked here takes precedence.
+  const selectedDayRange = useMemo(
+    () => (selectedDate === today ? null : { from: selectedDate, to: selectedDate }),
+    [selectedDate, today],
+  );
+  const activeRange = range ?? selectedDayRange;
+  const table = useAttendanceRange(token, activeRange, today);
+  // Changing Home's calendar always makes that day the active filter.
+  useEffect(() => setRange(null), [selectedDate]);
   // Only days with a check-in get a card; absent days, holidays and weekly offs are left out.
   const attendedDays = useMemo(() => list.days.filter((day) => day.record), [list.days]);
   // A list too short to scroll never reaches its end, so load the month before right away.
@@ -53,14 +61,25 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
   const { done, loadMore, loading, loadingMore, moreFailed } = list;
   useEffect(() => {
     const short = viewportHeight > 0 && contentHeight > 0 && contentHeight < viewportHeight;
-    if (!range && short && !(loading || loadingMore || done || moreFailed)) loadMore();
-  }, [contentHeight, done, loadMore, loading, loadingMore, moreFailed, range, viewportHeight]);
+    if (!activeRange && short && !(loading || loadingMore || done || moreFailed)) loadMore();
+  }, [
+    activeRange,
+    contentHeight,
+    done,
+    loadMore,
+    loading,
+    loadingMore,
+    moreFailed,
+    viewportHeight,
+  ]);
   // With a range applied the top cards describe it: present days out of all its days, and the
   // total time worked in it.
   const rangeSummary = useMemo(
     () =>
-      range && !table.loading && !table.failed ? summarizeRange(table.days, range, today) : null,
-    [range, table.days, table.failed, table.loading, today],
+      activeRange && !table.loading && !table.failed
+        ? summarizeRange(table.days, activeRange, today)
+        : null,
+    [activeRange, table.days, table.failed, table.loading, today],
   );
   // The card tapped for its locations and photos.
   const [detail, setDetail] = useState<AttendanceRecord | null>(null);
@@ -88,7 +107,7 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
       await Promise.all([
         summary.reload(),
         reloadHolidays(),
-        range ? table.reload() : list.reset(),
+        activeRange ? table.reload() : list.reset(),
       ]);
     } finally {
       setRefreshing(false);
@@ -96,13 +115,13 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
   };
 
   const exportRange = async () => {
-    if (!range || exporting) return;
+    if (!activeRange || exporting) return;
     setExporting(true);
     try {
       // Saved on the device first, so the file is kept even if the share sheet is dismissed.
-      const folder = await saveAttendanceCsv(table.days, range, today);
+      const folder = await saveAttendanceCsv(table.days, activeRange, today);
       if (folder) toast.success("Attendance exported", `Saved to ${folder} on your device.`);
-      await shareAttendanceCsv(table.days, range, today);
+      await shareAttendanceCsv(table.days, activeRange, today);
     } catch {
       toast.error("Couldn't export", "Please update the app and try again.");
     } finally {
@@ -117,14 +136,20 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
       />
       {tabs}
       <AttendanceSummaryCards
-        ranged={Boolean(range)}
-        summary={range ? rangeSummary : summary.summary}
+        ranged={Boolean(activeRange)}
+        summary={activeRange ? rangeSummary : summary.summary}
       />
       <View className="mt-5 flex-row items-center justify-between gap-3">
         <View className="flex-shrink">
-          <DateRangeFilter onChange={setRange} range={range} today={today} />
+          <DateRangeFilter
+            onChange={setRange}
+            onSelectedDateClear={resetToToday}
+            range={range}
+            selectedDate={selectedDate === today ? null : selectedDate}
+            today={today}
+          />
         </View>
-        {range && table.days.length ? (
+        {activeRange && table.days.length ? (
           <Pressable
             accessibilityRole="button"
             className={`h-11 flex-row items-center gap-2 bg-primary px-3 active:bg-primary-hover ${exporting ? "opacity-60" : ""}`}
@@ -146,7 +171,7 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
           </Pressable>
         ) : null}
       </View>
-      {range ? (
+      {activeRange ? (
         <AttendanceTable
           days={table.days}
           failed={table.failed}
@@ -159,7 +184,7 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
 
   // With no cards yet, the empty block shows loading and errors instead.
   const footer =
-    range || !attendedDays.length ? null : list.loadingMore ? (
+    activeRange || !attendedDays.length ? null : list.loadingMore ? (
       <View className="pt-3">
         <CardSkeleton />
       </View>
@@ -171,7 +196,7 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
       <Text className="py-6 text-center text-sm text-muted-foreground">No earlier attendance</Text>
     ) : null;
 
-  const empty = range ? null : list.loading || (list.loadingMore && !attendedDays.length) ? (
+  const empty = activeRange ? null : list.loading || (list.loadingMore && !attendedDays.length) ? (
     <EmptyBlock />
   ) : list.failed ? (
     <EmptyBlock
@@ -190,7 +215,7 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
   ) : null;
 
   // The first load fills the page; later ones (refresh, older months) load inside the list.
-  if (list.loading && !list.days.length && !range)
+  if (list.loading && !list.days.length && !activeRange)
     return (
       <TabScreen>
         <ListPageSkeleton chips={false} />
@@ -202,14 +227,14 @@ export function OwnAttendance({ tabs }: { tabs?: ReactNode }) {
       <FlatList
         className="flex-1"
         contentContainerClassName="px-5 pb-8"
-        data={range ? [] : attendedDays}
+        data={activeRange ? [] : attendedDays}
         ItemSeparatorComponent={Separator}
         keyExtractor={(day) => day.date}
         ListEmptyComponent={empty}
         ListFooterComponent={footer}
         ListHeaderComponent={header}
         onContentSizeChange={(_, height) => setContentHeight(height)}
-        onEndReached={range ? undefined : () => list.loadMore()}
+        onEndReached={activeRange ? undefined : () => list.loadMore()}
         onEndReachedThreshold={0.4}
         onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
         refreshControl={

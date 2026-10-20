@@ -18,9 +18,11 @@ export function ordersFromSheets(sheets: DrsSheet[], drsId: string | null): DrsO
   return orders;
 }
 
-const status = (order: DrsOrder) => order.shipmentStatus?.trim().toUpperCase() ?? "";
+const status = (order: Pick<DrsOrder, "shipmentStatus">) =>
+  order.shipmentStatus?.trim().toUpperCase() ?? "";
 
-export const isDelivered = (order: DrsOrder) => status(order) === "DELIVERED";
+export const isDelivered = (order: Pick<DrsOrder, "shipmentStatus">) =>
+  status(order) === "DELIVERED";
 
 export const isReturned = (order: DrsOrder) => status(order).startsWith("RTO");
 

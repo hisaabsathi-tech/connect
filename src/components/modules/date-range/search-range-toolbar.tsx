@@ -17,19 +17,25 @@ import { type DateRange, rangeLabel } from "./range-label";
 export function SearchRangeToolbar({
   autoCapitalize = "words",
   onQueryChange,
+  onSelectedDateClear,
   onRangeChange,
   query,
   range,
   searchLabel,
+  selectedDate = null,
   today,
 }: {
   autoCapitalize?: TextInputProps["autoCapitalize"];
   onQueryChange: (query: string) => void;
+  /** Clears a single day chosen in the shared Home calendar. */
+  onSelectedDateClear?: () => void;
   onRangeChange: (range: DateRange | null) => void;
   query: string;
   range: DateRange | null;
   /** Read out for the search field, e.g. "Search employees". */
   searchLabel: string;
+  /** A non-today day chosen on Home, shown unless a local range takes precedence. */
+  selectedDate?: string | null;
   today: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -75,16 +81,19 @@ export function SearchRangeToolbar({
           />
         </Pressable>
       </View>
-      {range ? (
+      {range || selectedDate ? (
         <View className="mt-3 h-9 flex-row items-center self-start border border-primary bg-accent">
-          <Text className="px-3 text-sm text-primary">{rangeLabel(range)}</Text>
+          <Text className="px-3 text-sm text-primary">
+            {range ? rangeLabel(range) : rangeLabel({ from: selectedDate!, to: selectedDate! })}
+          </Text>
           <Pressable
-            accessibilityLabel="Clear date range"
+            accessibilityLabel={range ? "Clear date range" : "Clear selected date"}
             accessibilityRole="button"
             className="h-full w-9 items-center justify-center border-primary border-l"
             onPress={() => {
               haptic("light");
-              onRangeChange(null);
+              if (range) onRangeChange(null);
+              else onSelectedDateClear?.();
             }}
           >
             <HugeiconsIcon color={colors.primary} icon={Cancel01Icon} size={14} />

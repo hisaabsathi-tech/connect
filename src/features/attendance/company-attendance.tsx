@@ -41,13 +41,17 @@ function Separator() {
  */
 export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
   const { token } = useAuthSession();
-  const { today } = useDateFilter();
+  const { resetToToday, selectedDate, today } = useDateFilter();
   const toast = useToast();
   const [range, setRange] = useState<DateRange | null>(null);
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
-  const from = range?.from ?? today;
-  const to = range?.to ?? today;
+  // A date picked in Home applies here until the user picks a local date range instead.
+  useEffect(() => setRange(null), [selectedDate]);
+  const selectedDayRange = selectedDate === today ? null : { from: selectedDate, to: selectedDate };
+  const activeRange = range ?? selectedDayRange;
+  const from = activeRange?.from ?? today;
+  const to = activeRange?.to ?? today;
   const roster = useRoster(token, { from, search, to });
   const register = useRegisterDownload(token, today);
   const [downloading, setDownloading] = useState(false);
@@ -84,7 +88,7 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
     if (downloading) return;
     setDownloading(true);
     try {
-      const files = await register.build(range);
+      const files = await register.build(activeRange);
       const folder = await saveToDevice(files);
       if (folder)
         toast.success(
@@ -139,17 +143,19 @@ export function CompanyAttendance({ tabs }: { tabs?: ReactNode }) {
       <View className="mt-5 flex-row gap-3">
         <StatCard label="Total Employees" value={totals ? String(totals.totalEmployees) : "--"} />
         <StatCard
-          label={range ? "Present" : "Present Today"}
+          label={activeRange ? "Present" : "Present Today"}
           value={totals ? String(totals.present) : "--"}
         />
       </View>
       <View className="mt-5">
         <SearchRangeToolbar
           onQueryChange={setQuery}
+          onSelectedDateClear={resetToToday}
           onRangeChange={setRange}
           query={query}
           range={range}
           searchLabel="Search employees"
+          selectedDate={selectedDate === today ? null : selectedDate}
           today={today}
         />
       </View>

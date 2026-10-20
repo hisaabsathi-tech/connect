@@ -9,6 +9,7 @@ import type { DrsSheet } from "@/lib/api/drs";
 import { haptic } from "@/lib/haptics";
 
 import { drsAreas, drsBadge, drsNextStatuses, drsPincodes } from "../lib/drs";
+import { isDelivered } from "../lib/orders";
 
 // The Figma's tinted action squares: print in grey, the scan in amber, editing in brand blue.
 const ACTIONS = {
@@ -73,6 +74,33 @@ function Field({
   );
 }
 
+/** The DRS status plus live order progress, so the delivery boy knows when it can be resolved. */
+function DrsStatusBadge({ sheet }: { sheet: DrsSheet }) {
+  const total = sheet.orders.length;
+  const delivered = sheet.orders.filter(isDelivered).length;
+  const allDelivered = total > 0 && delivered === total;
+
+  // Before resolution, make the completed run unmissable. A resolved sheet still says Resolved.
+  if (sheet.status !== "RESOLVED" && allDelivered)
+    return <RemarkBadge label="All orders delivered" variant="delivered" />;
+
+  if (sheet.status !== "DELIVERING ORDERS") return <RemarkBadge {...drsBadge(sheet.status)} />;
+
+  return (
+    <View className="flex-row items-center self-start bg-[#FFF8ED] px-2 py-1">
+      <View className="mr-1.5 h-1.5 w-1.5 rounded-full bg-[#D97706]" />
+      <Text className="text-[10px] font-medium uppercase tracking-[0.25px] text-[#D97706]">
+        Delivering
+      </Text>
+      {/* Separates the DRS status from its delivered / total order count. */}
+      <View className="mx-2 h-4 w-px bg-[#F2D6A8]" />
+      <Text className="text-[10px] font-medium text-[#D97706]">
+        {delivered}/{total}
+      </Text>
+    </View>
+  );
+}
+
 /**
  * One delivery run sheet: its id and status, the areas and pincodes it covers, and how many
  * orders ride on it. Tapping the card shows those orders; the squares print it, attach (or show)
@@ -113,7 +141,7 @@ export function DrsCard({
             {sheet.id}
           </Text>
         </View>
-        <RemarkBadge {...drsBadge(sheet.status)} />
+        <DrsStatusBadge sheet={sheet} />
       </View>
       <View className="mt-4 flex-row">
         <Field align="left" label="Deliverable Areas" values={drsAreas(sheet)} />

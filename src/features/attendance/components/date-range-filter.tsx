@@ -6,6 +6,7 @@ import { Pressable, useWindowDimensions, View } from "react-native";
 import { type DateRange, DateRangeSheet, rangeLabel } from "@/components/modules/date-range";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
+import { formatDayLabel } from "@/lib/date";
 import { haptic } from "@/lib/haptics";
 
 // The button's minimum share of the page width, so it reads as a proper filter field.
@@ -17,11 +18,15 @@ const MIN_WIDTH_SHARE = 0.6;
  */
 export function DateRangeFilter({
   onChange,
+  onSelectedDateClear,
   range,
+  selectedDate = null,
   today,
 }: {
   onChange: (range: DateRange | null) => void;
+  onSelectedDateClear?: () => void;
   range: DateRange | null;
+  selectedDate?: string | null;
   today: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -70,6 +75,22 @@ export function DateRangeFilter({
           </Pressable>
         ) : null}
       </View>
+      {selectedDate && !range ? (
+        <View className="mt-3 h-9 flex-row items-center self-start border border-primary bg-accent">
+          <Text className="px-3 text-sm text-primary">{formatDayLabel(selectedDate)}</Text>
+          <Pressable
+            accessibilityLabel="Clear selected date"
+            accessibilityRole="button"
+            className="h-full w-9 items-center justify-center border-primary border-l"
+            onPress={() => {
+              haptic("light");
+              onSelectedDateClear?.();
+            }}
+          >
+            <HugeiconsIcon color={colors.primary} icon={Cancel01Icon} size={14} />
+          </Pressable>
+        </View>
+      ) : null}
       <DateRangeSheet
         onApply={(next) => {
           setOpen(false);
