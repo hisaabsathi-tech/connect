@@ -19,7 +19,7 @@ export function ProfileCard({
   profile: Profile | null;
 }) {
   return (
-    <View className="mt-4 flex-row items-center gap-3 bg-[#F0F2FF] p-3">
+    <View className="mt-4 flex-row items-center gap-5 bg-[#F0F2FF] p-3">
       <View>
         <Pressable
           accessibilityLabel={profile?.image ? "View profile photo" : "Add profile photo"}

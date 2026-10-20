@@ -8,6 +8,8 @@ export type SavedChangePassword = {
   step: "code" | "password";
   code: string;
   resendEndsAt: number;
+  /** When the emailed code stops working; the attempt is dropped after this. */
+  expiresAt: number;
 };
 
 /** Stores a short-lived recovery attempt without ever writing a password to disk. */
@@ -20,7 +22,8 @@ export async function loadChangePassword(): Promise<SavedChangePassword | null> 
       typeof saved.email !== "string" ||
       (saved.step !== "code" && saved.step !== "password") ||
       typeof saved.code !== "string" ||
-      typeof saved.resendEndsAt !== "number"
+      typeof saved.resendEndsAt !== "number" ||
+      typeof saved.expiresAt !== "number"
     )
       return null;
     return saved as SavedChangePassword;
@@ -30,7 +33,9 @@ export async function loadChangePassword(): Promise<SavedChangePassword | null> 
 }
 
 export function saveChangePassword(attempt: SavedChangePassword) {
-  return SecureStore.setItemAsync(CHANGE_PASSWORD_KEY, JSON.stringify(attempt)).catch(() => undefined);
+  return SecureStore.setItemAsync(CHANGE_PASSWORD_KEY, JSON.stringify(attempt)).catch(
+    () => undefined,
+  );
 }
 
 export function clearChangePassword() {

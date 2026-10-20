@@ -1,6 +1,6 @@
 import { ResetPasswordIcon, SendIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 
 import { ActionButton } from "@/components/modules/button";
@@ -9,7 +9,7 @@ import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
-import { RESEND_COOLDOWN_MS, STRONG_PASSWORD } from "@/features/auth/lib/constants";
+import { OTP_TTL_MS, RESEND_COOLDOWN_MS, STRONG_PASSWORD } from "@/features/auth/lib/constants";
 import { useCountdown } from "@/hooks/use-countdown";
 import { authApi } from "@/lib/api/auth";
 import { errorMessage } from "@/lib/errors";
@@ -22,7 +22,11 @@ import {
 
 type PasswordStep = "request" | "code" | "password";
 
-/** Password reset initiated from a signed-in person's profile. */
+/**
+ * Password reset initiated from a signed-in person's profile. The step it reached is kept when
+ * the sheet is closed and across app restarts, until the password is updated or the emailed
+ * code expires; only then does it start over at "send code".
+ */
 export function ChangePassword({ email }: { email: string | null | undefined }) {
   const toast = useToast();
   const { seconds: resendSeconds, start: startResend } = useCountdown();
@@ -33,17 +37,44 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [resendEndsAt, setResendEndsAt] = useState(0);
+  const [expiresAt, setExpiresAt] = useState(0);
   const [restored, setRestored] = useState(false);
+  // Set once the password is updated, so the sheet starts over after it has slid away.
+  const completed = useRef(false);
+
+  /** Back to the first step, forgetting the code and anything typed. */
+  const startOver = useCallback(() => {
+    setStep("request");
+    setCode("");
+    setPassword("");
+    setConfirmPassword("");
+    setExpiresAt(0);
+    void clearChangePassword();
+  }, []);
+
+  /** True (and starts over, saying why) when the emailed code has expired mid-way. */
+  const codeExpired = () => {
+    if (step === "request" || Date.now() < expiresAt) return false;
+    startOver();
+    toast.error("Code expired", "Send a new verification code to continue.");
+    return true;
+  };
 
   useEffect(() => {
     if (!email) return;
     let active = true;
     void loadChangePassword()
       .then((saved) => {
-        if (!(active && saved?.email === email)) return;
+        if (!(active && saved)) return;
+        // Another account's attempt, or a code that no longer works: nothing to resume.
+        if (saved.email !== email || Date.now() >= saved.expiresAt) {
+          void clearChangePassword();
+          return;
+        }
         setStep(saved.step);
         setCode(saved.code);
         setResendEndsAt(saved.resendEndsAt);
+        setExpiresAt(saved.expiresAt);
         startResend(Math.max(0, saved.resendEndsAt - Date.now()));
         setVisible(true);
       })
@@ -57,8 +88,8 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
 
   useEffect(() => {
     if (!(restored && email && (step === "code" || step === "password"))) return;
-    void saveChangePassword({ code, email, resendEndsAt, step });
-  }, [code, email, resendEndsAt, restored, step]);
+    void saveChangePassword({ code, email, expiresAt, resendEndsAt, step });
+  }, [code, email, expiresAt, resendEndsAt, restored, step]);
 
   const requestCode = async () => {
     if (!email) {
@@ -69,8 +100,9 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
     try {
       await authApi.requestPasswordReset(email);
       setCode("");
-      const nextResendEndsAt = Date.now() + RESEND_COOLDOWN_MS;
-      setResendEndsAt(nextResendEndsAt);
+      const sentAt = Date.now();
+      setResendEndsAt(sentAt + RESEND_COOLDOWN_MS);
+      setExpiresAt(sentAt + OTP_TTL_MS);
       startResend(RESEND_COOLDOWN_MS);
       setStep("code");
       toast.success("Verification code sent", "Check your email for the six-digit code.");
@@ -86,7 +118,7 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
       toast.error("Check your code", "Enter the six-digit code we sent you.");
       return;
     }
-    if (!email) return;
+    if (!email || codeExpired()) return;
     setPending(true);
     try {
       await authApi.checkPasswordResetCode(email, code);
@@ -110,12 +142,13 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
       toast.error("Passwords don't match", "Make sure both password fields are the same.");
       return;
     }
-    if (!email) return;
+    if (!email || codeExpired()) return;
     setPending(true);
     try {
       await authApi.resetPassword(email, code, password);
       await clearChangePassword();
       toast.success("Password updated", "Your new password is ready to use.");
+      completed.current = true;
       setVisible(false);
     } catch (error) {
       toast.error("Couldn't update password", errorMessage(error));
@@ -135,7 +168,11 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
           accessibilityRole="button"
           className="flex-row items-center gap-1.5 bg-primary px-3 py-2.5"
           disabled={pending}
-          onPress={() => setVisible(true)}
+          onPress={() => {
+            // Resumes where it was left, unless the code has expired since.
+            codeExpired();
+            setVisible(true);
+          }}
         >
           <Text className="text-sm font-semibold text-primary-foreground">Change</Text>
           {pending ? (
@@ -149,6 +186,11 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
       <BottomSheet
         dismissible={!pending}
         onClose={() => setVisible(false)}
+        onClosed={() => {
+          if (!completed.current) return;
+          completed.current = false;
+          startOver();
+        }}
         visible={visible}
       >
         <View className="pt-5">
