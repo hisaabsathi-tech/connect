@@ -8,12 +8,13 @@ import { TabScreen } from "@/components/modules/layout";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
-import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
+import type { AttendanceRecord } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
 import { useDateFilter } from "@/lib/date";
 import { haptic } from "@/lib/haptics";
 
 import { AttendanceDayCard } from "./components/attendance-day-card";
+import { AttendanceDetailSheet, hasAttendanceDetails } from "./components/attendance-detail-sheet";
 import { AttendanceHeader, AttendanceSummaryCards } from "./components/attendance-summary";
 import { AttendanceTable } from "./components/attendance-table";
 import { DateRangeFilter } from "./components/date-range-filter";
@@ -23,7 +24,7 @@ import { useAttendanceDays } from "./hooks/use-attendance-days";
 import { type DateRange, useAttendanceRange } from "./hooks/use-attendance-range";
 import { useAttendanceSummary } from "./hooks/use-attendance-summary";
 import { useHolidays } from "./hooks/use-holidays";
-import { type AttendanceDayEntry, summarizeRange } from "./lib/days";
+import { summarizeRange } from "./lib/days";
 import { saveAttendanceCsv, shareAttendanceCsv } from "./lib/export-csv";
 
 function Separator() {
@@ -61,7 +62,8 @@ export function AttendanceScreen() {
       range && !table.loading && !table.failed ? summarizeRange(table.days, range, today) : null,
     [range, table.days, table.failed, table.loading, today],
   );
-  const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
+  // The card tapped for its locations and photos.
+  const [detail, setDetail] = useState<AttendanceRecord | null>(null);
   const [holidaysOpen, setHolidaysOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -106,10 +108,6 @@ export function AttendanceScreen() {
     } finally {
       setExporting(false);
     }
-  };
-
-  const openPhoto = (day: AttendanceDayEntry, side: PhotoViewerTarget["side"]) => {
-    if (day.record) setPhoto({ date: day.date, id: day.record.id, side });
   };
 
   const header = (
@@ -214,7 +212,14 @@ export function AttendanceScreen() {
           />
         }
         renderItem={({ item }) => (
-          <AttendanceDayCard day={item} onOpenPhoto={(side) => openPhoto(item, side)} />
+          <AttendanceDayCard
+            day={item}
+            onPress={
+              item.record && hasAttendanceDetails(item.record)
+                ? () => setDetail(item.record)
+                : undefined
+            }
+          />
         )}
       />
       <HolidaySheet
@@ -223,7 +228,7 @@ export function AttendanceScreen() {
         today={today}
         visible={holidaysOpen}
       />
-      <PhotoViewer onClose={() => setPhoto(null)} target={photo} token={token} />
+      <AttendanceDetailSheet onClose={() => setDetail(null)} record={detail} token={token} />
     </TabScreen>
   );
 }
