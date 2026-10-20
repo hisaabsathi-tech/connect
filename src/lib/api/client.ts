@@ -1,3 +1,4 @@
+import { reportRejectedToken } from "@/lib/auth/session-expiry";
 import { env } from "@/lib/env";
 
 const baseUrl = `${env.apiUrl}${env.apiPrefix}`;
@@ -18,6 +19,7 @@ export async function apiRequest<T>(
   }
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
+    if (response.status === 401) reportRejectedToken(token);
     const message =
       payload && typeof payload === "object" && "message" in payload
         ? (payload as { message?: string }).message

@@ -2,7 +2,7 @@ import { View } from "react-native";
 
 import { Text } from "@/components/modules/typography";
 
-import type { Remark, RemarkVariant } from "../lib/remarks";
+import type { Remark, RemarkVariant } from "@/lib/attendance/remarks";
 
 // Light-theme values of the web app's `--order-status-*` tokens.
 const variants: Record<RemarkVariant, { background: string; color: string }> = {

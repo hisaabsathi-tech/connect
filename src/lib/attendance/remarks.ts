@@ -1,6 +1,10 @@
 import type { AttendanceSession, AttendanceSubStatus } from "@/lib/api/attendance";
 
-import type { DayKind } from "../hooks/use-day-attendance";
+export type DayKind = "past" | "today" | "future";
+
+export function dayKindOf(date: string, today: string): DayKind {
+  return date < today ? "past" : date > today ? "future" : "today";
+}
 
 /** The web app's order-status badge colours (`--order-status-*` in software/src/index.css). */
 export type RemarkVariant = "delivered" | "destructive" | "rescheduled" | "transit";
@@ -56,7 +60,7 @@ const WEEKDAYS = new Set([
  * The server names a weekly off by its weekday and a holiday by its own name.
  */
 export function dayStateWithoutRecord(kind: DayKind, offDay: string | null): DayState {
-  if (offDay && WEEKDAYS.has(offDay)) {
+  if (offDay && isWeeklyOff(offDay)) {
     const weekend = offDay === "Saturday" || offDay === "Sunday";
     return {
       label: "Weekly Off",
@@ -68,4 +72,34 @@ export function dayStateWithoutRecord(kind: DayKind, offDay: string | null): Day
   if (kind === "future") return { label: "Upcoming", tone: "plain", value: "Not Started" };
   if (kind === "today") return { label: "Today", tone: "plain", value: "Not checked in yet" };
   return { label: "Absent", tone: "absent", value: "No attendance" };
+}
+
+/** The server names a weekly off by its weekday, a holiday by its own name. */
+export function isWeeklyOff(offDay: string) {
+  return WEEKDAYS.has(offDay);
+}
+
+/**
+ * Pills on an attendance list card: Present, then Late Entry, Overtime and Missed Checkout, or
+ * Working while today's session is still open.
+ */
+export function attendedDayRemarks(record: AttendanceSession, kind: DayKind): Remark[] {
+  const remarks: Remark[] = [{ label: "Present", variant: "delivered" }];
+  if (record.subStatuses?.includes("LATE_ENTRY")) remarks.push(SUB_STATUS.LATE_ENTRY);
+  if (record.subStatuses?.includes("OVERTIME")) remarks.push(SUB_STATUS.OVERTIME);
+  if (record.checkOutAt) {
+    if (record.subStatuses?.includes("MISSED_CHECKOUT")) remarks.push(SUB_STATUS.MISSED_CHECKOUT);
+  } else
+    remarks.push(
+      kind === "today" ? { label: "Working", variant: "transit" } : SUB_STATUS.MISSED_CHECKOUT,
+    );
+  return remarks;
+}
+
+/** The one pill for a day without attendance: a holiday, a weekly off, today, or absent. */
+export function unattendedDayRemark(kind: DayKind, offDay: string | null): Remark {
+  if (offDay && isWeeklyOff(offDay)) return { label: "Weekly Off", variant: "transit" };
+  if (offDay) return { label: "Public Holiday", variant: "rescheduled" };
+  if (kind === "today") return { label: "Not checked in", variant: "transit" };
+  return { label: "Absent", variant: "destructive" };
 }

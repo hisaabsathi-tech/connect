@@ -2,21 +2,19 @@ import { Image02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { type ReactNode, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
-
+import { RemarkBadge } from "@/components/modules/remark-badge";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import type { AttendanceSession } from "@/lib/api/attendance";
-import { formatDayLabel, formatDuration, formatTime } from "@/lib/date";
-
-import type { DayKind } from "../hooks/use-day-attendance";
 import {
   checkInRemarks,
   checkOutRemarks,
+  type DayKind,
   type DayStateTone,
   dayStateWithoutRecord,
   type Remark,
-} from "../lib/remarks";
-import { RemarkBadge } from "./remark-badge";
+} from "@/lib/attendance/remarks";
+import { formatDayLabel, formatDuration, formatTime } from "@/lib/date";
 
 interface DayRecordProps {
   date: string;

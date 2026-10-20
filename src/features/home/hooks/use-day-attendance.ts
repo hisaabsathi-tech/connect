@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type AttendanceSession, fetchMyAttendanceOn } from "@/lib/api/attendance";
+import { type DayKind, dayKindOf } from "@/lib/attendance/remarks";
 
-export type DayKind = "past" | "today" | "future";
+export type { DayKind };
 
 /**
  * The signed-in member's attendance record for the calendar's selected day, plus whether the
@@ -10,7 +11,7 @@ export type DayKind = "past" | "today" | "future";
  * an upcoming holiday shows as one.
  */
 export function useDayAttendance(token: string | null, date: string, today: string) {
-  const kind: DayKind = date < today ? "past" : date > today ? "future" : "today";
+  const kind = dayKindOf(date, today);
   const [record, setRecord] = useState<AttendanceSession | null>(null);
   const [offDay, setOffDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

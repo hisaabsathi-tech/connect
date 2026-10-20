@@ -53,17 +53,63 @@ export function fetchOpenAttendance(token: string) {
   }>("/organizations/me/attendance/open", token);
 }
 
-const MY_ATTENDANCE_DAY_QUERY = `
-query ConnectorAttendanceDay($date: String!) {
-  myAttendances(from: $date, to: $date) {
+const MY_ATTENDANCE_RANGE_QUERY = `
+query ConnectorAttendanceRange($from: String!, $to: String!) {
+  myAttendances(from: $from, to: $to) {
     items {
-      id checkInAt checkOutAt checkOutKind subStatuses hasCheckInPhoto hasCheckOutPhoto
+      id date checkInAt checkOutAt checkOutKind subStatuses hasCheckInPhoto hasCheckOutPhoto
       checkInAddress checkInLatitude checkInLongitude
       checkOutAddress checkOutLatitude checkOutLongitude
     }
     nonWorkingDays { date name }
   }
 }`;
+
+const MY_NON_WORKING_DAYS_QUERY = `
+query ConnectorNonWorkingDays($from: String!, $to: String!) {
+  myAttendances(from: $from, to: $to) {
+    nonWorkingDays { date name }
+  }
+}`;
+
+/** A session read back from `myAttendances`, with the `YYYY-MM-DD` day it was checked in on. */
+export type AttendanceRecord = AttendanceSession & { date: string };
+
+/** A day the organisation's calendar marks off. */
+export type NonWorkingDay = {
+  date: string;
+  /** The holiday's name, or the weekday for a weekly off. */
+  name: string;
+};
+
+export type AttendanceRange = {
+  /** Oldest first, as the server returns them. */
+  items: AttendanceRecord[];
+  /** Holidays and weekly offs in the range; empty when attendance configuration is off. */
+  nonWorkingDays: NonWorkingDay[];
+};
+
+/** The signed-in member's sessions between two `YYYY-MM-DD` days (both included). */
+export async function fetchMyAttendanceRange(
+  token: string,
+  from: string,
+  to: string,
+): Promise<AttendanceRange> {
+  const payload = await graphqlRequest<{ myAttendances: AttendanceRange }>({
+    query: MY_ATTENDANCE_RANGE_QUERY,
+    token,
+    variables: { from, to },
+  });
+  return payload.myAttendances;
+}
+
+/** Only the organisation's holidays and weekly offs between two days. */
+export async function fetchNonWorkingDays(token: string, from: string, to: string) {
+  const payload = await graphqlRequest<{
+    myAttendances: Pick<AttendanceRange, "nonWorkingDays">;
+  }>({ query: MY_NON_WORKING_DAYS_QUERY, token, variables: { from, to } });
+  return payload.myAttendances.nonWorkingDays;
+}
 
 export type AttendanceDay = {
   /** The latest session that day, or null. */
@@ -74,13 +120,7 @@ export type AttendanceDay = {
 
 /** The signed-in member's attendance on one `YYYY-MM-DD` day, with the org's calendar for it. */
 export async function fetchMyAttendanceOn(token: string, date: string): Promise<AttendanceDay> {
-  const payload = await graphqlRequest<{
-    myAttendances: {
-      items: AttendanceSession[];
-      nonWorkingDays: { date: string; name: string }[];
-    };
-  }>({ query: MY_ATTENDANCE_DAY_QUERY, token, variables: { date } });
-  const { items, nonWorkingDays } = payload.myAttendances;
+  const { items, nonWorkingDays } = await fetchMyAttendanceRange(token, date, date);
   return {
     offDay: nonWorkingDays.find((day) => day.date === date)?.name ?? null,
     record: items.at(-1) ?? null,

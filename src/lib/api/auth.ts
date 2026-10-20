@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/client";
+import { reportRejectedToken } from "@/lib/auth/session-expiry";
 import { env } from "@/lib/env";
 
 const AUTH_TOKEN_HEADER = "set-auth-token";
@@ -59,7 +60,10 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
       payload = { message: raw };
     }
   }
-  if (!response.ok) throw new AuthApiError(messageFrom(payload), response.status);
+  if (!response.ok) {
+    if (response.status === 401) reportRejectedToken(token);
+    throw new AuthApiError(messageFrom(payload), response.status);
+  }
 
   return { data: payload as T, token: response.headers.get(AUTH_TOKEN_HEADER) };
 }
@@ -123,6 +127,9 @@ export const authApi = {
       { body: JSON.stringify({ code, trustDevice }), method: "POST" },
       token,
     ),
+  /** Ends every session of the user, this one included. */
+  revokeSessions: (token: string) =>
+    request<unknown>("/revoke-sessions", { body: JSON.stringify({}), method: "POST" }, token),
   signOut: (token: string) =>
     request<unknown>("/sign-out", { body: JSON.stringify({}), method: "POST" }, token),
 };

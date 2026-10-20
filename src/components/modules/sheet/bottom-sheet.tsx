@@ -32,6 +32,11 @@ interface BottomSheetProps {
   onClosed?: () => void;
   /** False while work is running (e.g. an upload), so nothing dismisses it mid-way. */
   dismissible?: boolean;
+  /**
+   * Only the handle at the top drags the sheet down, so content that scrolls (a long list)
+   * keeps its own vertical drags.
+   */
+  dragHandleOnly?: boolean;
 }
 
 /**
@@ -41,6 +46,7 @@ interface BottomSheetProps {
 export function BottomSheet({
   children,
   dismissible = true,
+  dragHandleOnly = false,
   onClose,
   onClosed,
   visible,
@@ -105,6 +111,26 @@ export function BottomSheet({
     height.value = event.nativeEvent.layout.height;
   };
 
+  const handle = <View className="h-1 w-10 self-center bg-border" />;
+  const sheet = (
+    <Animated.View onLayout={onSheetLayout} style={sheetStyle}>
+      <View
+        className="border-border border-t bg-card px-5 pt-3"
+        style={{ elevation: 12, paddingBottom: insets.bottom + 20 }}
+      >
+        {dragHandleOnly ? (
+          <GestureDetector gesture={pull}>
+            {/* A strip wider and taller than the pill itself, so it is easy to grab. */}
+            <View className="-mx-5 -mt-3 pt-3 pb-2">{handle}</View>
+          </GestureDetector>
+        ) : (
+          handle
+        )}
+        {children}
+      </View>
+    </Animated.View>
+  );
+
   return (
     <Modal
       animationType="none"
@@ -132,17 +158,7 @@ export function BottomSheet({
               onPress={requestClose}
             />
           </Animated.View>
-          <GestureDetector gesture={pull}>
-            <Animated.View onLayout={onSheetLayout} style={sheetStyle}>
-              <View
-                className="border-border border-t bg-card px-5 pt-3"
-                style={{ elevation: 12, paddingBottom: insets.bottom + 20 }}
-              >
-                <View className="h-1 w-10 self-center bg-border" />
-                {children}
-              </View>
-            </Animated.View>
-          </GestureDetector>
+          {dragHandleOnly ? sheet : <GestureDetector gesture={pull}>{sheet}</GestureDetector>}
         </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>

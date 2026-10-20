@@ -6,10 +6,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { AppState } from "react-native";
 
-import { authApi } from "@/lib/api/auth";
+import { useToast } from "@/components/ui/toast";
+import { AuthApiError, authApi, type SessionPayload } from "@/lib/api/auth";
+import { onRejectedToken } from "@/lib/auth/session-expiry";
 
 const TOKEN_KEY = "hisaabsathi.connector.auth-token";
 
@@ -17,14 +21,46 @@ type AuthSession = {
   isReady: boolean;
   token: string | null;
   completeSignIn: (token: string | null | undefined) => Promise<void>;
+  /** Signs out on the server too, then locally. */
   signOut: () => Promise<void>;
+  /**
+   * Forgets the session on this phone only (the server has already ended it), which takes the
+   * app back to sign in. `notice` explains why in a toast.
+   */
+  endSession: (notice?: { title: string; description: string }) => Promise<void>;
 };
 
 const AuthSessionContext = createContext<AuthSession | null>(null);
 
+/** A session the app can use: valid and inside an organisation (every API call needs one). */
+function isUsable(payload: SessionPayload) {
+  return Boolean(payload?.session?.activeOrganizationId);
+}
+
+/** No answer from the server (offline, timeout): not a reason to end the session. */
+function isUnreachable(error: unknown) {
+  return error instanceof AuthApiError && error.status === 0;
+}
+
 export function AuthSessionProvider({ children }: PropsWithChildren) {
+  const toast = useToast();
   const [isReady, setReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
+  // The latest token for callbacks registered once (rejected-token handler, app-state check).
+  const current = useRef<string | null>(null);
+  useEffect(() => {
+    current.current = token;
+  }, [token]);
+
+  const endSession = useCallback(
+    async (notice?: { title: string; description: string }) => {
+      current.current = null;
+      setToken(null);
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      if (notice) toast.show(notice);
+    },
+    [toast],
+  );
 
   useEffect(() => {
     let active = true;
@@ -33,17 +69,19 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
       if (!stored) return;
       try {
         const result = await authApi.getSession(stored);
-        // A session without an organisation can't use the app (every API call needs one), so
-        // it is dropped and sign-in asks for the organisation again.
-        if (!result.data?.session?.activeOrganizationId) {
+        // Revoked, expired, or without an organisation: sign-in starts over.
+        if (!isUsable(result.data)) {
           await SecureStore.deleteItemAsync(TOKEN_KEY);
           return;
         }
         const refreshed = result.token ?? stored;
         if (active) setToken(refreshed);
         if (refreshed !== stored) await SecureStore.setItemAsync(TOKEN_KEY, refreshed);
-      } catch {
-        await SecureStore.deleteItemAsync(TOKEN_KEY);
+      } catch (error) {
+        // Offline at launch: keep the session; the next request or foreground check verifies it.
+        if (isUnreachable(error)) {
+          if (active) setToken(stored);
+        } else await SecureStore.deleteItemAsync(TOKEN_KEY);
       }
     })().finally(() => {
       if (active) setReady(true);
@@ -53,27 +91,64 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  // Any request the server rejects with this session's token (signed out elsewhere, password
+  // changed, expired) ends it here, so no screen is left stuck with failing requests.
+  useEffect(() => {
+    onRejectedToken((rejected) => {
+      if (rejected !== current.current) return;
+      void endSession({
+        description: "Please sign in again to continue.",
+        title: "Your session has ended",
+      });
+    });
+    return () => onRejectedToken(null);
+  }, [endSession]);
+
+  // Back in the foreground: confirm the session still exists, even if no screen asks the server.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      const active = current.current;
+      if (state !== "active" || !active) return;
+      authApi
+        .getSession(active)
+        .then((result) => {
+          if (current.current === active && !isUsable(result.data))
+            void endSession({
+              description: "Please sign in again to continue.",
+              title: "Your session has ended",
+            });
+        })
+        // A 401 is reported through the rejected-token handler; offline keeps the session.
+        .catch(() => undefined);
+    });
+    return () => subscription.remove();
+  }, [endSession]);
+
   const completeSignIn = useCallback(async (nextToken: string | null | undefined) => {
     if (!nextToken) throw new Error("The server did not return an authentication token.");
     await SecureStore.setItemAsync(TOKEN_KEY, nextToken);
+    current.current = nextToken;
     setToken(nextToken);
   }, []);
 
   const signOut = useCallback(async () => {
-    if (token) {
+    const active = current.current;
+    // Forget it first, so the sign-out request's own answer can't trigger "session ended".
+    current.current = null;
+    if (active) {
       try {
-        await authApi.signOut(token);
+        await authApi.signOut(active);
       } catch {
         // Removing the local session is still the safest outcome.
       }
     }
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     setToken(null);
-  }, [token]);
+  }, []);
 
   const value = useMemo(
-    () => ({ isReady, token, completeSignIn, signOut }),
-    [completeSignIn, isReady, signOut, token],
+    () => ({ completeSignIn, endSession, isReady, signOut, token }),
+    [completeSignIn, endSession, isReady, signOut, token],
   );
   return <AuthSessionContext value={value}>{children}</AuthSessionContext>;
 }

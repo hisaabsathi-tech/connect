@@ -34,3 +34,16 @@ export function saveAuthFlow(flow: SavedAuthFlow) {
 export function clearAuthFlow() {
   return SecureStore.deleteItemAsync(FLOW_KEY).catch(() => undefined);
 }
+
+/** Opens sign-in at the first step with this email filled in, e.g. after a password change. */
+export function rememberSignInEmail(email: string) {
+  return saveAuthFlow({
+    challengeToken: null,
+    code: "",
+    email,
+    orgToken: null,
+    organizationId: null,
+    step: "sign-in",
+    trustDevice: false,
+  });
+}

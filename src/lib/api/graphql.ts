@@ -1,3 +1,4 @@
+import { reportRejectedToken } from "@/lib/auth/session-expiry";
 import { env } from "@/lib/env";
 
 export class GraphqlApiError extends Error {
@@ -12,7 +13,10 @@ export class GraphqlApiError extends Error {
 
 interface GraphqlResponse<T> {
   data?: T;
-  errors?: Array<{ message?: string }>;
+  errors?: Array<{
+    message?: string;
+    extensions?: { code?: string; http?: { status?: number } };
+  }>;
 }
 
 export const graphqlUrl = `${env.apiUrl}${env.apiPrefix}${env.graphqlPath}`;
@@ -43,6 +47,16 @@ export async function graphqlRequest<T>(options: {
   }
 
   const payload = (await response.json().catch(() => null)) as GraphqlResponse<T> | null;
+  // The server reports a revoked or expired session as HTTP 401 or as a 401 GraphQL error.
+  const unauthorized =
+    response.status === 401 ||
+    payload?.errors?.some(
+      (error) =>
+        error.extensions?.http?.status === 401 ||
+        error.extensions?.code === "UNAUTHORIZED" ||
+        error.extensions?.code === "UNAUTHENTICATED",
+    );
+  if (unauthorized) reportRejectedToken(options.token);
   if (!response.ok) {
     throw new GraphqlApiError(
       payload?.errors?.[0]?.message || "GraphQL request failed.",

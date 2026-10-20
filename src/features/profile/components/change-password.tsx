@@ -9,9 +9,11 @@ import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { rememberSignInEmail } from "@/features/auth";
 import { OTP_TTL_MS, RESEND_COOLDOWN_MS, STRONG_PASSWORD } from "@/features/auth/lib/constants";
 import { useCountdown } from "@/hooks/use-countdown";
 import { authApi } from "@/lib/api/auth";
+import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 
 import {
@@ -25,10 +27,12 @@ type PasswordStep = "request" | "code" | "password";
 /**
  * Password reset initiated from a signed-in person's profile. The step it reached is kept when
  * the sheet is closed and across app restarts, until the password is updated or the emailed
- * code expires; only then does it start over at "send code".
+ * code expires; only then does it start over at "send code". A new password signs the account
+ * out everywhere, this phone included, and opens sign-in with the email filled in.
  */
 export function ChangePassword({ email }: { email: string | null | undefined }) {
   const toast = useToast();
+  const { endSession, token } = useAuthSession();
   const { seconds: resendSeconds, start: startResend } = useCountdown();
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState<PasswordStep>("request");
@@ -147,7 +151,7 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
     try {
       await authApi.resetPassword(email, code, password);
       await clearChangePassword();
-      toast.success("Password updated", "Your new password is ready to use.");
+      await rememberSignInEmail(email);
       completed.current = true;
       setVisible(false);
     } catch (error) {
@@ -190,6 +194,15 @@ export function ChangePassword({ email }: { email: string | null | undefined }) 
           if (!completed.current) return;
           completed.current = false;
           startOver();
+          // Forget this phone's session first, so the revoke call's own 401 isn't taken for an
+          // unexpected sign-out; then end every session of the account on the server.
+          const signedIn = token;
+          void endSession({
+            description: "Sign in again with your new password.",
+            title: "Password updated",
+          }).then(() => {
+            if (signedIn) void authApi.revokeSessions(signedIn).catch(() => undefined);
+          });
         }}
         visible={visible}
       >
