@@ -1,3 +1,4 @@
+import { apiRequest } from "@/lib/api/client";
 import { env } from "@/lib/env";
 
 const AUTH_TOKEN_HEADER = "set-auth-token";
@@ -17,6 +18,11 @@ export class AuthApiError extends Error {
 }
 
 export type SignInResult = { token?: string; twoFactorRedirect?: boolean };
+
+/** Better Auth's session payload; null when the token is no longer valid. */
+export type SessionPayload = { session?: { activeOrganizationId?: string | null } } | null;
+
+export type AuthOrganization = { id: string; name: string; slug: string; logo?: string | null };
 
 function messageFrom(payload: unknown) {
   if (payload && typeof payload === "object") {
@@ -59,7 +65,16 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
 }
 
 export const authApi = {
-  getSession: (token: string) => request<unknown>("/get-session", { method: "GET" }, token),
+  getSession: (token: string) => request<SessionPayload>("/get-session", { method: "GET" }, token),
+  /** Organisations the user belongs to, with `logo` as a view URL; works before one is active. */
+  listOrganizations: (token: string) =>
+    apiRequest<AuthOrganization[]>("/organizations/me/memberships", token),
+  setActiveOrganization: (organizationId: string, token: string) =>
+    request<unknown>(
+      "/organization/set-active",
+      { body: JSON.stringify({ organizationId }), method: "POST" },
+      token,
+    ),
   signIn: (email: string, password: string) =>
     request<SignInResult>("/sign-in/email", {
       body: JSON.stringify({ email, password, rememberMe: true }),

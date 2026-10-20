@@ -30,3 +30,23 @@ export function formatDuration(fromIso: string, toIso: string | null, now = Date
   const hours = Math.floor(seconds / 3600);
   return `${twoDigits(hours)}:${twoDigits(Math.floor((seconds % 3600) / 60))}:${twoDigits(seconds % 60)}`;
 }
+
+const dayLabelFormatter = new Intl.DateTimeFormat("en-IN", {
+  month: "short",
+  timeZone: "UTC",
+  year: "numeric",
+});
+
+function ordinal(day: number) {
+  if (day % 100 >= 11 && day % 100 <= 13) return `${day}th`;
+  return `${day}${["th", "st", "nd", "rd"][day % 10] ?? "th"}`;
+}
+
+/** "20th Oct, 2026" for a `YYYY-MM-DD` calendar day. */
+export function formatDayLabel(iso: string) {
+  const date = new Date(`${iso}T00:00:00Z`);
+  const parts = dayLabelFormatter.formatToParts(date);
+  const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const year = parts.find((part) => part.type === "year")?.value ?? "";
+  return `${ordinal(date.getUTCDate())} ${month}, ${year}`;
+}

@@ -5,3 +5,5 @@ export const MIN_PASSWORD_LENGTH = 8;
 export const OTP_LENGTH = 6;
 export const RESEND_COOLDOWN_MS = 60_000;
 export const CHALLENGE_EXPIRED_MESSAGE = "Your sign-in challenge expired. Please sign in again.";
+export const NO_ORGANIZATION_MESSAGE =
+  "You are not assigned to any organization. Please contact your administrator.";

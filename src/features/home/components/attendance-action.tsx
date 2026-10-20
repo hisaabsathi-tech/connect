@@ -1,37 +1,52 @@
-import { View } from "react-native";
+import { formatDayLabel } from "@/lib/date";
 
-import { Text } from "@/components/modules/typography";
-
+import type { DayKind } from "../hooks/use-day-attendance";
 import { SwipeAttendance } from "./swipe-attendance";
 
 interface AttendanceActionProps {
   attendedToday: boolean;
   isCheckedIn: boolean;
   busy: boolean;
-  canSubmit: boolean;
+  /** Today's status has loaded. */
+  ready: boolean;
+  /** The live position is known. */
+  located: boolean;
+  /** The calendar's selected day; the swipe only ever acts on today. */
+  date: string;
+  kind: DayKind;
   onSubmit: () => void;
 }
 
-/** Swipe to check in or out, or a done banner once today's attendance is closed. */
-export function AttendanceAction({
+/** Why the swipe can't be used right now, or null when it can. */
+function blockedLabel({
   attendedToday,
+  date,
   isCheckedIn,
-  busy,
-  canSubmit,
-  onSubmit,
-}: AttendanceActionProps) {
-  if (attendedToday && !isCheckedIn)
-    return (
-      <View className="h-[52px] items-center justify-center bg-[#EDF8F0]">
-        <Text className="font-medium text-success">Attendance completed for today</Text>
-      </View>
-    );
+  kind,
+  located,
+  ready,
+}: Omit<AttendanceActionProps, "busy" | "onSubmit">) {
+  if (kind === "future") return `Check-in opens on ${formatDayLabel(date)}`;
+  if (kind === "past") return `Check-in closed for ${formatDayLabel(date)}`;
+  if (!ready) return "Loading today's attendance";
+  if (attendedToday && !isCheckedIn) return "Attendance completed for today";
+  if (!located) return "Waiting for your location";
+  return null;
+}
+
+/**
+ * Swipe to check in or out. On any other day than today, once today is done, or while the
+ * status or location is still loading, the button stays disabled and says why.
+ */
+export function AttendanceAction({ busy, onSubmit, ...state }: AttendanceActionProps) {
+  const blocked = blockedLabel(state);
   return (
     <SwipeAttendance
       action={onSubmit}
       busy={busy}
-      disabled={!canSubmit}
-      mode={isCheckedIn ? "out" : "in"}
+      disabled={Boolean(blocked)}
+      label={blocked ?? undefined}
+      mode={state.kind === "today" && state.isCheckedIn ? "out" : "in"}
     />
   );
 }

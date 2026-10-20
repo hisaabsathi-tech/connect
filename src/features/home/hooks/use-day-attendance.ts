@@ -5,12 +5,14 @@ import { type AttendanceSession, fetchMyAttendanceOn } from "@/lib/api/attendanc
 export type DayKind = "past" | "today" | "future";
 
 /**
- * The signed-in member's attendance record for the calendar's selected day, from the
- * `myAttendances` date-range query. Future days have no record, so nothing is fetched.
+ * The signed-in member's attendance record for the calendar's selected day, plus whether the
+ * organisation's calendar marks it off (holiday or weekly off). Future days are fetched too, so
+ * an upcoming holiday shows as one.
  */
 export function useDayAttendance(token: string | null, date: string, today: string) {
   const kind: DayKind = date < today ? "past" : date > today ? "future" : "today";
   const [record, setRecord] = useState<AttendanceSession | null>(null);
+  const [offDay, setOffDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   // Only the latest request may update state, so quickly tapping through days can't show an
@@ -20,28 +22,30 @@ export function useDayAttendance(token: string | null, date: string, today: stri
   const load = useCallback(async () => {
     const request = ++latestRequest.current;
     setFailed(false);
-    if (!token || kind === "future") {
-      setRecord(null);
+    // Clear the previous day at once; its record must not show under the new date.
+    setRecord(null);
+    setOffDay(null);
+    if (!token) {
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
       const next = await fetchMyAttendanceOn(token, date);
-      if (request === latestRequest.current) setRecord(next);
-    } catch {
       if (request === latestRequest.current) {
-        setRecord(null);
-        setFailed(true);
+        setRecord(next.record);
+        setOffDay(next.offDay);
       }
+    } catch {
+      if (request === latestRequest.current) setFailed(true);
     } finally {
       if (request === latestRequest.current) setLoading(false);
     }
-  }, [date, kind, token]);
+  }, [date, token]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  return { failed, kind, loading, record, reload: load };
+  return { failed, kind, loading, offDay, record, reload: load };
 }

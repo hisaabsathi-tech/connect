@@ -4,6 +4,9 @@ import type { Coordinates } from "@/lib/maps/geo";
 
 export type Point = Coordinates & { address?: string | null };
 
+/** Server-computed remarks from the organisation's working hours (same as the web roster). */
+export type AttendanceSubStatus = "LATE_ENTRY" | "MISSED_CHECKOUT" | "OVERTIME";
+
 export type AttendanceSession = {
   id: string;
   checkInAt: string;
@@ -16,6 +19,8 @@ export type AttendanceSession = {
   checkOutLatitude?: number | null;
   checkOutLongitude?: number | null;
   checkOutAddress?: string | null;
+  /** Only on days read back from `myAttendances`. */
+  subStatuses?: AttendanceSubStatus[];
 };
 
 export function checkInPointOf(session: AttendanceSession | null): Point | null {
@@ -47,21 +52,34 @@ const MY_ATTENDANCE_DAY_QUERY = `
 query ConnectorAttendanceDay($date: String!) {
   myAttendances(from: $date, to: $date) {
     items {
-      id checkInAt checkOutAt checkOutKind
+      id checkInAt checkOutAt checkOutKind subStatuses
       checkInAddress checkInLatitude checkInLongitude
       checkOutAddress checkOutLatitude checkOutLongitude
     }
+    nonWorkingDays { date name }
   }
 }`;
 
-/** The signed-in member's attendance on one `YYYY-MM-DD` day (the latest, if several), or null. */
-export async function fetchMyAttendanceOn(token: string, date: string) {
-  const payload = await graphqlRequest<{ myAttendances: { items: AttendanceSession[] } }>({
-    query: MY_ATTENDANCE_DAY_QUERY,
-    token,
-    variables: { date },
-  });
-  return payload.myAttendances.items.at(-1) ?? null;
+export type AttendanceDay = {
+  /** The latest session that day, or null. */
+  record: AttendanceSession | null;
+  /** Holiday name or weekday when the organisation's calendar marks the day off, else null. */
+  offDay: string | null;
+};
+
+/** The signed-in member's attendance on one `YYYY-MM-DD` day, with the org's calendar for it. */
+export async function fetchMyAttendanceOn(token: string, date: string): Promise<AttendanceDay> {
+  const payload = await graphqlRequest<{
+    myAttendances: {
+      items: AttendanceSession[];
+      nonWorkingDays: { date: string; name: string }[];
+    };
+  }>({ query: MY_ATTENDANCE_DAY_QUERY, token, variables: { date } });
+  const { items, nonWorkingDays } = payload.myAttendances;
+  return {
+    offDay: nonWorkingDays.find((day) => day.date === date)?.name ?? null,
+    record: items.at(-1) ?? null,
+  };
 }
 
 export function checkIn(token: string, point: Point) {

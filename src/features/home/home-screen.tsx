@@ -79,16 +79,26 @@ export function HomeScreen() {
           organization={home.organization}
         />
         <DateStrip />
-        <DayRecord failed={day.failed} kind={day.kind} loading={day.loading} record={day.record} />
+        <DayRecord
+          date={selectedDate}
+          failed={day.failed}
+          kind={day.kind}
+          loading={day.loading}
+          offDay={day.offDay}
+          record={day.record}
+        />
       </ScrollView>
       {/* Pinned above the navigation; anything added below the calendar scrolls behind it. */}
       <View className="bg-background px-5 py-3">
         <AttendanceAction
           attendedToday={home.attendedToday}
           busy={home.busy}
-          canSubmit={Boolean(live) && home.statusLoaded}
+          date={selectedDate}
           isCheckedIn={home.isCheckedIn}
+          kind={day.kind}
+          located={Boolean(live)}
           onSubmit={submit}
+          ready={home.statusLoaded}
         />
       </View>
     </TabScreen>

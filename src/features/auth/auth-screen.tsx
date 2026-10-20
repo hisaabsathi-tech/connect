@@ -12,6 +12,7 @@ import { useAuthFlow } from "./hooks/use-auth-flow";
 import type { AuthStepProps } from "./lib/types";
 import { RequestCodeStep } from "./screens/request-code";
 import { ResetPasswordStep } from "./screens/reset-password";
+import { SelectOrgStep } from "./screens/select-org";
 import { SignInStep } from "./screens/sign-in";
 import { TwoFactorStep } from "./screens/two-factor";
 import { VerifyCodeStep } from "./screens/verify-code";
@@ -34,6 +35,8 @@ function AuthStepView(props: AuthStepProps) {
       return <ResetPasswordStep {...props} />;
     case "two-fa":
       return <TwoFactorStep {...props} />;
+    case "select-org":
+      return <SelectOrgStep {...props} />;
   }
 }
 
@@ -53,7 +56,7 @@ export function AuthScreen() {
       formHeight + ILLUSTRATION_HEIGHT + ILLUSTRATION_GAP <= visibleHeight);
 
   // Don't mark startup ready yet: the root loader stays up until real content lays out.
-  if (!isReady) return <Loader fullPage />;
+  if (!(isReady && flow.restored)) return <Loader fullPage />;
   if (sessionToken)
     return (
       <>

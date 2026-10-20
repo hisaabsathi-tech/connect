@@ -33,6 +33,12 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
       if (!stored) return;
       try {
         const result = await authApi.getSession(stored);
+        // A session without an organisation can't use the app (every API call needs one), so
+        // it is dropped and sign-in asks for the organisation again.
+        if (!result.data?.session?.activeOrganizationId) {
+          await SecureStore.deleteItemAsync(TOKEN_KEY);
+          return;
+        }
         const refreshed = result.token ?? stored;
         if (active) setToken(refreshed);
         if (refreshed !== stored) await SecureStore.setItemAsync(TOKEN_KEY, refreshed);

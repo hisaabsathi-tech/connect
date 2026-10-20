@@ -29,10 +29,18 @@ interface SwipeAttendanceProps {
   action: () => void;
   busy: boolean;
   disabled?: boolean;
+  /** Replaces "Swipe to Check In/Out", e.g. to say why the button is disabled. */
+  label?: string;
   mode: "in" | "out";
 }
 
-export function SwipeAttendance({ action, busy, disabled, mode }: SwipeAttendanceProps) {
+export function SwipeAttendance({
+  action,
+  busy,
+  disabled,
+  label: override,
+  mode,
+}: SwipeAttendanceProps) {
   const x = useRef(new Animated.Value(0)).current;
   const nudge = useRef(new Animated.Value(0)).current;
   const [complete, setComplete] = useState(false);
@@ -46,7 +54,7 @@ export function SwipeAttendance({ action, busy, disabled, mode }: SwipeAttendanc
     latest.current = { action, busy, disabled, travel };
   }, [action, busy, disabled, travel]);
   const accent = mode === "in" ? colors.primary : colors.checkOut;
-  const label = mode === "in" ? "Swipe to Check In" : "Swipe to Check Out";
+  const label = override ?? (mode === "in" ? "Swipe to Check In" : "Swipe to Check Out");
   const reset = () => Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
   useEffect(() => {
     if (!busy && complete) {
@@ -140,10 +148,11 @@ export function SwipeAttendance({ action, busy, disabled, mode }: SwipeAttendanc
       style={{ backgroundColor: accent, paddingHorizontal: INSET }}
     >
       <Animated.View
-        className="absolute inset-0 items-center justify-center"
-        style={{ opacity: labelOpacity }}
+        className="absolute inset-y-0 right-0 items-center justify-center px-2"
+        // Centred in the track to the right of the thumb, so long labels never run under it.
+        style={{ left: THUMB + INSET, opacity: labelOpacity }}
       >
-        <Text className="text-base text-white">
+        <Text className="text-base text-white" numberOfLines={1}>
           {busy ? (mode === "in" ? "Checking you in" : "Checking you out") : label}
         </Text>
       </Animated.View>

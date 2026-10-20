@@ -10,7 +10,8 @@ export type AuthStep =
   | "verify-reset"
   | "reset"
   | "two-fa"
-  | "verify-two-fa";
+  | "verify-two-fa"
+  | "select-org";
 
 /** What a one-time code is being sent for. */
 export type CodePurpose = "sign-in" | "reset" | "two-fa";
