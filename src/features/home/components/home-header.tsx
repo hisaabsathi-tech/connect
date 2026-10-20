@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import type { PropsWithChildren } from "react";
 import { Pressable, View } from "react-native";
 
 import { Avatar } from "@/components/modules/avatar";
@@ -23,27 +24,33 @@ function quoteForToday() {
   return quotes[dayNumber % quotes.length];
 }
 
-/** Profile entry point with a daily work-focused message. */
-export function HomeHeader({ identity }: { identity: HomeIdentity | null }) {
+/** Profile entry point with a daily work-focused message; `children` are the top-right buttons. */
+export function HomeHeader({
+  children,
+  identity,
+}: PropsWithChildren<{ identity: HomeIdentity | null }>) {
   const router = useRouter();
   const name = identity?.name?.trim().split(/\s+/)[0] || "there";
   return (
-    <Pressable
-      accessibilityHint="Opens your profile"
-      accessibilityRole="button"
-      className="mb-3 flex-row items-center gap-3"
-      onPress={() => {
-        haptic("light");
-        router.push("/profile");
-      }}
-    >
-      <Avatar image={identity?.image} name={identity?.name} round seed={identity?.id} size={52} />
-      <View className="flex-1">
-        <Text className="font-semibold text-lg text-foreground">Hi, {name}</Text>
-        <Text className="mt-0.5 font-semibold text-muted-foreground text-sm">
-          {quoteForToday()}
-        </Text>
-      </View>
-    </Pressable>
+    <View className="mb-3 flex-row items-center gap-3">
+      <Pressable
+        accessibilityHint="Opens your profile"
+        accessibilityRole="button"
+        className="flex-1 flex-row items-center gap-3"
+        onPress={() => {
+          haptic("light");
+          router.push("/profile");
+        }}
+      >
+        <Avatar image={identity?.image} name={identity?.name} round seed={identity?.id} size={52} />
+        <View className="flex-1">
+          <Text className="font-semibold text-lg text-foreground">Hi, {name}</Text>
+          <Text className="mt-0.5 font-semibold text-muted-foreground text-sm">
+            {quoteForToday()}
+          </Text>
+        </View>
+      </Pressable>
+      {children ? <View className="flex-row items-center gap-2">{children}</View> : null}
+    </View>
   );
 }

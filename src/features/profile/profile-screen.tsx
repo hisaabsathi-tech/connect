@@ -9,6 +9,7 @@ import { colors } from "@/config/colors";
 import { useAuthSession } from "@/lib/auth/session";
 
 import { BrandFooter } from "./components/brand-footer";
+import { ChangePassword } from "./components/change-password";
 import { LogoutButton } from "./components/logout-button";
 
 import { ProfileCard } from "./components/profile-card";
@@ -41,7 +42,7 @@ export function ProfileScreen() {
             />
           }
         >
-          <Text className="text-2xl font-semibold leading-7 text-foreground">Profile</Text>
+          <Text className="text-2xl font-semibold leading-8 text-foreground">Profile</Text>
           <Text className="mt-0.5 text-sm text-muted-foreground">Manage your profile details</Text>
           <View className="flex-1 justify-between pt-2">
             <View>
@@ -51,6 +52,7 @@ export function ProfileScreen() {
                 profile={profile}
               />
               <ProfileDetails onSave={save} profile={profile} saving={saving} token={token} />
+              <ChangePassword email={profile?.email} />
               <LogoutButton />
             </View>
             <BrandFooter />

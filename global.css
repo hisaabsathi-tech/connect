@@ -28,6 +28,8 @@
   --destructive-foreground: #f9fbff;
   --success: #16a34a;
   --success-foreground: #f9fbff;
+  /* Soft green behind success marks, e.g. the live location indicator. */
+  --success-soft: #edf9f1;
   /* Swipe to Check Out. */
   --check-out: #ff6b6b;
   --tertiary: #f6a221;
@@ -63,6 +65,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
   --color-check-out: var(--check-out);
   --color-tertiary: var(--tertiary);
   --color-tertiary-foreground: var(--tertiary-foreground);

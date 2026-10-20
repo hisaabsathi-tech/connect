@@ -11,6 +11,8 @@ export interface TextFieldProps {
   value: string;
   onChangeText: (value: string) => void;
   secure?: boolean;
+  /** Show a secure value initially; useful when users need to review a newly chosen password. */
+  visibleByDefault?: boolean;
   type?: "default" | "email-address" | "number-pad";
   complete?: "email" | "password" | "one-time-code";
   onFocusField?: (input: TextInput | null) => void;
@@ -32,6 +34,7 @@ export function TextField({
   value,
   onChangeText,
   secure,
+  visibleByDefault = false,
   type = "default",
   complete,
   onFocusField,
@@ -39,7 +42,7 @@ export function TextField({
 }: TextFieldProps) {
   const inputRef = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
-  const [showValue, setShowValue] = useState(false);
+  const [showValue, setShowValue] = useState(visibleByDefault);
   const numeric = type === "number-pad";
   const hasClearButton = type === "email-address" && Boolean(value);
   return (

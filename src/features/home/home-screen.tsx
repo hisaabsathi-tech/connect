@@ -5,7 +5,7 @@ import { TabScreen } from "@/components/modules/layout";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
-import { useLiveLocation } from "@/hooks/use-live-location";
+import { type LiveLocation, useLiveLocation } from "@/hooks/use-live-location";
 import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
 import { formatDuration, formatTime, useDateFilter } from "@/lib/date";
@@ -15,6 +15,7 @@ import { DateStrip } from "./components/date-strip";
 import { DayRecord } from "./components/day-record";
 import { HomeHeader } from "./components/home-header";
 import { HomeMap } from "./components/home-map";
+import { LocationIndicator, type LocationIndicatorState } from "./components/location-indicator";
 import { useDayAttendance } from "./hooks/use-day-attendance";
 import { useHomeAttendance } from "./hooks/use-home-attendance";
 
@@ -23,10 +24,20 @@ import { useHomeAttendance } from "./hooks/use-home-attendance";
 const MAP_MIN_HEIGHT = 200;
 const MAP_MAX_HEIGHT = 360;
 
+/** What the header's location button shows; the one place that decides when each state appears. */
+function locationIndicatorState({
+  locating,
+  status,
+}: Pick<LiveLocation, "locating" | "status">): LocationIndicatorState {
+  if (status === "denied" || status === "blocked" || status === "disabled") return "off";
+  return locating || status === "checking" ? "active" : "on";
+}
+
 /** Signed-in only: the tabs layout redirects to /auth before this renders without a session. */
 export function HomeScreen() {
   const { token } = useAuthSession();
-  const live = useLiveLocation(Boolean(token));
+  const location = useLiveLocation(Boolean(token));
+  const live = location.location;
   const home = useHomeAttendance(token, live);
   const { resetToToday, selectedDate, today } = useDateFilter();
   const toast = useToast();
@@ -54,6 +65,8 @@ export function HomeScreen() {
   };
 
   const submit = async () => {
+    // Location may have been switched off since it was last checked; this asks again if so.
+    if (!(await location.ensure())) return;
     const session = await home.submit();
     if (!session) return;
     // Show today's updated record, whichever day the calendar was on.
@@ -90,7 +103,9 @@ export function HomeScreen() {
           />
         }
       >
-        <HomeHeader identity={home.identity} />
+        <HomeHeader identity={home.identity}>
+          <LocationIndicator onPress={location.resolve} state={locationIndicatorState(location)} />
+        </HomeHeader>
         <HomeMap
           checkIn={dayCheckIn}
           checkOut={dayCheckOut}
@@ -118,6 +133,8 @@ export function HomeScreen() {
         isCheckedIn={home.isCheckedIn}
         kind={day.kind}
         located={Boolean(live)}
+        location={location.status}
+        onFixLocation={location.resolve}
         onSubmit={submit}
         ready={home.statusLoaded}
       />

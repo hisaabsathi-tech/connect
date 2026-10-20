@@ -1,5 +1,12 @@
 import { type PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
-import { type LayoutChangeEvent, Modal, Pressable, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  type LayoutChangeEvent,
+  Modal,
+  Platform,
+  Pressable,
+  View,
+} from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -111,27 +118,32 @@ export function BottomSheet({
       transparent
       visible={mounted}
     >
-      <GestureHandlerRootView style={{ flex: 1, justifyContent: "flex-end" }}>
-        <Animated.View
-          style={[{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }, backdropStyle]}
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1, justifyContent: "flex-end" }}
         >
-          <Pressable
-            accessibilityLabel="Close"
-            className="flex-1 bg-[#161950]/50"
-            onPress={requestClose}
-          />
-        </Animated.View>
-        <GestureDetector gesture={pull}>
-          <Animated.View onLayout={onSheetLayout} style={sheetStyle}>
-            <View
-              className="border-border border-t bg-card px-5 pt-3"
-              style={{ elevation: 12, paddingBottom: insets.bottom + 20 }}
-            >
-              <View className="h-1 w-10 self-center bg-border" />
-              {children}
-            </View>
+          <Animated.View
+            style={[{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }, backdropStyle]}
+          >
+            <Pressable
+              accessibilityLabel="Close"
+              className="flex-1 bg-[#161950]/50"
+              onPress={requestClose}
+            />
           </Animated.View>
-        </GestureDetector>
+          <GestureDetector gesture={pull}>
+            <Animated.View onLayout={onSheetLayout} style={sheetStyle}>
+              <View
+                className="border-border border-t bg-card px-5 pt-3"
+                style={{ elevation: 12, paddingBottom: insets.bottom + 20 }}
+              >
+                <View className="h-1 w-10 self-center bg-border" />
+                {children}
+              </View>
+            </Animated.View>
+          </GestureDetector>
+        </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
   );

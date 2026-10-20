@@ -4,6 +4,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import {
   Camera,
   type CameraRef,
+  LogManager,
   Map,
   Marker,
   type StyleSpecification,
@@ -76,6 +77,19 @@ if (olaMapsApiKey) {
     name: "api_key",
     value: olaMapsApiKey,
   });
+}
+
+// A camera command that races the map mounting or unmounting (e.g. the pins change right as the
+// map appears) finds no native view: the command just doesn't apply. Native logs that as an error
+// on top of the rejected promise, so drop those log lines; real map errors still show.
+LogManager.onLog(({ tag }) => tag === "ReactTagResolver");
+
+/**
+ * Runs a camera command, ignoring the rejection it gets when the map isn't there (see above).
+ * The commands are typed `void` but return the native call's promise.
+ */
+function moveCamera(command: unknown) {
+  void Promise.resolve(command).catch(() => undefined);
 }
 
 // Pins closer than this are one place (e.g. checked in and out at the desk). They are nudged
@@ -164,6 +178,8 @@ interface NativeOlaMapProps {
 
 function NativeOlaMap({ points, controlsTop, legendBottom, children }: NativeOlaMapProps) {
   const camera = useRef<CameraRef>(null);
+  // Camera commands only apply once the map has loaded; earlier ones find no native view.
+  const loaded = useRef(false);
   const style = useOlaMapStyle();
   const bounds = useMemo(() => boundsFor(points), [points]);
   const offsets = useMemo(() => samePlaceOffsets(points), [points]);
@@ -172,23 +188,30 @@ function NativeOlaMap({ points, controlsTop, legendBottom, children }: NativeOla
   /** Frames every pin (or the single pin at street zoom), undoing any drag or zoom. */
   const fitCamera = useCallback(
     (duration = 0) => {
-      if (bounds) {
-        camera.current?.fitBounds(bounds, {
-          duration,
-          padding: { bottom: 56, left: 56, right: 56, top: 56 },
-        });
-      } else {
-        camera.current?.easeTo({
-          center: [center.longitude, center.latitude],
-          duration,
-          zoom: 15,
-        });
-      }
+      if (!loaded.current) return;
+      moveCamera(
+        bounds
+          ? camera.current?.fitBounds(bounds, {
+              duration,
+              padding: { bottom: 56, left: 56, right: 56, top: 56 },
+            })
+          : camera.current?.easeTo({
+              center: [center.longitude, center.latitude],
+              duration,
+              zoom: 15,
+            }),
+      );
     },
     [bounds, center.latitude, center.longitude],
   );
 
   useEffect(() => fitCamera(), [fitCamera]);
+  useEffect(
+    () => () => {
+      loaded.current = false;
+    },
+    [],
+  );
 
   return (
     <View className="flex-1">
@@ -202,7 +225,10 @@ function NativeOlaMap({ points, controlsTop, legendBottom, children }: NativeOla
           dragPan
           logo={false}
           mapStyle={style}
-          onDidFinishLoadingStyle={() => fitCamera()}
+          onDidFinishLoadingStyle={() => {
+            loaded.current = true;
+            fitCamera();
+          }}
           preferredFramesPerSecond={60}
           style={{ flex: 1 }}
           touchPitch={false}
@@ -224,11 +250,13 @@ function NativeOlaMap({ points, controlsTop, legendBottom, children }: NativeOla
               lngLat={[point.longitude, point.latitude]}
               offset={offsets[point.kind]}
               onPress={() =>
-                camera.current?.easeTo({
-                  center: [point.longitude, point.latitude],
-                  duration: 500,
-                  zoom: PIN_FOCUS_ZOOM,
-                })
+                moveCamera(
+                  camera.current?.easeTo({
+                    center: [point.longitude, point.latitude],
+                    duration: 500,
+                    zoom: PIN_FOCUS_ZOOM,
+                  }),
+                )
               }
             >
               <Image contentFit="contain" source={pins[point.kind]} style={PIN_SIZE} />
