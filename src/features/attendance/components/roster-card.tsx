@@ -50,7 +50,6 @@ export function RosterCard({
       disabled={!onPress}
       onPress={onPress}
       onPressIn={onPress ? () => haptic("light") : undefined}
-      style={{ elevation: 1 }}
     >
       <View className="flex-row items-start gap-3">
         <View className="flex-1">

@@ -83,7 +83,6 @@ export function AttendanceDayCard({
       disabled={!onPress}
       onPress={onPress}
       onPressIn={onPress ? () => haptic("light") : undefined}
-      style={{ elevation: 1 }}
     >
       {record ? (
         <View className="mb-4 flex-row">
