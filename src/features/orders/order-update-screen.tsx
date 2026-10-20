@@ -68,11 +68,13 @@ const MAP_MIN_HEIGHT = 280;
 const MAP_MAX_HEIGHT = 480;
 
 function OutcomeButton({
+  fullWidth = false,
   icon,
   label,
   onPress,
   tone,
 }: {
+  fullWidth?: boolean;
   icon: typeof Undo02Icon;
   label: string;
   onPress: () => void;
@@ -82,7 +84,7 @@ function OutcomeButton({
   return (
     <Pressable
       accessibilityRole="button"
-      className={`min-h-12 flex-1 flex-row items-center justify-center gap-2 border px-3 py-2 active:opacity-80 ${tone === "rto" ? "bg-[#FFF6EC]" : "bg-card"}`}
+      className={`min-h-12 ${fullWidth ? "w-full" : "flex-1"} flex-row items-center justify-center gap-2 border px-3 py-2 active:opacity-80 ${tone === "rto" ? "bg-[#FFF6EC]" : "bg-card"}`}
       onPress={onPress}
       onPressIn={() => haptic("light")}
       style={{ borderColor: color }}
@@ -97,10 +99,11 @@ function OutcomeButton({
 
 /**
  * A scanned order's update, as in Connector v1 (a finished order opens here straight from the
- * list, to look at, with no actions): the order card with its full details (sender,
- * shipment facts), then Confirm Delivery, Order RTO or Order not Delivered, each finishing in its
- * sheet and returning to the list, and the delivery route on a map at the bottom. Leaving
- * without an update asks first, since the parcel would have to be scanned again.
+ * list, to look at): the order card with its full details (sender, shipment facts), then Confirm
+ * Delivery, Order RTO or Order not Delivered, each finishing in its sheet and returning to the
+ * list, and the delivery route on a map at the bottom. A delivered order still exposes Order RTO
+ * for a necessary correction. Leaving a pending order without an update asks first, since the
+ * parcel would have to be scanned again.
  */
 export function OrderUpdateScreen() {
   const { orderId } = useLocalSearchParams<{ orderId?: string }>();
@@ -177,7 +180,17 @@ export function OrderUpdateScreen() {
             >
               <OrderDetails details={details} order={order} />
             </OrderCard>
-            {finished ? null : (
+            {finished ? (
+              isDelivered(order) ? (
+                <OutcomeButton
+                  fullWidth
+                  icon={Undo02Icon}
+                  label="Order RTO"
+                  onPress={() => setReason("rto")}
+                  tone="rto"
+                />
+              ) : null
+            ) : (
               <>
                 <Pressable
                   accessibilityRole="button"
@@ -195,18 +208,21 @@ export function OrderUpdateScreen() {
                     strokeWidth={1.8}
                   />
                 </Pressable>
-                <View className="flex-row gap-3">
+                <View className="gap-3">
                   <OutcomeButton
-                    icon={Undo02Icon}
-                    label="Order RTO"
-                    onPress={() => setReason("rto")}
-                    tone="rto"
-                  />
-                  <OutcomeButton
+                    fullWidth
                     icon={CancelCircleIcon}
                     label="Order not Delivered"
                     onPress={() => setReason("not-delivered")}
                     tone="failed"
+                  />
+                  {/* Kept immediately before the route map, so RTO remains a clear final action. */}
+                  <OutcomeButton
+                    fullWidth
+                    icon={Undo02Icon}
+                    label="Order RTO"
+                    onPress={() => setReason("rto")}
+                    tone="rto"
                   />
                 </View>
               </>

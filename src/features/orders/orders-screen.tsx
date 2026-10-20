@@ -34,6 +34,8 @@ import { useDrsSheets } from "./hooks/use-drs-sheets";
 import { useOrderMap } from "./hooks/use-order-map";
 import { drsOnTheRoad, rememberOrder } from "./lib/active-order";
 import {
+  compareDeliveringDrs,
+  compareDrsForDelivery,
   DRS_FILTERS,
   type DrsFilter,
   drsAreas,
@@ -181,9 +183,10 @@ export function OrdersScreen() {
   );
   const shownSheets = useMemo(
     () =>
-      sheets.filter(
-        (sheet) => matchesDrsFilter(sheet, drsFilter) && matchesDrsSearch(sheet, query),
-      ),
+      sheets
+        .filter((sheet) => matchesDrsFilter(sheet, drsFilter) && matchesDrsSearch(sheet, query))
+        // In Delivering, start with untouched runs; otherwise keep the full delivery work queue.
+        .sort(drsFilter === "DELIVERING ORDERS" ? compareDeliveringDrs : compareDrsForDelivery),
     [drsFilter, query, sheets],
   );
 
@@ -350,9 +353,19 @@ export function OrdersScreen() {
       description={
         searching
           ? `No DRS matches "${searching}".`
-          : "Try another filter to see the rest of your DRS."
+          : drsFilter === "all-not-delivered"
+            ? "Every delivering DRS has at least one order delivered."
+            : drsFilter === "all-delivered"
+              ? "No DRS has every order delivered yet."
+              : "Try another filter to see the rest of your DRS."
       }
-      title="No DRS found"
+      title={
+        drsFilter === "all-delivered"
+          ? "No fully delivered DRS"
+          : drsFilter === "all-not-delivered"
+            ? "No untouched DRS"
+            : "No DRS found"
+      }
     />
   );
 

@@ -1,4 +1,10 @@
-import { PencilEdit02Icon, PrinterIcon, Upload06Icon, ViewIcon } from "@hugeicons/core-free-icons";
+import {
+  CheckmarkCircle02Icon,
+  PencilEdit02Icon,
+  PrinterIcon,
+  Upload06Icon,
+  ViewIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { ActivityIndicator, Pressable, View } from "react-native";
 
@@ -8,8 +14,14 @@ import { colors } from "@/config/colors";
 import type { DrsSheet } from "@/lib/api/drs";
 import { haptic } from "@/lib/haptics";
 
-import { drsAreas, drsBadge, drsNextStatuses, drsPincodes } from "../lib/drs";
-import { isDelivered } from "../lib/orders";
+import {
+  areAllOrdersDelivered,
+  deliveredOrderCount,
+  drsAreas,
+  drsBadge,
+  drsNextStatuses,
+  drsPincodes,
+} from "../lib/drs";
 
 // The Figma's tinted action squares: print in grey, the scan in amber, editing in brand blue.
 const ACTIONS = {
@@ -77,11 +89,11 @@ function Field({
 /** The DRS status plus live order progress, so the delivery boy knows when it can be resolved. */
 function DrsStatusBadge({ sheet }: { sheet: DrsSheet }) {
   const total = sheet.orders.length;
-  const delivered = sheet.orders.filter(isDelivered).length;
-  const allDelivered = total > 0 && delivered === total;
+  const delivered = deliveredOrderCount(sheet);
+  const allDelivered = areAllOrdersDelivered(sheet);
 
   // Before resolution, make the completed run unmissable. A resolved sheet still says Resolved.
-  if (sheet.status !== "RESOLVED" && allDelivered)
+  if (sheet.status === "DELIVERING ORDERS" && allDelivered)
     return <RemarkBadge label="All orders delivered" variant="delivered" />;
 
   if (sheet.status !== "DELIVERING ORDERS") return <RemarkBadge {...drsBadge(sheet.status)} />;
@@ -124,6 +136,11 @@ export function DrsCard({
 }) {
   const pincodes = drsPincodes(sheet);
   const orders = sheet.orders.length;
+  const allDelivered = areAllOrdersDelivered(sheet);
+  const canResolve =
+    sheet.status === "DELIVERING ORDERS" &&
+    allDelivered &&
+    drsNextStatuses(sheet.status).includes("RESOLVED");
   return (
     <Pressable
       accessibilityHint="Shows this DRS's orders"
@@ -172,7 +189,7 @@ export function DrsCard({
             onPress={onScan}
             tone="scan"
           />
-          {drsNextStatuses(sheet.status).length ? (
+          {drsNextStatuses(sheet.status).length && !canResolve ? (
             <ActionSquare
               icon={PencilEdit02Icon}
               label="Update the DRS status"
@@ -182,6 +199,18 @@ export function DrsCard({
           ) : null}
         </View>
       </View>
+      {canResolve ? (
+        <Pressable
+          accessibilityLabel={`Update DRS ${sheet.id} status to resolved`}
+          accessibilityRole="button"
+          className="mt-3 h-11 flex-row items-center justify-center gap-2 border border-[#86EFAC] bg-[#ECFDF5] active:opacity-70"
+          onPress={onEdit}
+          onPressIn={() => haptic("light")}
+        >
+          <Text className="text-sm font-medium text-[#16A34A]">Update DRS status to RESOLVED</Text>
+          <HugeiconsIcon color="#16A34A" icon={CheckmarkCircle02Icon} size={18} strokeWidth={1.8} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }

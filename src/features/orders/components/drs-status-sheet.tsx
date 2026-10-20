@@ -15,7 +15,7 @@ import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { lastPosition } from "@/lib/maps/last-position";
 
-import { drsBadge, drsNextStatuses } from "../lib/drs";
+import { areAllOrdersDelivered, drsBadge, drsNextStatuses } from "../lib/drs";
 
 /** A status in its badge colours, with the server's full name ("OUT FOR DELIVERY"). */
 function StatusPill({ status }: { status: DrsStatus }) {
@@ -53,14 +53,25 @@ export function DrsStatusSheet({
   useEffect(() => {
     if (!sheet) return;
     setShown(sheet);
-    setDraft(sheet.status);
+    // A card's green completion action opens this sheet only after every parcel is delivered.
+    // Resolve is then the only valid next step, so it is selected immediately.
+    setDraft(
+      sheet.status === "DELIVERING ORDERS" && areAllOrdersDelivered(sheet)
+        ? "RESOLVED"
+        : sheet.status,
+    );
     setOpen(false);
   }, [sheet]);
 
+  const resolvingCompletedRun = Boolean(
+    shown && shown.status === "DELIVERING ORDERS" && areAllOrdersDelivered(shown),
+  );
   // The field already shows the chosen status, so the list offers only the others.
-  const options = shown
-    ? [shown.status, ...drsNextStatuses(shown.status)].filter((option) => option !== draft)
-    : [];
+  const options = resolvingCompletedRun
+    ? []
+    : shown
+      ? [shown.status, ...drsNextStatuses(shown.status)].filter((option) => option !== draft)
+      : [];
   const changed = Boolean(shown && draft && draft !== shown.status);
 
   const confirm = async () => {
@@ -91,18 +102,21 @@ export function DrsStatusSheet({
       <Pressable
         accessibilityLabel="Status"
         accessibilityRole="combobox"
-        accessibilityState={{ expanded: open }}
-        className="mt-2 h-12 flex-row items-center justify-between border border-border bg-card px-4"
+        accessibilityState={{ disabled: resolvingCompletedRun, expanded: open }}
+        className={`mt-2 h-12 flex-row items-center justify-between border border-border px-4 ${resolvingCompletedRun ? "bg-[#ECFDF5]" : "bg-card"}`}
+        disabled={resolvingCompletedRun}
         onPress={() => setOpen((value) => !value)}
         onPressIn={() => haptic("light")}
       >
         {draft ? <StatusPill status={draft} /> : <View />}
-        <HugeiconsIcon
-          color={colors.foreground}
-          icon={open ? ArrowUp01Icon : ArrowDown01Icon}
-          size={20}
-          strokeWidth={1.8}
-        />
+        {resolvingCompletedRun ? null : (
+          <HugeiconsIcon
+            color={colors.foreground}
+            icon={open ? ArrowUp01Icon : ArrowDown01Icon}
+            size={20}
+            strokeWidth={1.8}
+          />
+        )}
       </Pressable>
       {open ? (
         <View className="border border-border border-t-0 bg-card">
