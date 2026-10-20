@@ -24,6 +24,9 @@ const abis = abiArg ?? (abiIndex >= 0 ? process.argv[abiIndex + 1] : undefined) 
 const universal = process.argv.includes("--universal");
 // Several CPU types and not --universal: one APK each.
 const split = !universal && abis.includes(",");
+// `--aab` also builds the Play Console app bundle (`…-v<version>.aab`) in the same Gradle run. It
+// holds every CPU type; Play sends each phone only its own.
+const aab = process.argv.includes("--aab");
 
 /** The file name suffix that tells people which phones an APK is for. */
 function abiSuffix(abi: string): string {
@@ -63,7 +66,9 @@ try {
         },
       ];
   // Remove the previous build of this version first, so a failed build never leaves a stale APK.
+  const bundleOut = resolve(outDir, `hisaabsathi-connect-v${version}.aab`);
   for (const { apk } of outputs) rmSync(apk, { force: true });
+  rmSync(bundleOut, { force: true });
 
   console.log(
     `Building production APK${split ? "s" : ""} v${version} (${abis}${split ? ", one per CPU type" : ""}) for ${production.apiUrl}`,
@@ -78,6 +83,7 @@ try {
     "./gradlew",
     [
       "assembleRelease",
+      ...(aab ? ["bundleRelease"] : []),
       ...daemonArgs,
       `-PreactNativeArchitectures=${abis}`,
       `-PsplitApksByAbi=${split}`,
@@ -103,6 +109,14 @@ try {
     copyFileSync(built, apk);
     const size = (statSync(apk).size / 1024 / 1024).toFixed(1);
     console.log(`Production APK ready (${size} MB): ${relative(root, apk)}`);
+  }
+  if (aab) {
+    copyFileSync(
+      resolve(root, "android/app/build/outputs/bundle/release/app-release.aab"),
+      bundleOut,
+    );
+    const size = (statSync(bundleOut).size / 1024 / 1024).toFixed(1);
+    console.log(`Play Console bundle ready (${size} MB): ${relative(root, bundleOut)}`);
   }
   console.log("Install on a connected phone: bun run android:device:install");
 } catch (error) {

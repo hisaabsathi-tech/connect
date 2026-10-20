@@ -44,6 +44,8 @@ env:
   # used), and 32-bit for older ones.
   ASSET: hisaabsathi-connect.apk
   ASSET_32BIT: hisaabsathi-connect-32bit.apk
+  # The app bundle to upload to the Play Console (Play sends each phone only its own CPU code).
+  ASSET_AAB: hisaabsathi-connect.aab
 
 jobs:
   apk:
@@ -162,8 +164,8 @@ jobs:
 
       # Same command as local builds: production env only, release signing, and a check that the
       # API URL is inside the bundle.
-      - name: Build production APK
-        run: bun run android:apk:build
+      - name: Build production APKs and Play bundle
+        run: bun run android:apk:build --aab
 
       - name: Name the APKs
         env:
@@ -171,7 +173,8 @@ jobs:
         run: |
           cp "apks/android/hisaabsathi-connect-v$VERSION.apk" "$ASSET"
           cp "apks/android/hisaabsathi-connect-v$VERSION-32bit.apk" "$ASSET_32BIT"
-          ls -l "$ASSET" "$ASSET_32BIT"
+          cp "apks/android/hisaabsathi-connect-v$VERSION.aab" "$ASSET_AAB"
+          ls -l "$ASSET" "$ASSET_32BIT" "$ASSET_AAB"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -180,6 +183,7 @@ jobs:
           path: |
             ${{ env.ASSET }}
             ${{ env.ASSET_32BIT }}
+            ${{ env.ASSET_AAB }}
           if-no-files-found: error
           retention-days: 14
 
@@ -220,17 +224,19 @@ jobs:
 
           If Android says the app isn't compatible with the phone (some older or budget phones
           run 32-bit Android), use **$ASSET_32BIT** instead.
+
+          **$ASSET_AAB** is the app bundle to upload to the Play Console, not for phones.
           EOF
 
           if [[ "$RELEASE" == rebuild ]] && gh release view "$tag" >/dev/null 2>&1; then
             # Same version, new build: point the tag at this commit and replace the APK in place.
             git tag -f "$tag" "$sha"
             git push -f origin "refs/tags/$tag"
-            gh release upload "$tag" "$ASSET" "$ASSET_32BIT" --clobber
+            gh release upload "$tag" "$ASSET" "$ASSET_32BIT" "$ASSET_AAB" --clobber
             gh release edit "$tag" --notes-file notes.md
-            echo "Replaced $ASSET and $ASSET_32BIT on $tag."
+            echo "Replaced $ASSET, $ASSET_32BIT and $ASSET_AAB on $tag."
           else
-            gh release create "$tag" "$ASSET" "$ASSET_32BIT" --target "$sha" \
+            gh release create "$tag" "$ASSET" "$ASSET_32BIT" "$ASSET_AAB" --target "$sha" \
               --title "Hisaab Sathi Connect $tag" --notes-file notes.md --latest
             echo "Published $tag."
           fi

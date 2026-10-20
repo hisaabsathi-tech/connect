@@ -201,6 +201,7 @@ real Android phone, and each APK carries just one of the two, so it is roughly a
 an APK with both. For other targets:
 
 ```bash
+bun run android:apk:build --aab                                     # also the Play Console bundle (.aab)
 bun run android:apk:build --universal                               # one APK for 64- and 32-bit phones
 bun run android:apk:build --abi arm64-v8a                           # 64-bit phones only
 bun run android:apk:build --abi armeabi-v7a,arm64-v8a,x86,x86_64    # one APK per type, also emulators
@@ -336,8 +337,9 @@ The build types:
 The workflow runs `bun run lint`, `bun run typecheck`, and then `bun run android:apk:build`, so it uses the
 same size optimizations and the same API-URL bundle check as a local build. Each release has two APKs:
 `hisaabsathi-connect.apk` for 64-bit phones (almost all) and `hisaabsathi-connect-32bit.apk` for older
-32-bit ones; the release notes say so. Both are also kept as a workflow artifact for 14 days. The
-newest release's 64-bit APK is always at:
+32-bit ones; the release notes say so. It also carries `hisaabsathi-connect.aab`, the app bundle to
+upload to the Play Console. All three are also kept as a workflow artifact for 14 days. The newest
+release's 64-bit APK is always at:
 
 ```
 https://github.com/hisaabsathi-tech/connect/releases/latest/download/hisaabsathi-connect.apk
