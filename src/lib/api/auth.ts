@@ -23,7 +23,17 @@ export type SignInResult = { token?: string; twoFactorRedirect?: boolean };
 /** Better Auth's session payload; null when the token is no longer valid. */
 export type SessionPayload = { session?: { activeOrganizationId?: string | null } } | null;
 
-export type AuthOrganization = { id: string; name: string; slug: string; logo?: string | null };
+export type AuthOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  logo?: string | null;
+  /**
+   * The user's other companies of the same owner (employee sync copies) that this entry stands
+   * for, primary first. Empty for a company the user owns; missing from older servers.
+   */
+  linkedOrganizations?: { id: string; name: string }[];
+};
 
 function messageFrom(payload: unknown) {
   if (payload && typeof payload === "object") {

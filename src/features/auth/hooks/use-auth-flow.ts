@@ -152,10 +152,11 @@ export function useAuthFlow() {
       await authApi.signOut(current).catch(() => undefined);
       throw new Error(NO_ORGANIZATION_MESSAGE);
     }
-    // One choice (a member whose other companies are synced copies of the same employee): no
-    // picker. Keep the company the server already has active, which may be one of those copies.
+    // One choice (e.g. a member whose other companies are synced copies of the same employee):
+    // no picker. The server lists the company they were first made a member of, so open that
+    // one even when a copy is active.
     if (list.length === 1) {
-      if (active) return enter(current);
+      if (active === list[0].id) return enter(current);
       const activated = await authApi.setActiveOrganization(list[0].id, current);
       return enter(activated.token ?? current);
     }

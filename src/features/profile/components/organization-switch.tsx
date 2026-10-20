@@ -1,6 +1,6 @@
 import { ArrowLeftRightIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 
 import { HapticButton } from "@/components/modules/button";
@@ -9,39 +9,30 @@ import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
-import { type AuthOrganization, authApi } from "@/lib/api/auth";
+import type { AuthOrganization } from "@/lib/api/auth";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 
 /**
- * "Switch" beside the organisation in the profile, shown only when the user belongs to more than
- * one. It opens a sheet listing them with their logos; switching reloads the app's tabs for the
- * chosen organisation (back on Home).
+ * "Switch" beside the company in the profile, shown only when there is more than one to choose
+ * (synced copies of one owner's companies count as one). It opens a sheet listing them with their
+ * logos; switching reloads the app's tabs for the chosen company (back on Home).
  */
-export function OrganizationSwitch({ activeId }: { activeId: string | null | undefined }) {
-  const { switchOrganization, token } = useAuthSession();
+export function OrganizationSwitch({
+  activeId,
+  organizations,
+}: {
+  activeId: string | null | undefined;
+  /** From `useMemberships`. */
+  organizations: AuthOrganization[];
+}) {
+  const { switchOrganization } = useAuthSession();
   const toast = useToast();
   const { height } = useWindowDimensions();
-  const [organizations, setOrganizations] = useState<AuthOrganization[]>([]);
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
-
-  useEffect(() => {
-    if (!token) return;
-    let active = true;
-    authApi
-      .listOrganizations(token)
-      .then((list) => {
-        if (active) setOrganizations(list);
-      })
-      // Without the list there is nothing to switch to; the button stays hidden.
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [token]);
 
   if (organizations.length < 2) return null;
 

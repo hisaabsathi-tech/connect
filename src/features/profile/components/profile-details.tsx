@@ -13,10 +13,33 @@ import { ActivityIndicator, Pressable, TextInput, View } from "react-native";
 
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
+import type { AuthOrganization } from "@/lib/api/auth";
 import { type AddressSuggestion, autocompleteAddress } from "@/lib/api/maps";
 import type { Profile } from "@/lib/api/profile";
 
+import { useMemberships } from "../hooks/use-memberships";
 import { OrganizationSwitch } from "./organization-switch";
+
+/**
+ * The companies the profile names: the active one, or, when the member's record was copied into
+ * the same owner's other companies, all of them with the one it was created in first. `activeId`
+ * is the entry that stands for the active company in the switcher (a copy maps to its original).
+ */
+function companiesOf(memberships: AuthOrganization[], profile: Profile | null) {
+  const activeId = profile?.organizationId ?? null;
+  const entry = memberships.find(
+    (organization) =>
+      organization.id === activeId ||
+      organization.linkedOrganizations?.some((linked) => linked.id === activeId),
+  );
+  if (entry)
+    return {
+      activeId: entry.id,
+      list: [{ id: entry.id, name: entry.name }, ...(entry.linkedOrganizations ?? [])],
+    };
+  const name = profile?.organizationName?.trim();
+  return { activeId, list: name ? [{ id: activeId ?? name, name }] : [] };
+}
 
 function DetailRow({
   border = true,
@@ -108,6 +131,8 @@ interface ProfileDetailsProps {
 
 /** Contact details with an in-place edit mode for phone number and address. */
 export function ProfileDetails({ onSave, profile, saving, token }: ProfileDetailsProps) {
+  const memberships = useMemberships(token);
+  const companies = companiesOf(memberships, profile);
   const [editing, setEditing] = useState(false);
   const [address, setAddress] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -168,12 +193,24 @@ export function ProfileDetails({ onSave, profile, saving, token }: ProfileDetail
       <View className="flex-row items-center gap-3 border-border border-b py-4">
         <HugeiconsIcon color={colors.primary} icon={Building03Icon} size={22} strokeWidth={1.8} />
         <View className="flex-1">
-          <Text className="text-xs text-muted-foreground">Organization</Text>
-          <Text className="mt-0.5 text-sm font-medium text-foreground" numberOfLines={1}>
-            {profile?.organizationName?.trim() || "—"}
+          <Text className="text-xs text-muted-foreground">
+            {companies.list.length > 1 ? "Companies" : "Company"}
           </Text>
+          {companies.list.length ? (
+            // Side by side, wrapping onto the next line when they don't fit.
+            <View className="mt-0.5 flex-row flex-wrap items-center gap-x-2 gap-y-1">
+              {companies.list.map(({ id, name }, index) => (
+                <View className="flex-row items-center gap-2" key={id}>
+                  {index ? <View className="h-3.5 w-px bg-border" /> : null}
+                  <Text className="text-sm font-medium text-foreground">{name}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text className="mt-0.5 text-sm font-medium text-foreground">—</Text>
+          )}
         </View>
-        <OrganizationSwitch activeId={profile?.organizationId} />
+        <OrganizationSwitch activeId={companies.activeId} organizations={memberships} />
       </View>
       {profile?.vehicleNo ? (
         <View className="flex-row items-center gap-3 border-border border-b py-4">
