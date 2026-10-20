@@ -147,25 +147,29 @@ export function ToastProvider({ children }: PropsWithChildren) {
   );
 }
 
+// One object for the whole app. Callers list `toast` in effect and callback dependencies, so a
+// new object per render would re-run them on every render (the profile refetched in a loop).
+const toastApi = {
+  error: (title: string, description?: string) =>
+    Toast.show({ text1: title, text2: description, type: "appError" }),
+  show: ({
+    title,
+    description,
+    type = "info",
+  }: {
+    description?: string;
+    title: string;
+    type?: ToastKind;
+  }) =>
+    Toast.show({
+      text1: title,
+      text2: description,
+      type: type === "success" ? "appSuccess" : type === "error" ? "appError" : "appInfo",
+    }),
+  success: (title: string, description?: string) =>
+    Toast.show({ text1: title, text2: description, type: "appSuccess" }),
+};
+
 export function useToast() {
-  return {
-    error: (title: string, description?: string) =>
-      Toast.show({ text1: title, text2: description, type: "appError" }),
-    show: ({
-      title,
-      description,
-      type = "info",
-    }: {
-      description?: string;
-      title: string;
-      type?: ToastKind;
-    }) =>
-      Toast.show({
-        text1: title,
-        text2: description,
-        type: type === "success" ? "appSuccess" : type === "error" ? "appError" : "appInfo",
-      }),
-    success: (title: string, description?: string) =>
-      Toast.show({ text1: title, text2: description, type: "appSuccess" }),
-  };
+  return toastApi;
 }

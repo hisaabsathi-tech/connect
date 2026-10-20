@@ -10,15 +10,24 @@ import type { Profile } from "@/lib/api/profile";
 /** Photo (or generated avatar) with its edit button, name and role at the top of the profile. */
 export function ProfileCard({
   onEditPhoto,
+  onViewPhoto,
   profile,
 }: {
   onEditPhoto: () => void;
+  /** Tapping an uploaded photo opens it full size; without one the tap offers to add a photo. */
+  onViewPhoto: () => void;
   profile: Profile | null;
 }) {
   return (
     <View className="mt-4 flex-row items-center gap-3 bg-[#F0F2FF] p-3">
       <View>
-        <Avatar image={profile?.image} name={profile?.name} seed={profile?.id} size={64} />
+        <Pressable
+          accessibilityLabel={profile?.image ? "View profile photo" : "Add profile photo"}
+          accessibilityRole="button"
+          onPress={profile?.image ? onViewPhoto : onEditPhoto}
+        >
+          <Avatar image={profile?.image} name={profile?.name} seed={profile?.id} size={64} />
+        </Pressable>
         <Pressable
           accessibilityLabel="Change profile photo"
           accessibilityRole="button"

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 
 import { TabScreen } from "@/components/modules/layout";
+import { PhotoDialog } from "@/components/modules/photo";
 import { Loader } from "@/components/modules/system";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -18,6 +20,7 @@ export function ProfileScreen() {
   const { token } = useAuthSession();
   const { loading, profile, refresh, refreshing, save, savePhoto, saving } = useProfile(token);
   const photo = useProfilePhoto(savePhoto);
+  const [viewing, setViewing] = useState(false);
 
   return (
     <TabScreen>
@@ -42,7 +45,11 @@ export function ProfileScreen() {
           <Text className="mt-0.5 text-sm text-muted-foreground">Manage your profile details</Text>
           <View className="flex-1 justify-between pt-2">
             <View>
-              <ProfileCard onEditPhoto={photo.open} profile={profile} />
+              <ProfileCard
+                onEditPhoto={photo.open}
+                onViewPhoto={() => setViewing(true)}
+                profile={profile}
+              />
               <ProfileDetails onSave={save} profile={profile} saving={saving} token={token} />
               <LogoutButton />
             </View>
@@ -51,6 +58,12 @@ export function ProfileScreen() {
         </ScrollView>
       )}
       {photo.element}
+      <PhotoDialog
+        onClose={() => setViewing(false)}
+        title="Profile photo"
+        uri={profile?.image ?? null}
+        visible={viewing && Boolean(profile?.image)}
+      />
     </TabScreen>
   );
 }
