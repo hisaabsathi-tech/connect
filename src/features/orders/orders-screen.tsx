@@ -3,11 +3,18 @@ import { Redirect, router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 
-import { type DateRange, rangeLabel, SearchRangeToolbar } from "@/components/modules/date-range";
+import {
+  type DateRange,
+  rangeLabel,
+  SearchRangeToolbar,
+} from "@/components/modules/date-range";
 import { useDialog } from "@/components/modules/dialog";
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
-import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
+import {
+  LocationIndicator,
+  locationIndicatorState,
+} from "@/components/modules/location";
 import {
   CardListSkeleton,
   ListPageSkeleton,
@@ -131,20 +138,36 @@ export function OrdersScreen() {
       cancelLabel: "Not now",
       confirmLabel: resolving ? "Resolve" : "Start delivering",
       description: resolving
-        ? `Close ${sheet.id}? It can't be updated once resolved.`
-        : `Set ${sheet.id} out for delivery, so its orders can be scanned and delivered.`,
-      title: resolving ? "Resolve this DRS?" : "Out for delivery?",
+        ? "It can't be updated once resolved."
+        : "Its orders can then be scanned and delivered.",
+      details: [
+        { label: "DRS ID", value: sheet.id },
+        {
+          highlight: true,
+          label: "New status",
+          value: resolving ? "Resolved" : "Out for delivery",
+        },
+      ],
+      title: "Update DRS",
     });
     if (!sure) return false;
     setAdvancing(sheet.id);
     try {
-      updated(await patchDrs(token, sheet.id, { status, ...(await lastPosition()) }));
+      updated(
+        await patchDrs(token, sheet.id, { status, ...(await lastPosition()) }),
+      );
       haptic("success");
-      toast.success("DRS updated", `${sheet.id} is now ${status.toLowerCase()}.`);
+      toast.success(
+        "DRS updated",
+        `${sheet.id} is now ${status.toLowerCase()}.`,
+      );
       return true;
     } catch (error) {
       haptic("error");
-      toast.error("Couldn't update the DRS", errorMessage(error, "Please try again."));
+      toast.error(
+        "Couldn't update the DRS",
+        errorMessage(error, "Please try again."),
+      );
       return false;
     } finally {
       setAdvancing(null);
@@ -153,7 +176,10 @@ export function OrdersScreen() {
 
   const scanOrder = (order: DrsOrder) => {
     rememberOrder(order);
-    router.push({ params: { orderId: order.orderId }, pathname: "/orders/scan" });
+    router.push({
+      params: { orderId: order.orderId },
+      pathname: "/orders/scan",
+    });
   };
 
   // Tapping an order scans its parcel, then updates it. A DRS still issued is set out for
@@ -162,7 +188,10 @@ export function OrdersScreen() {
     // A finished order has nothing to scan for: its details open straight away.
     if (!isPending(order)) {
       rememberOrder(order);
-      router.push({ params: { orderId: order.orderId }, pathname: "/orders/update" });
+      router.push({
+        params: { orderId: order.orderId },
+        pathname: "/orders/update",
+      });
       return;
     }
     if (drsOnTheRoad(order)) {
@@ -190,15 +219,21 @@ export function OrdersScreen() {
   );
 
   // The chosen DRS only narrows the orders while it is among the range's sheets.
-  const activeDrsId = drsId && sheets.some((sheet) => sheet.id === drsId) ? drsId : null;
+  const activeDrsId =
+    drsId && sheets.some((sheet) => sheet.id === drsId) ? drsId : null;
 
-  const scopedOrders = useMemo(() => ordersFromSheets(sheets, activeDrsId), [activeDrsId, sheets]);
+  const scopedOrders = useMemo(
+    () => ordersFromSheets(sheets, activeDrsId),
+    [activeDrsId, sheets],
+  );
   // Orders still to deliver come first; delivered ones sink to the bottom.
   const orders = useMemo(
     () =>
       pendingFirst(
         scopedOrders.filter(
-          (order) => matchesOrderFilter(order, orderFilter) && matchesOrderSearch(order, query),
+          (order) =>
+            matchesOrderFilter(order, orderFilter) &&
+            matchesOrderSearch(order, query),
         ),
       ),
     [orderFilter, query, scopedOrders],
@@ -206,9 +241,17 @@ export function OrdersScreen() {
   const shownSheets = useMemo(
     () =>
       sheets
-        .filter((sheet) => matchesDrsFilter(sheet, drsFilter) && matchesDrsSearch(sheet, query))
+        .filter(
+          (sheet) =>
+            matchesDrsFilter(sheet, drsFilter) &&
+            matchesDrsSearch(sheet, query),
+        )
         // In Delivering, start with untouched runs; otherwise keep the full delivery work queue.
-        .sort(drsFilter === "DELIVERING ORDERS" ? compareDeliveringDrs : compareDrsForDelivery),
+        .sort(
+          drsFilter === "DELIVERING ORDERS"
+            ? compareDeliveringDrs
+            : compareDrsForDelivery,
+        ),
     [drsFilter, query, sheets],
   );
 
@@ -271,7 +314,10 @@ export function OrdersScreen() {
         {/* A little room above: the active ripple reaches 2pt past the circle, and the list's top
             edge would clip it. */}
         <View className="mt-1">
-          <LocationIndicator onPress={location.resolve} state={locationIndicatorState(location)} />
+          <LocationIndicator
+            onPress={location.resolve}
+            state={locationIndicatorState(location)}
+          />
         </View>
       </View>
       <PageTabs onChange={changeTab} value={tab} />
@@ -308,7 +354,9 @@ export function OrdersScreen() {
               active={drsFilter === "RESOLVED"}
               label="Completed DRS"
               onPress={() => toggleDrsFilter("RESOLVED")}
-              value={String(sheets.filter((sheet) => !isDrsOngoing(sheet)).length)}
+              value={String(
+                sheets.filter((sheet) => !isDrsOngoing(sheet)).length,
+              )}
             />
           </>
         )}
@@ -316,11 +364,17 @@ export function OrdersScreen() {
       {onOrders ? (
         <FilterChips
           className="mt-3"
-          onChange={toggleOrderFilter} options={ORDER_FILTERS} value={orderFilter} />
+          onChange={toggleOrderFilter}
+          options={ORDER_FILTERS}
+          value={orderFilter}
+        />
       ) : (
         <FilterChips
           className="mt-3"
-          onChange={toggleDrsFilter} options={DRS_FILTERS} value={drsFilter} />
+          onChange={toggleDrsFilter}
+          options={DRS_FILTERS}
+          value={drsFilter}
+        />
       )}
       <View className="mt-3">
         <SearchRangeToolbar
@@ -408,7 +462,9 @@ export function OrdersScreen() {
         data={data.loading ? [] : onOrders ? orders : shownSheets}
         ItemSeparatorComponent={Separator}
         keyboardShouldPersistTaps="handled"
-        keyExtractor={(item) => ("orderId" in item ? `order-${item.orderId}` : `drs-${item.id}`)}
+        keyExtractor={(item) =>
+          "orderId" in item ? `order-${item.orderId}` : `drs-${item.id}`
+        }
         ListEmptyComponent={empty}
         ListHeaderComponent={header}
         ref={listRef}

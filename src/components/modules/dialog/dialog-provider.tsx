@@ -15,8 +15,16 @@ import { Text } from "@/components/modules/typography";
 
 type DialogTone = "brand" | "danger";
 
+/** A labelled fact shown under the title, like the record being changed; `highlight` tints the value. */
+export interface DialogDetail {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}
+
 interface DialogOptions {
   title: string;
+  details?: DialogDetail[];
   description?: string;
   tone?: DialogTone;
 }
@@ -82,7 +90,8 @@ export function DialogProvider({ children }: PropsWithChildren) {
       alert: async ({ actionLabel = "OK", ...options }) => {
         await open({ ...options, confirmLabel: actionLabel });
       },
-      confirm: ({ cancelLabel = "Cancel", ...options }) => open({ ...options, cancelLabel }),
+      confirm: ({ cancelLabel = "Cancel", ...options }) =>
+        open({ ...options, cancelLabel }),
     }),
     [open],
   );
@@ -90,12 +99,40 @@ export function DialogProvider({ children }: PropsWithChildren) {
   return (
     <DialogContext.Provider value={api}>
       {children}
-      <BottomSheet onClose={() => close(false)} onClosed={onClosed} visible={visible}>
+      <BottomSheet
+        onClose={() => close(false)}
+        onClosed={onClosed}
+        visible={visible}
+      >
         {dialog ? (
           <View accessibilityRole="alert">
-            <Text className="mt-5 text-xl font-semibold text-foreground">{dialog.title}</Text>
+            <Text className="mt-5 text-xl font-semibold text-foreground">
+              {dialog.title}
+            </Text>
+            {dialog.details?.length ? (
+              <View className="mt-4 border border-border bg-card">
+                {dialog.details.map((detail, index) => (
+                  <View
+                    className={`flex-row items-center justify-between gap-4 px-4 py-3 ${index ? "border-border border-t" : ""}`}
+                    key={detail.label}
+                  >
+                    <Text className="text-xs font-medium uppercase tracking-[0.3px] text-muted-foreground">
+                      {detail.label}
+                    </Text>
+                    <Text
+                      className={`shrink text-right text-base font-semibold ${detail.highlight ? "text-primary" : "text-foreground"}`}
+                      numberOfLines={1}
+                    >
+                      {detail.value}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             {dialog.description ? (
-              <Text className="mt-2 text-base leading-6 text-muted-foreground">
+              <Text
+                className={`${dialog.details?.length ? "mt-3" : "mt-2"} text-base leading-6 text-muted-foreground`}
+              >
                 {dialog.description}
               </Text>
             ) : null}
