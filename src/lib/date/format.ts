@@ -54,6 +54,12 @@ export function formatHours(ms: number) {
   return String(Math.round(ms / 360_000) / 10);
 }
 
+/** "38h 05m" (hours and minutes, no seconds) for a length of time in milliseconds. */
+export function formatHoursMinutes(ms: number) {
+  const minutes = Math.floor(ms / 60_000);
+  return `${Math.floor(minutes / 60)}h ${twoDigits(minutes % 60)}m`;
+}
+
 /** "08:20:11" (hours:minutes:seconds) for a length of time in milliseconds. */
 export function formatElapsed(ms: number) {
   const seconds = Math.floor(ms / 1000);

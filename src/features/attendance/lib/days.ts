@@ -55,7 +55,16 @@ export type AttendanceSummary = {
   closedMs: number;
   /** Check-in time of today's session while it is still open, which keeps adding to the time. */
   openSince: string | null;
+  /** Days with time worked in the period the time covers (today included once checked in). */
+  workedDays: number;
 };
+
+// Past this many days worked, the hours card shows the average day rather than the total.
+const AVERAGE_AFTER_DAYS = 5;
+
+/** The hours card shows the average worked day once more than 5 days are worked. */
+export const showsAverageDay = (summary: AttendanceSummary) =>
+  summary.workedDays > AVERAGE_AFTER_DAYS;
 
 /** The period's time worked at `now`: the closed sessions plus today's open one so far. */
 export function workedSoFarMs(summary: AttendanceSummary, now = Date.now()) {
@@ -101,6 +110,7 @@ export function summarize(range: AttendanceRange, today: string): AttendanceSumm
     closedMs: closedTime(window, open, today),
     openSince: open?.checkInAt ?? null,
     presentDays: attended.size,
+    workedDays: new Set(window.map((item) => item.date)).size,
     // Day 0 of next month is this month's last day.
     totalDays: new Date(
       Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0),
@@ -121,6 +131,7 @@ export function summarizeRange(
     openSince: open?.checkInAt ?? null,
     presentDays: records.length,
     totalDays: daysBetween(range.from, range.to) + 1,
+    workedDays: new Set(records.map((record) => record.date)).size,
   };
 }
 

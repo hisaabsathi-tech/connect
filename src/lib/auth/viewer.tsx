@@ -34,6 +34,10 @@ type ViewerState = {
   /** False until the first answer (or failure); role-gated screens wait for it. */
   isLoaded: boolean;
   isDeliveryBoy: boolean;
+  /** The role grants attendance view: the Attendance tab and the day's record on Home. */
+  canViewAttendance: boolean;
+  /** The role grants attendance create: the check-in / check-out swipe. */
+  canCheckIn: boolean;
   reload: () => Promise<void>;
 };
 
@@ -65,6 +69,12 @@ export function ViewerProvider({ children }: PropsWithChildren) {
 
   const value = useMemo(
     () => ({
+      // Until the role is known, attendance shows as before; most roles have it, and the server
+      // turns away a check-in the role doesn't allow.
+      canCheckIn: viewer ? viewer.attendanceActions.includes("CREATE") : true,
+      canViewAttendance: viewer
+        ? viewer.attendanceActions.some((action) => action === "GET" || action === "GET_ALL")
+        : true,
       isDeliveryBoy: isDeliveryBoyRoleSlug(viewer?.roleSlug),
       isLoaded,
       reload,

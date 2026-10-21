@@ -18,11 +18,14 @@ type ActiveIconName = "attendance" | "orders" | "profile";
 // These used to load from bundled SVG asset URIs. Android debug can resolve those URIs, while
 // release APK asset packaging can leave SvgUri with nothing to read. Keeping the same artwork as
 // native SVG nodes puts it in the JS bundle and works identically in debug and production.
+// Every outline-only path sets `fill="none"`: react-native-svg fills a path black by default, which
+// closed the calendar's "17" strokes into a black dot.
 function ActiveIcon({ name }: { name: ActiveIconName }) {
   if (name === "attendance")
     return (
-      <Svg height={28} viewBox="0 0 24 24" width={28}>
+      <Svg fill="none" height={28} viewBox="0 0 24 24" width={28}>
         <Path
+          fill="none"
           d="M16 2V6M8 2V6"
           stroke="#465FFF"
           strokeLinecap="round"
@@ -38,6 +41,7 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
           strokeWidth={1.5}
         />
         <Path
+          fill="none"
           d="M3 10H21"
           stroke="#465FFF"
           strokeLinecap="round"
@@ -45,6 +49,7 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
           strokeWidth={1.5}
         />
         <Path
+          fill="none"
           d="M10 18.5002L9.99999 13.8474C9.99999 13.6557 9.86325 13.5002 9.69458 13.5002H9M14 18.4983L15.4855 13.8923C15.4951 13.8626 15.5 13.8315 15.5 13.8002C15.5 13.6346 15.3657 13.5002 15.2 13.5002L13 13.5"
           stroke="#465FFF"
           strokeLinecap="round"
@@ -55,7 +60,7 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
     );
   if (name === "orders")
     return (
-      <Svg height={28} viewBox="0 0 24 24" width={28}>
+      <Svg fill="none" height={28} viewBox="0 0 24 24" width={28}>
         <Path
           d="M2.49219 13.5V7.5H21.4922V13.5C21.4922 17.2712 21.4922 19.1569 20.3206 20.3284C19.149 21.5 17.2634 21.5 13.4922 21.5H10.4922C6.72095 21.5 4.83533 21.5 3.66376 20.3284C2.49219 19.1569 2.49219 17.2712 2.49219 13.5Z"
           fill="#CCD3FF"
@@ -73,6 +78,7 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
           strokeWidth={1.5}
         />
         <Path
+          fill="none"
           d="M11.9922 7.5V2.5"
           stroke="#465FFF"
           strokeLinecap="round"
@@ -80,6 +86,7 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
           strokeWidth={1.5}
         />
         <Path
+          fill="none"
           d="M5.99219 18H10.9922M5.99219 15H8.99219"
           stroke="#465FFF"
           strokeLinecap="round"
@@ -89,7 +96,7 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
       </Svg>
     );
   return (
-    <Svg height={28} viewBox="0 0 24 24" width={28}>
+    <Svg fill="none" height={28} viewBox="0 0 24 24" width={28}>
       <Path
         d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z"
         fill="#CCD3FF"
@@ -127,14 +134,18 @@ const pageHaptics: Record<keyof typeof items, HapticKind> = {
 // Destinations only some roles get; everyone else never sees them in the bar.
 const DELIVERY_BOY_ONLY = new Set(["orders"]);
 
-/** Home, Attendance and Profile for every signed-in user; Orders for delivery boys too. */
+/**
+ * Home and Profile for every signed-in user; Attendance when the role grants attendance view;
+ * Orders for delivery boys too.
+ */
 export function BottomNavigation({ insets, navigation, state }: BottomTabBarProps) {
-  const { isDeliveryBoy } = useViewer();
+  const { canViewAttendance, isDeliveryBoy } = useViewer();
   return (
     <View className="flex-row bg-[#F0F2FF] px-5 pt-3" style={{ paddingBottom: insets.bottom + 8 }}>
       {state.routes.map((route, index) => {
         const item = items[route.name as keyof typeof items];
         if (!item || (DELIVERY_BOY_ONLY.has(route.name) && !isDeliveryBoy)) return null;
+        if (route.name === "attendance" && !canViewAttendance) return null;
         const active = state.index === index;
         const color = active ? colors.primary : colors.foreground;
         const activeIcon =

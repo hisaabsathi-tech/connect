@@ -43,15 +43,16 @@ const REVEAL_TIMEOUT_MS = 8000;
 export function HomeScreen() {
   const { token } = useAuthSession();
   const viewer = useViewer();
-  const { isDeliveryBoy } = viewer;
+  const { canCheckIn, canViewAttendance, isDeliveryBoy } = viewer;
   const screenTop = useScreenTop();
   const location = useLiveLocation(Boolean(token));
   const live = location.location;
   const home = useHomeAttendance(token, live);
   const { resetToToday, selectedDate, today } = useDateFilter();
   const toast = useToast();
-  // The calendar picks whose pins and record show; the swipe button always acts on today.
-  const day = useDayAttendance(token, selectedDate, today);
+  // The calendar picks whose pins and record show; the swipe button always acts on today. Not
+  // fetched for a role without attendance view, which shows no record.
+  const day = useDayAttendance(canViewAttendance ? token : null, selectedDate, today);
   // Stable per record: the map re-frames its camera whenever its pins change.
   const dayCheckIn = useMemo(() => checkInPointOf(day.record), [day.record]);
   const dayCheckOut = useMemo(() => checkOutPointOf(day.record), [day.record]);
@@ -174,8 +175,9 @@ export function HomeScreen() {
         <View onLayout={(event) => setBelowHeight(event.nativeEvent.layout.height)}>
           <DateStrip />
           {/* A superadmin without Superadmin Attendance doesn't check in: the card leads to the
-            organisation's attendance instead of their own day. */}
-          {home.selfAttendance ? (
+            organisation's attendance instead of their own day. A role without attendance view
+            gets neither. */}
+          {!canViewAttendance ? null : home.selfAttendance ? (
             <DayRecord
               date={selectedDate}
               failed={day.failed}
@@ -198,8 +200,9 @@ export function HomeScreen() {
           ) : null}
         </View>
       </ScrollView>
-      {/* Below the scrolling page, just above the navigation; it never covers the content. */}
-      {home.selfAttendance ? (
+      {/* Below the scrolling page, just above the navigation; it never covers the content. Only
+        for a role that may check in. */}
+      {home.selfAttendance && canCheckIn ? (
         <AttendanceAction
           attendedToday={home.attendedToday}
           busy={home.busy}

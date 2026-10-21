@@ -1,3 +1,4 @@
+import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -7,6 +8,7 @@ import { Text } from "@/components/modules/typography";
 import { fetchOpenAttendance } from "@/lib/api/attendance";
 import { fetchIsOrgOwner } from "@/lib/api/attendance-roster";
 import { useAuthSession } from "@/lib/auth/session";
+import { useViewer } from "@/lib/auth/viewer";
 import { haptic } from "@/lib/haptics";
 
 import { CompanyAttendance } from "./company-attendance";
@@ -90,13 +92,17 @@ function useAccess(token: string | null) {
 /**
  * The Attendance tab. Only the organisation's owner gets its roster (Company); when they also
  * check in themselves (Superadmin Attendance on) they get Company / Own tabs to see their own
- * attendance too. Every internal member, whatever their role or permissions, sees only their own.
+ * attendance too. Every other member sees only their own, and a member whose role has no
+ * attendance view is sent back Home (the tab is hidden for them; this covers links).
  */
 export function AttendanceScreen() {
   const { token } = useAuthSession();
-  const access = useAccess(token);
+  const viewer = useViewer();
+  const allowed = viewer.isLoaded && viewer.canViewAttendance;
+  const access = useAccess(allowed ? token : null);
   const [view, setView] = useState<AttendanceView>("company");
 
+  if (viewer.isLoaded && !viewer.canViewAttendance) return <Redirect href="/" />;
   if (!access)
     return (
       <TabScreen>

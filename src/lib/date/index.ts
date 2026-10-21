@@ -17,6 +17,7 @@ export {
   formatDuration,
   formatElapsed,
   formatHours,
+  formatHoursMinutes,
   formatTime,
   todayIsoDate,
   toIsoDate,

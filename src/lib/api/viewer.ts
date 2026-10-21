@@ -15,12 +15,15 @@ export type Viewer = {
   name: string;
   roleSlug: string | null;
   organization: ViewerOrganization | null;
+  /** The member's granted `attendance` actions (GET, GET_ALL, CREATE, …); empty without any. */
+  attendanceActions: string[];
 };
 
 const VIEWER_QUERY = `
 query ConnectorViewer {
   me {
     orgRole { slug }
+    permissions { resource actions }
     user { name }
   }
   organization {
@@ -30,10 +33,14 @@ query ConnectorViewer {
 
 const isUrl = (value: string | null | undefined) => /^(https?:|data:)/i.test(value?.trim() ?? "");
 
-/** Who is signed in to the active organisation: their name, role, and the organisation. */
+/** Who is signed in to the active organisation: their name, role, attendance access, and the organisation. */
 export async function fetchViewer(token: string): Promise<Viewer> {
   const payload = await graphqlRequest<{
-    me: { orgRole?: { slug?: string | null } | null; user: { name: string } };
+    me: {
+      orgRole?: { slug?: string | null } | null;
+      permissions?: { resource: string; actions: string[] }[] | null;
+      user: { name: string };
+    };
     organization?: {
       name: string;
       logo?: string | null;
@@ -45,7 +52,9 @@ export async function fetchViewer(token: string): Promise<Viewer> {
     } | null;
   }>({ query: VIEWER_QUERY, token });
   const organization = payload.organization;
+  const attendance = payload.me.permissions?.find((grant) => grant.resource === "attendance");
   return {
+    attendanceActions: attendance?.actions ?? [],
     name: payload.me.user.name,
     organization: organization
       ? {
