@@ -41,7 +41,7 @@ let probing: Promise<void> | null = null;
 function set(status: ConnectivityStatus, reason?: OfflineReason) {
   const resolvedReason =
     status === "offline"
-      ? reason ?? (lastDeviceConnected === false ? "no_network" : "server_unreachable")
+      ? (reason ?? (lastDeviceConnected === false ? "no_network" : "server_unreachable"))
       : undefined;
 
   if (state.status === status && state.reason === resolvedReason) return;

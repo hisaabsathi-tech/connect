@@ -32,6 +32,46 @@ export function bearingBetween(a: Coordinates, b: Coordinates) {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }
 
+/**
+ * Compass bearing (0–360°) pointing from `from` towards `target`.
+ * When road route coordinates (`[longitude, latitude][]`) are provided, it looks forward
+ * along the route from the position closest to `from` for the first point at least `minMetres`
+ * away, pointing along the road path towards the delivery address.
+ * Falls back to direct compass bearing from `from` to `target`.
+ */
+export function bearingTowardsTarget(
+  from: Coordinates,
+  target: Coordinates,
+  routeCoords?: [number, number][] | null,
+  minMetres = 10,
+): number {
+  if (routeCoords && routeCoords.length > 1) {
+    let closestIdx = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < routeCoords.length; i++) {
+      const coord = routeCoords[i];
+      if (!coord) continue;
+      const pt: Coordinates = { latitude: coord[1], longitude: coord[0] };
+      const dist = distanceInMetres(from, pt);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIdx = i;
+      }
+    }
+
+    for (let i = closestIdx; i < routeCoords.length; i++) {
+      const coord = routeCoords[i];
+      if (!coord) continue;
+      const pt: Coordinates = { latitude: coord[1], longitude: coord[0] };
+      if (distanceInMetres(from, pt) >= minMetres) {
+        return bearingBetween(from, pt);
+      }
+    }
+  }
+
+  return bearingBetween(from, target);
+}
+
 export function centerOf(points: Coordinates[]): Coordinates {
   if (!points.length) return INDIA_CENTER;
   return points.reduce(

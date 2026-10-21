@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -12,6 +13,11 @@ import { LiveTripCard } from "./components/live-trip-card";
 import { useTripMap } from "./hooks/use-trip-map";
 import { useLiveTrips } from "./lib/live-trips-store";
 import { nextStopOf, useNextStopPicks } from "./lib/next-stop";
+
+const CARD_BOTTOM = 16;
+const CARD_GAP = 12;
+// Used only for the first frame, before React Native reports the card's actual height.
+const INITIAL_CARD_HEIGHT = 180;
 
 /**
  * One live trip on the map, following the vehicle as its points arrive over the trip's socket:
@@ -31,6 +37,7 @@ export function TripMapScreen() {
   const order = trip ? nextStopOf(trip, picks) : null;
   const own = useLiveLocation(Boolean(trip?.mine));
   const { ended, path, stops, vehicle } = useTripMap(trip, own.location);
+  const [cardHeight, setCardHeight] = useState(INITIAL_CARD_HEIGHT);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -39,7 +46,7 @@ export function TripMapScreen() {
       <LiveTripMap
         bearing={trip?.mine ? own.heading : undefined}
         controlsTop={insets.top + 12}
-        legendBottom={insets.bottom + 180}
+        legendBottom={insets.bottom + CARD_BOTTOM + cardHeight + CARD_GAP}
         nextStopId={order?.orderId ?? null}
         onAction={close}
         path={path}
@@ -47,7 +54,11 @@ export function TripMapScreen() {
         vehicle={vehicle}
         vehiclePin={vehiclePinFor(trip?.vehicleWheelCount)}
       />
-      <View className="absolute right-4 left-4" style={{ bottom: insets.bottom + 16 }}>
+      <View
+        className="absolute right-4 left-4"
+        onLayout={(event) => setCardHeight(event.nativeEvent.layout.height)}
+        style={{ bottom: insets.bottom + CARD_BOTTOM }}
+      >
         {trip && order && !ended ? (
           <LiveTripCard onMap order={order} trip={trip} />
         ) : (

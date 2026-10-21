@@ -177,12 +177,8 @@ export function NetworkProvider({ children }: PropsWithChildren) {
               strokeWidth={1.5}
             />
           </View>
-          <Text className="mt-4 text-xl font-semibold text-foreground">
-            {title}
-          </Text>
-          <Text className="mt-2 text-base leading-6 text-muted-foreground">
-            {description}
-          </Text>
+          <Text className="mt-4 text-xl font-semibold text-foreground">{title}</Text>
+          <Text className="mt-2 text-base leading-6 text-muted-foreground">{description}</Text>
           <View className="mt-7 flex-row gap-3">
             <HapticButton
               kind="light"

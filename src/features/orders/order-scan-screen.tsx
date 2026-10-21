@@ -107,6 +107,10 @@ export function OrderScanScreen() {
   const matched = useRef(false);
   const lastCode = useRef({ at: 0, value: "" });
 
+  // Normally this returns to the trip map or Orders list that opened the scanner. A direct link
+  // has no history entry, so keep Close inside the Orders tab instead of exiting the app.
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/orders"));
+
   // The camera (and flash) runs only while this screen is in front.
   useFocusEffect(
     useCallback(() => {
@@ -151,7 +155,7 @@ export function OrderScanScreen() {
     <TabScreen>
       <View className="flex-1 bg-card px-5 pt-4">
         <View className="flex-row items-center justify-between">
-          <RoundButton icon={Cancel01Icon} label="Close scanner" onPress={() => router.back()} />
+          <RoundButton icon={Cancel01Icon} label="Close scanner" onPress={close} />
           {granted && order ? (
             <RoundButton
               active={torch}

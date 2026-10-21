@@ -36,7 +36,12 @@ import { useMyVehicle } from "@/hooks/use-my-vehicle";
 import type { Point } from "@/lib/api/attendance";
 import { fetchRoute, type RoadRoute } from "@/lib/api/maps";
 import { useAuthSession } from "@/lib/auth/session";
-import { bearingBetween, type Coordinates, distanceInMetres } from "@/lib/maps/geo";
+import {
+  bearingBetween,
+  bearingTowardsTarget,
+  type Coordinates,
+  distanceInMetres,
+} from "@/lib/maps/geo";
 import { googleMapsDirectionsUrl, googleMapsPlaceUrl } from "@/lib/maps/google-maps";
 import {
   loadOlaMapStyle,
@@ -1095,7 +1100,14 @@ function useOrderMapView(
   const { delivered, deliveredAt } = state;
   const route = useRoadRoute(delivered ? null : live, delivered ? null : order);
   const handedOver = delivered && deliveredAt ? deliveredAt : null;
-  const selfPin = useSelfPin(delivered ? null : live, heading);
+  // When there is a delivery address and the order is not yet delivered, orient the vehicle pin
+  // towards the delivery location along the road route (or straight-line when no route yet).
+  // This overrides the raw GPS heading so the face always points the rider at the drop.
+  const deliveryHeading = useMemo(() => {
+    if (delivered || !live || !order) return heading;
+    return bearingTowardsTarget(live, order, route?.coordinates ?? null);
+  }, [delivered, heading, live, order, route]);
+  const selfPin = useSelfPin(delivered ? null : live, deliveryHeading);
   const points = useMemo(
     () =>
       [
@@ -1377,21 +1389,29 @@ export function LiveTripMap({
   onAction: () => void;
 }) {
   const route = usePlannedRoute(vehicle, stops, nextStopId);
+  // Keep the marker facing the same first stop used to build the displayed route. This matters
+  // especially on the driver's Home map: a phone compass heading can be stale while the vehicle
+  // is parked or turning, but the map should always make the intended delivery direction clear.
+  const destination = useMemo(
+    () => visitOrder(vehicle, stops, nextStopId)[0] ?? null,
+    [nextStopId, stops, vehicle],
+  );
   const [focusId, setFocusId] = useState<string | null>(null);
   const points = useMemo(() => {
     const headingPath = vehicle ? [...path, vehicle] : path;
-    const computedBearing = bearing ?? travelBearing(headingPath);
+    const computedBearing =
+      vehicle && destination
+        ? bearingTowardsTarget(vehicle, destination, route?.coordinates ?? null)
+        : (bearing ?? travelBearing(headingPath));
     const items: (MapPoint | null)[] = [
       ...stops.map((stop) => ({
         ...at(stop, `trip-stop-${stop.id}`, "order" as const),
         info: { address: stop.address, title: stop.title },
       })),
-      vehicle
-        ? { ...at(vehicle, "trip-vehicle", vehiclePin), bearing: computedBearing }
-        : null,
+      vehicle ? { ...at(vehicle, "trip-vehicle", vehiclePin), bearing: computedBearing } : null,
     ];
     return items.filter((item): item is MapPoint => item !== null);
-  }, [bearing, path, stops, vehicle, vehiclePin]);
+  }, [bearing, destination, path, route, stops, vehicle, vehiclePin]);
   const trail = useMemo(
     () => path.map((point) => [point.longitude, point.latitude] as [number, number]),
     [path],
