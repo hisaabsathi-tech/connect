@@ -36,6 +36,7 @@ export default function TabsLayout() {
         >
           <Tabs.Screen name="index" />
           <Tabs.Screen name="orders" />
+          <Tabs.Screen name="pickups" />
           <Tabs.Screen name="attendance" />
           <Tabs.Screen name="profile" />
         </Tabs>

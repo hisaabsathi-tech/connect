@@ -19,6 +19,8 @@ export type Viewer = {
   attendanceActions: string[];
   /** The member's granted `order` actions (GET, UPDATE, …); empty without any. */
   orderActions: string[];
+  /** True when an enabled same-owner organization grants this delivery boy Pickup access. */
+  canViewPickups: boolean;
 };
 
 const VIEWER_QUERY = `
@@ -31,6 +33,7 @@ query ConnectorViewer {
   organization {
     name logo addressLine1 addressLine2 city state pincode
   }
+  pickupAvailability { eligible }
 }`;
 
 const isUrl = (value: string | null | undefined) => /^(https?:|data:)/i.test(value?.trim() ?? "");
@@ -52,12 +55,14 @@ export async function fetchViewer(token: string): Promise<Viewer> {
       state?: string | null;
       pincode?: string | null;
     } | null;
+    pickupAvailability?: { eligible?: boolean | null } | null;
   }>({ query: VIEWER_QUERY, token });
   const organization = payload.organization;
   const actionsOn = (resource: string) =>
     payload.me.permissions?.find((grant) => grant.resource === resource)?.actions ?? [];
   return {
     attendanceActions: actionsOn("attendance"),
+    canViewPickups: Boolean(payload.pickupAvailability?.eligible),
     name: payload.me.user.name,
     organization: organization
       ? {

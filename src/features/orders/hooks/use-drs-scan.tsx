@@ -9,7 +9,7 @@ import { errorMessage } from "@/lib/errors";
 
 /**
  * The scan of a signed DRS. `open` uploads one when the sheet has none (camera or gallery, a
- * free-shape crop, then Retake / Confirm) and otherwise shows it, with Re-upload to replace it.
+ * free-shape crop, then Retake / Confirm) and otherwise shows it, with Re Upload to replace it.
  * The sheet the server returns goes to `onUpdated`. Render `element` once.
  */
 export function useDrsScan(onUpdated: (sheet: DrsSheet) => void) {
@@ -77,7 +77,7 @@ export function useDrsScan(onUpdated: (sheet: DrsSheet) => void) {
         action={
           viewing
             ? {
-                label: "Re-upload",
+                label: "Re Upload",
                 onPress: () => {
                   const sheet = viewing;
                   setViewing(null);

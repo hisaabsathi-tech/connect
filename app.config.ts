@@ -6,6 +6,7 @@ import {
   withAndroidStyles,
   withAppBuildGradle,
   withGradleProperties,
+  withStringsXml,
 } from "expo/config-plugins";
 
 import androidLogo from "./assets/logo/android/metadata.json";
@@ -50,6 +51,27 @@ const withPortraitOnLargeScreens: ConfigPlugin = (config) =>
     application.property = properties;
     return config;
   });
+
+// The home screen icon's label is just "Connect" — short enough to sit under the icon without
+// wrapping or being cut off. The app's full name ("Hisaab Sathi Connect") stays everywhere else:
+// Settings > Apps, the recents/app-switcher card, and the Play Store listing.
+const LAUNCHER_LABEL = "Connect";
+
+const withShortLauncherLabel: ConfigPlugin = (config) =>
+  withAndroidManifest(
+    withStringsXml(config, (config) => {
+      config.modResults = AndroidConfig.Strings.setStringItem(
+        [{ $: { name: "launcher_label", translatable: "false" }, _: LAUNCHER_LABEL }],
+        config.modResults,
+      );
+      return config;
+    }),
+    (config) => {
+      const mainActivity = AndroidConfig.Manifest.getMainActivityOrThrow(config.modResults);
+      mainActivity.$["android:label"] = "@string/launcher_label";
+      return config;
+    },
+  );
 
 // Smaller release builds: R8 strips unused Java/Kotlin code, unused resources are dropped, and
 // native libraries are stored compressed inside the APK. Fresco's GIF and WebP add-ons only serve
@@ -111,96 +133,98 @@ const withReleaseBuildGradle: ConfigPlugin = (config) =>
   });
 
 export default ({ config }: ConfigContext): ExpoConfig =>
-  withPortraitOnLargeScreens(
-    withReleaseBuildGradle(
-      withGradlePropertyOverrides(
-        withTransparentAutofillHighlight({
-          ...config,
-          name: "Hisaab Sathi Connect",
-          slug: "hisaab-sathi-connect",
-          version: release.version,
-          orientation: "portrait",
-          icon: "./assets/logo/android/app.png",
-          scheme: "hisaabsathi-connect",
-          userInterfaceStyle: "light",
-          android: {
-            package: "in.hisaabsathi.connect",
-            versionCode: release.versionCode,
-            softwareKeyboardLayoutMode: "resize",
-            adaptiveIcon: {
-              backgroundColor: androidLogo.backgroundColor,
-              foregroundImage: "./assets/logo/android/adaptive-foreground.png",
-              backgroundImage: "./assets/logo/android/adaptive-background.png",
-              monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
+  withShortLauncherLabel(
+    withPortraitOnLargeScreens(
+      withReleaseBuildGradle(
+        withGradlePropertyOverrides(
+          withTransparentAutofillHighlight({
+            ...config,
+            name: "Hisaab Sathi Connect",
+            slug: "hisaab-sathi-connect",
+            version: release.version,
+            orientation: "portrait",
+            icon: "./assets/logo/android/app.png",
+            scheme: "hisaabsathi-connect",
+            userInterfaceStyle: "light",
+            android: {
+              package: "in.hisaabsathi.connect",
+              versionCode: release.versionCode,
+              softwareKeyboardLayoutMode: "resize",
+              adaptiveIcon: {
+                backgroundColor: androidLogo.backgroundColor,
+                foregroundImage: "./assets/logo/android/adaptive-foreground.png",
+                backgroundImage: "./assets/logo/android/adaptive-background.png",
+                monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
+              },
+              predictiveBackGestureEnabled: true,
+              // Attendance photos (Image Confirmation module) open the phone's camera app.
+              permissions: ["android.permission.CAMERA"],
             },
-            predictiveBackGestureEnabled: true,
-            // Attendance photos (Image Confirmation module) open the phone's camera app.
-            permissions: ["android.permission.CAMERA"],
-          },
-          plugins: [
-            "expo-router",
-            // Satoshi ships only Regular and Medium. One native family maps every weight to a real
-            // face (500+ → Medium), so heavier classes never fall back to a synthesized bold.
-            [
-              "expo-font",
-              {
-                android: {
-                  fonts: [
-                    {
-                      fontFamily: "Satoshi",
-                      fontDefinitions: [
-                        { path: "./assets/fonts/satoshi-regular.otf", weight: 400 },
-                        { path: "./assets/fonts/satoshi-medium.otf", weight: 500 },
-                        { path: "./assets/fonts/satoshi-medium.otf", weight: 600 },
-                        { path: "./assets/fonts/satoshi-medium.otf", weight: 700 },
-                      ],
-                    },
-                  ],
+            plugins: [
+              "expo-router",
+              // Satoshi ships only Regular and Medium. One native family maps every weight to a real
+              // face (500+ → Medium), so heavier classes never fall back to a synthesized bold.
+              [
+                "expo-font",
+                {
+                  android: {
+                    fonts: [
+                      {
+                        fontFamily: "Satoshi",
+                        fontDefinitions: [
+                          { path: "./assets/fonts/satoshi-regular.otf", weight: 400 },
+                          { path: "./assets/fonts/satoshi-medium.otf", weight: 500 },
+                          { path: "./assets/fonts/satoshi-medium.otf", weight: 600 },
+                          { path: "./assets/fonts/satoshi-medium.otf", weight: 700 },
+                        ],
+                      },
+                    ],
+                  },
+                  ios: {
+                    fonts: [
+                      "./assets/fonts/satoshi-regular.otf",
+                      "./assets/fonts/satoshi-medium.otf",
+                    ],
+                  },
                 },
-                ios: {
-                  fonts: [
-                    "./assets/fonts/satoshi-regular.otf",
-                    "./assets/fonts/satoshi-medium.otf",
-                  ],
+              ],
+              "expo-secure-store",
+              // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
+              // A development/release build is required; this is not available in Expo Go.
+              "@maplibre/maplibre-react-native",
+              // Scans the parcel label's barcode before an order is updated. Video is never
+              // recorded, so no microphone permission is added.
+              [
+                "expo-camera",
+                {
+                  cameraPermission:
+                    "Allow Hisaab Sathi Connect to use the camera to scan parcel barcodes.",
+                  recordAudioAndroid: false,
                 },
-              },
+              ],
+              [
+                "expo-location",
+                {
+                  locationWhenInUsePermission:
+                    "Allow Hisaab Sathi Connect to use your location for attendance.",
+                },
+              ],
+              [
+                "expo-splash-screen",
+                {
+                  backgroundColor: androidLogo.splashBackgroundColor,
+                  image: "./assets/logo/splash/dark.png",
+                  imageWidth: 288,
+                  resizeMode: "contain",
+                },
+              ],
             ],
-            "expo-secure-store",
-            // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
-            // A development/release build is required; this is not available in Expo Go.
-            "@maplibre/maplibre-react-native",
-            // Scans the parcel label's barcode before an order is updated. Video is never
-            // recorded, so no microphone permission is added.
-            [
-              "expo-camera",
-              {
-                cameraPermission:
-                  "Allow Hisaab Sathi Connect to use the camera to scan parcel barcodes.",
-                recordAudioAndroid: false,
-              },
-            ],
-            [
-              "expo-location",
-              {
-                locationWhenInUsePermission:
-                  "Allow Hisaab Sathi Connect to use your location for attendance.",
-              },
-            ],
-            [
-              "expo-splash-screen",
-              {
-                backgroundColor: androidLogo.splashBackgroundColor,
-                image: "./assets/logo/splash/dark.png",
-                imageWidth: 288,
-                resizeMode: "contain",
-              },
-            ],
-          ],
-          experiments: {
-            typedRoutes: true,
-            reactCompiler: true,
-          },
-        }),
+            experiments: {
+              typedRoutes: true,
+              reactCompiler: true,
+            },
+          }),
+        ),
       ),
     ),
   );

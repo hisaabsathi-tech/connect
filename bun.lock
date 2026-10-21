@@ -36,7 +36,6 @@
         "jsbarcode": "^3.12.3",
         "nativewind": "5.0.0-rc.0",
         "react": "19.2.3",
-        "react-dom": "19.2.3",
         "react-native": "0.86.3",
         "react-native-css": "3.1.0-rc.0",
         "react-native-gesture-handler": "~2.32.0",
@@ -46,7 +45,6 @@
         "react-native-screens": "~4.26.0",
         "react-native-svg": "15.15.4",
         "react-native-toast-message": "^2.5.2",
-        "react-native-web": "~0.21.0",
         "react-native-worklets": "0.10.1",
       },
       "devDependencies": {

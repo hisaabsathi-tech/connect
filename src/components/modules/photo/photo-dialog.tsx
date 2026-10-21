@@ -15,7 +15,7 @@ interface PhotoDialogProps {
   uri: string | null;
   error?: string | null;
   onClose: () => void;
-  /** A button along the bottom, such as Re-upload. */
+  /** A button along the bottom, such as Re Upload. */
   action?: { label: string; onPress: () => void };
 }
 

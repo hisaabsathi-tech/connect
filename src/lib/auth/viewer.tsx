@@ -21,6 +21,8 @@ type ViewerState = {
    * order. Any role with it gets them, not only the delivery boy role.
    */
   canUpdateOrders: boolean;
+  /** An enabled same-owner organization grants this delivery boy Pickup access. */
+  canViewPickups: boolean;
   /** The role grants attendance view: the Attendance tab and the day's record on Home. */
   canViewAttendance: boolean;
   /** The role grants attendance create: the check-in / check-out swipe. */
@@ -63,6 +65,7 @@ export function ViewerProvider({ children }: PropsWithChildren) {
         ? viewer.attendanceActions.some((action) => action === "GET" || action === "GET_ALL")
         : true,
       canUpdateOrders: viewer?.orderActions.includes("UPDATE") ?? false,
+      canViewPickups: viewer?.canViewPickups ?? false,
       isLoaded,
       reload,
       viewer,

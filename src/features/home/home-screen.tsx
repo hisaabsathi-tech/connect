@@ -57,7 +57,8 @@ export function HomeScreen() {
   const dayCheckIn = useMemo(() => checkInPointOf(day.record), [day.record]);
   const dayCheckOut = useMemo(() => checkOutPointOf(day.record), [day.record]);
   // Orders still to deliver for a role with order edit; while there are any, today's map shows them.
-  const deliveries = useActiveOrders(canUpdateOrders ? token : null, today);
+  // Loaded alongside the role rather than after it; dropped if the role has no order edit.
+  const deliveries = useActiveOrders(!viewer.isLoaded || canUpdateOrders ? token : null, today);
   const showOrders = deliveries.active && selectedDate === today;
   const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
   // Bumped by a pull to refresh, which recenters the map.
@@ -68,14 +69,20 @@ export function HomeScreen() {
   // height never feeds back into its own size.
   const [headerHeight, setHeaderHeight] = useState(0);
   const [belowHeight, setBelowHeight] = useState(0);
-  // The Orders card's height (with its margin), left out of what must fit on screen.
+  // The Orders card's height (with its margin). Left out of what must fit on screen only when a
+  // day record or the swipe is also showing above it — otherwise it's the only thing below the
+  // map, and the map shrinks to fit it in rather than pushing it under the fold.
   const [ordersCardHeight, setOrdersCardHeight] = useState(0);
   const [minHeight, maxHeight] = canUpdateOrders
     ? [DELIVERY_MAP_MIN_HEIGHT, DELIVERY_MAP_MAX_HEIGHT]
     : [MAP_MIN_HEIGHT, MAP_MAX_HEIGHT];
   const measured = Boolean(viewportHeight && headerHeight && belowHeight);
+  const ordersCardScrollsBelowFold = canUpdateOrders && canViewAttendance;
   const onScreen =
-    headerHeight + belowHeight + CONTENT_BOTTOM_PADDING - (canUpdateOrders ? ordersCardHeight : 0);
+    headerHeight +
+    belowHeight +
+    CONTENT_BOTTOM_PADDING -
+    (ordersCardScrollsBelowFold ? ordersCardHeight : 0);
   const mapHeight = measured
     ? Math.min(maxHeight, Math.max(minHeight, viewportHeight - onScreen))
     : maxHeight;

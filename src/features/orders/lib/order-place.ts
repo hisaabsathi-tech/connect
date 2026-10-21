@@ -1,4 +1,4 @@
-import { geocodeAddress } from "@/lib/api/maps";
+import { joinAddress, lookUpAddress } from "@/lib/maps/address-lookup";
 import type { Coordinates } from "@/lib/maps/geo";
 
 import type { DrsOrder } from "./orders";
@@ -15,30 +15,7 @@ export type OrderPin = Coordinates & {
   exact: boolean;
 };
 
-// Looked-up places, kept for the app run (the server caches them for longer).
-const places = new Map<string, Promise<Coordinates | null>>();
-
-function lookUp(token: string, address: string) {
-  const key = address.toLowerCase();
-  let place = places.get(key);
-  if (!place) {
-    place = geocodeAddress(address, token)
-      .then((result) => (result ? { latitude: result.lat, longitude: result.lng } : null))
-      .catch(() => {
-        places.delete(key);
-        return null;
-      });
-    places.set(key, place);
-  }
-  return place;
-}
-
-/** Address parts with the blanks dropped, comma-separated. */
-export const joinAddress = (parts: (string | null | undefined)[]) =>
-  parts
-    .map((part) => part?.trim())
-    .filter(Boolean)
-    .join(", ");
+export { joinAddress };
 
 /**
  * The street address when there is one, else the area and pincode, which only places the pin
@@ -55,10 +32,10 @@ export async function placeOrder(token: string, order: DrsOrder): Promise<OrderP
   };
   const full = joinAddress([street, area]);
   if (street) {
-    const exact = await lookUp(token, full);
+    const exact = await lookUpAddress(token, full);
     if (exact) return { ...base, ...exact, address: full, exact: true };
   }
-  const approximate = area ? await lookUp(token, area) : null;
+  const approximate = area ? await lookUpAddress(token, area) : null;
   // The card still shows the whole address, though the pin only marks its area.
   return approximate ? { ...base, ...approximate, address: full, exact: false } : null;
 }

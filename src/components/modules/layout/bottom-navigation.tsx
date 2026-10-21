@@ -13,7 +13,7 @@ import { type HapticKind, haptic } from "@/lib/haptics";
 
 type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
-type ActiveIconName = "attendance" | "orders" | "profile";
+type ActiveIconName = "attendance" | "orders" | "pickups" | "profile";
 
 // These used to load from bundled SVG asset URIs. Android debug can resolve those URIs, while
 // release APK asset packaging can leave SvgUri with nothing to read. Keeping the same artwork as
@@ -95,6 +95,24 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
         />
       </Svg>
     );
+  if (name === "pickups")
+    return (
+      <Svg fill="none" height={28} viewBox="0 0 24 24" width={28}>
+        <Path
+          d="M2 7C2 5.3 3.3 4 5 4H11.5V17H5C3.3 17 2 15.7 2 14V7ZM11.5 7H16.2C17.5 7 17.9 7.6 18.6 8.7L21 12.5V15.2C21 16.2 20.2 17 19.2 17H18.8C18.3 15.8 17.3 15 16 15C14.7 15 13.7 15.8 13.2 17H11.5V7Z"
+          fill="#CCD3FF"
+          stroke="#465FFF"
+          strokeLinejoin="round"
+          strokeWidth={1.5}
+        />
+        <Path
+          d="M9 18A2 2 0 1 1 5 18A2 2 0 0 1 9 18ZM18 18A2 2 0 1 1 14 18A2 2 0 0 1 18 18Z"
+          fill="#CCD3FF"
+          stroke="#465FFF"
+          strokeWidth={1.5}
+        />
+      </Svg>
+    );
   return (
     <Svg fill="none" height={28} viewBox="0 0 24 24" width={28}>
       <Path
@@ -120,6 +138,7 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
 const items = {
   index: { icon: null, label: "Home" },
   orders: { icon: Package04Icon, label: "Orders" },
+  pickups: { icon: null, label: "Pickups" },
   attendance: { icon: Calendar01Icon, label: "Attendance" },
   profile: { icon: User02Icon, label: "Profile" },
 } as const;
@@ -128,6 +147,7 @@ const pageHaptics: Record<keyof typeof items, HapticKind> = {
   attendance: "medium",
   index: "selection",
   orders: "medium",
+  pickups: "medium",
   profile: "light",
 };
 
@@ -136,18 +156,22 @@ const pageHaptics: Record<keyof typeof items, HapticKind> = {
  * Orders when it grants order edit.
  */
 export function BottomNavigation({ insets, navigation, state }: BottomTabBarProps) {
-  const { canUpdateOrders, canViewAttendance } = useViewer();
+  const { canUpdateOrders, canViewAttendance, canViewPickups } = useViewer();
   return (
     <View className="flex-row bg-[#F0F2FF] px-5 pt-3" style={{ paddingBottom: insets.bottom + 8 }}>
       {state.routes.map((route, index) => {
         const item = items[route.name as keyof typeof items];
         if (!item) return null;
         if (route.name === "orders" && !canUpdateOrders) return null;
+        if (route.name === "pickups" && !canViewPickups) return null;
         if (route.name === "attendance" && !canViewAttendance) return null;
         const active = state.index === index;
         const color = active ? colors.primary : colors.foreground;
         const activeIcon =
-          route.name === "attendance" || route.name === "orders" || route.name === "profile"
+          route.name === "attendance" ||
+          route.name === "orders" ||
+          route.name === "pickups" ||
+          route.name === "profile"
             ? route.name
             : null;
         const onPress = () => {
@@ -176,6 +200,16 @@ export function BottomNavigation({ insets, navigation, state }: BottomTabBarProp
                 </View>
               ) : item.icon ? (
                 <HugeiconsIcon color={color} icon={item.icon} size={26} />
+              ) : route.name === "pickups" ? (
+                <Svg fill="none" height={26} viewBox="0 0 24 24" width={26}>
+                  <Path
+                    d="M2 7C2 5.3 3.3 4 5 4H11.5V17H5C3.3 17 2 15.7 2 14V7ZM11.5 7H16.2C17.5 7 17.9 7.6 18.6 8.7L21 12.5V15.2C21 16.2 20.2 17 19.2 17H18.8C18.3 15.8 17.3 15 16 15C14.7 15 13.7 15.8 13.2 17H11.5V7Z M9 18A2 2 0 1 1 5 18A2 2 0 0 1 9 18ZM18 18A2 2 0 1 1 14 18A2 2 0 0 1 18 18Z"
+                    stroke={color}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                  />
+                </Svg>
               ) : (
                 <Image
                   contentFit="contain"

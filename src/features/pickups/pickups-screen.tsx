@@ -1,0 +1,394 @@
+import { Call02Icon, CheckmarkCircle02Icon, Location01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react-native";
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Linking,
+  Pressable,
+  RefreshControl,
+  View,
+} from "react-native";
+
+import { type DateRange, SearchRangeToolbar } from "@/components/modules/date-range";
+import { useDialog } from "@/components/modules/dialog";
+import { EmptyBlock } from "@/components/modules/empty-state";
+import { TabScreen } from "@/components/modules/layout";
+import { RemarkBadge } from "@/components/modules/remark-badge";
+import { BottomSheet } from "@/components/modules/sheet";
+import { CardListSkeleton } from "@/components/modules/skeleton";
+import { Text } from "@/components/modules/typography";
+import { useToast } from "@/components/ui/toast";
+import { colors } from "@/config/colors";
+import { FilterChips } from "@/features/orders/components/filter-chips";
+import {
+  fetchMyPickupRequests,
+  markPickupPickedUp,
+  type PickupRequest,
+  type PickupStatus,
+} from "@/lib/api/pickups";
+import { useAuthSession } from "@/lib/auth/session";
+import { useViewer } from "@/lib/auth/viewer";
+import { formatDayLabel, formatTime, useDateFilter } from "@/lib/date";
+import { errorMessage } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
+import { dialUrl, formatMobile } from "@/lib/phone";
+
+import { usePickupMap } from "./hooks/use-pickup-map";
+
+type Tab = "all" | "pending" | "picked";
+
+const tabs: { id: Tab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "pending", label: "Yet to pickup" },
+  { id: "picked", label: "Picked up" },
+];
+
+/** Tapping the already-active tab clears it, back to "all" — the same as Orders' filter chips. */
+function toggleTab(current: Tab, next: Tab): Tab {
+  return current === next ? "all" : next;
+}
+
+const statusBadge: Record<
+  PickupStatus,
+  { label: string; variant: "delivered" | "destructive" | "rescheduled" | "transit" }
+> = {
+  OPEN: { label: "Open", variant: "transit" },
+  ASSIGNED: { label: "Assigned", variant: "rescheduled" },
+  RESOLVED: { label: "Picked up", variant: "delivered" },
+  CANCELLED: { label: "Cancelled", variant: "destructive" },
+  OUTDATED: { label: "Outdated", variant: "destructive" },
+};
+
+function bounds(from: string, to: string) {
+  return {
+    from: new Date(`${from}T00:00:00.000+05:30`).toISOString(),
+    to: new Date(`${to}T23:59:59.999+05:30`).toISOString(),
+  };
+}
+
+function matchesTab(request: PickupRequest, tab: Tab) {
+  if (tab === "all") return true;
+  return tab === "pending"
+    ? ["OPEN", "ASSIGNED"].includes(request.status)
+    : request.status === "RESOLVED";
+}
+
+function PickupDetails({
+  locating,
+  onClose,
+  onMap,
+  request,
+  visible,
+}: {
+  locating: boolean;
+  onClose: () => void;
+  onMap: () => void;
+  request: PickupRequest | null;
+  visible: boolean;
+}) {
+  if (!request) return null;
+  const dial = dialUrl(request.phoneNumber);
+  return (
+    <BottomSheet onClose={onClose} visible={visible}>
+      <Text className="mt-4 text-xl font-semibold text-foreground">{request.name}</Text>
+      <Text className="mt-1 text-sm text-muted-foreground">
+        {request.organizationName ?? "Pickup request"}
+      </Text>
+      <RemarkBadge {...statusBadge[request.status]} />
+      <Text className="mt-5 text-xs text-muted-foreground">ADDRESS</Text>
+      <Text className="mt-1 text-base leading-6 text-foreground">
+        {request.address}, {request.pincode}
+      </Text>
+      <Text className="mt-5 text-xs text-muted-foreground">PREFERRED DATE & TIME</Text>
+      <Text className="mt-1 text-base font-semibold text-foreground">
+        {formatDayLabel(request.preferredAt.slice(0, 10))} · {formatTime(request.preferredAt)}
+      </Text>
+      <View className="mt-6 flex-row gap-3">
+        {dial ? (
+          <Pressable
+            className="h-11 flex-1 items-center justify-center border border-primary"
+            onPress={() => void Linking.openURL(dial)}
+          >
+            <Text className="font-medium text-primary">Call customer</Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          className="h-11 flex-1 items-center justify-center border border-primary"
+          disabled={locating}
+          onPress={onMap}
+        >
+          {locating ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <Text className="font-medium text-primary">View on map</Text>
+          )}
+        </Pressable>
+      </View>
+    </BottomSheet>
+  );
+}
+
+function PickupCard({
+  busy,
+  locating,
+  onMap,
+  onOpen,
+  onPickedUp,
+  request,
+}: {
+  busy: boolean;
+  /** The map button's spinner while the address is being found. */
+  locating: boolean;
+  onMap: () => void;
+  onOpen: () => void;
+  onPickedUp: () => void;
+  request: PickupRequest;
+}) {
+  const dial = dialUrl(request.phoneNumber);
+  return (
+    <View className="border border-[#EEF0F6] bg-card p-4">
+      <Pressable accessibilityRole="button" onPress={onOpen} onPressIn={() => haptic("light")}>
+        <View className="flex-row items-start gap-3">
+          <View className="flex-1">
+            <Text className="text-lg font-semibold text-foreground">{request.name}</Text>
+            <Text className="mt-1 text-base text-muted-foreground">
+              {formatMobile(request.phoneNumber)}
+            </Text>
+          </View>
+          <RemarkBadge {...statusBadge[request.status]} />
+        </View>
+        <View className="mt-4 flex-row items-start gap-3">
+          <View className="flex-1">
+            <Text className="text-xs text-muted-foreground">Address</Text>
+            <Text className="mt-1 text-base leading-6 text-foreground">
+              {request.address}, {request.pincode}
+            </Text>
+          </View>
+          <View className="flex-row gap-2">
+            {dial ? (
+              <Pressable
+                accessibilityLabel="Call customer"
+                className="h-10 w-10 items-center justify-center bg-accent"
+                onPress={() => void Linking.openURL(dial)}
+              >
+                <HugeiconsIcon color={colors.primary} icon={Call02Icon} size={20} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityLabel="View on map"
+              className="h-10 w-10 items-center justify-center bg-accent"
+              disabled={locating}
+              onPress={onMap}
+            >
+              {locating ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <HugeiconsIcon color={colors.primary} icon={Location01Icon} size={20} />
+              )}
+            </Pressable>
+          </View>
+        </View>
+        <Text className="mt-4 text-xs text-muted-foreground">PREFERRED DATE & TIME</Text>
+        <Text className="mt-1 text-base font-semibold text-foreground">
+          {formatDayLabel(request.preferredAt.slice(0, 10))} · {formatTime(request.preferredAt)}
+        </Text>
+        {request.note ? (
+          <>
+            <Text className="mt-4 text-xs text-muted-foreground">NOTE</Text>
+            <Text className="mt-1 text-base leading-6 text-foreground">{request.note}</Text>
+          </>
+        ) : null}
+      </Pressable>
+      {request.status === "ASSIGNED" ? (
+        <Pressable
+          accessibilityLabel={`Mark ${request.name}'s pickup as picked up`}
+          className="mt-4 h-11 flex-row items-center justify-center gap-2 border border-[#86EFAC] bg-[#ECFDF5]"
+          disabled={busy}
+          onPress={onPickedUp}
+          onPressIn={() => haptic("light")}
+        >
+          {busy ? (
+            <ActivityIndicator color="#16A34A" size="small" />
+          ) : (
+            <>
+              <Text className="font-medium text-[#16A34A]">Mark as picked up</Text>
+              <HugeiconsIcon color="#16A34A" icon={CheckmarkCircle02Icon} size={18} />
+            </>
+          )}
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+export function PickupsScreen() {
+  const { token } = useAuthSession();
+  const viewer = useViewer();
+  const dialog = useDialog();
+  const pickupMap = usePickupMap();
+  const toast = useToast();
+  const { resetToToday, selectedDate, today } = useDateFilter();
+  const [tab, setTab] = useState<Tab>("all");
+  const [range, setRange] = useState<DateRange | null>(null);
+  const [query, setQuery] = useState("");
+  const [requests, setRequests] = useState<PickupRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [selected, setSelected] = useState<PickupRequest | null>(null);
+  const from = range?.from ?? selectedDate;
+  const to = range?.to ?? selectedDate;
+  const load = async (quiet = false) => {
+    if (!token) return;
+    if (!quiet) setLoading(true);
+    setFailed(false);
+    try {
+      setRequests(
+        await fetchMyPickupRequests(token, { ...bounds(from, to), q: query.trim() || undefined }),
+      );
+    } catch {
+      setFailed(true);
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, [from, to, token, query]);
+  useEffect(() => {
+    setRange(null);
+  }, [selectedDate]);
+  const shown = useMemo(
+    () => requests.filter((request) => matchesTab(request, tab)),
+    [requests, tab],
+  );
+  const confirmPickedUp = async (request: PickupRequest) => {
+    if (!token || updating) return;
+    const accepted = await dialog.confirm({
+      title: "Mark pickup as picked up?",
+      description: `Confirm collection from ${request.name}.`,
+      confirmLabel: "Mark picked up",
+      cancelLabel: "Not now",
+    });
+    if (!accepted) return;
+    setUpdating(request.id);
+    try {
+      await markPickupPickedUp(token, request);
+      toast.success("Pickup updated", "The pickup has been marked as picked up.");
+      await load(true);
+    } catch (error) {
+      toast.error("Couldn't update pickup", errorMessage(error, "Please try again."));
+    } finally {
+      setUpdating(null);
+    }
+  };
+  const header = (
+    <View className="pb-4">
+      <Text className="text-2xl font-semibold text-foreground">Order Pickup</Text>
+      <Text className="mt-0.5 text-sm text-muted-foreground">
+        See all your order pickup requests
+      </Text>
+      <FilterChips
+        onChange={(next) => setTab((current) => toggleTab(current, next))}
+        options={tabs}
+        value={tab}
+      />
+      <View className="mt-5">
+        <SearchRangeToolbar
+          onQueryChange={setQuery}
+          onRangeChange={setRange}
+          onSelectedDateClear={resetToToday}
+          query={query}
+          range={range}
+          searchLabel="Search pickup requests"
+          selectedDate={selectedDate === today ? null : selectedDate}
+          today={today}
+        />
+      </View>
+    </View>
+  );
+  if (!viewer.isLoaded)
+    return (
+      <TabScreen>
+        <FlatList
+          contentContainerClassName="px-5 pb-8 pt-2"
+          data={[]}
+          ListEmptyComponent={<CardListSkeleton />}
+          ListHeaderComponent={header}
+          renderItem={() => null}
+        />
+      </TabScreen>
+    );
+  if (!viewer.canViewPickups)
+    return (
+      <TabScreen>
+        <EmptyBlock
+          description="Pickup requests are not available for this organization."
+          title="No Pickup access"
+        />
+      </TabScreen>
+    );
+  return (
+    <TabScreen>
+      <FlatList
+        contentContainerClassName="px-5 pb-8 pt-2"
+        data={loading ? [] : shown}
+        keyExtractor={(item) => `${item.organizationId}-${item.id}`}
+        ItemSeparatorComponent={() => <View className="h-3" />}
+        ListHeaderComponent={header}
+        ListEmptyComponent={
+          loading ? (
+            <CardListSkeleton />
+          ) : (
+            <EmptyBlock
+              action={failed ? { label: "Try again", onPress: () => void load() } : undefined}
+              description={
+                failed
+                  ? "Check your connection and try again."
+                  : query
+                    ? `No pickup matches "${query}".`
+                    : "There are no pickup requests for this date."
+              }
+              title={failed ? "Couldn't load pickups" : "No pickup requests"}
+            />
+          )
+        }
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load(true).finally(() => setRefreshing(false));
+            }}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        renderItem={({ item }) => (
+          <PickupCard
+            busy={updating === item.id}
+            locating={pickupMap.locating === item.id}
+            onMap={() => void pickupMap.open(item)}
+            onOpen={() => setSelected(item)}
+            onPickedUp={() => void confirmPickedUp(item)}
+            request={item}
+          />
+        )}
+      />
+      <PickupDetails
+        locating={selected !== null && pickupMap.locating === selected.id}
+        onClose={() => setSelected(null)}
+        onMap={() => {
+          if (!selected) return;
+          // The map opens full screen; the sheet closes so it isn't left behind it.
+          void pickupMap.open(selected).then(() => setSelected(null));
+        }}
+        request={selected}
+        visible={Boolean(selected)}
+      />
+      {pickupMap.element}
+    </TabScreen>
+  );
+}

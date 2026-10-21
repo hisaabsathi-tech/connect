@@ -12,7 +12,7 @@ import { colors } from "@/config/colors";
 const ILLUSTRATION = require("@/assets/illustrations/empty-block.webp");
 const ILLUSTRATION_SIZE = { height: 143, width: 150 };
 
-/** The empty, loading and error blocks take at least this share of the screen's height. */
+/** The table's loading block takes at least this share of the screen's height. */
 const SCREEN_SHARE = 0.5;
 
 /**
@@ -20,6 +20,11 @@ const SCREEN_SHARE = 0.5;
  * empty-table icon inside a table), a title, a line of help and an optional action. Without a
  * title it is loading: a list shows skeleton cards in place of the cards to come, a table a
  * loading block of the same height.
+ *
+ * The illustration sits directly on the page background, sized to its own content — no card
+ * background, no border and no minimum height, so an empty list never forces the page to scroll.
+ * Inside a table, the empty/loading row keeps a card background and holds half the screen's
+ * height, in place of the rows it stands in for.
  */
 export function EmptyBlock({
   action,
@@ -38,8 +43,8 @@ export function EmptyBlock({
   if (!title && framed) return <CardListSkeleton />;
   return (
     <View
-      className={`items-center justify-center bg-card px-6 py-8 ${framed ? "border border-border" : ""}`}
-      style={{ minHeight: height * SCREEN_SHARE }}
+      className={`items-center justify-center px-6 py-8 ${framed ? "" : "bg-card"}`}
+      style={framed ? undefined : { minHeight: height * SCREEN_SHARE }}
     >
       {title ? (
         <>

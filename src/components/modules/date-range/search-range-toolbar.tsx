@@ -83,9 +83,20 @@ export function SearchRangeToolbar({
       </View>
       {range || selectedDate ? (
         <View className="mt-3 h-9 flex-row items-center self-start border border-primary bg-accent">
-          <Text className="px-3 text-sm text-primary">
-            {range ? rangeLabel(range) : rangeLabel({ from: selectedDate!, to: selectedDate! })}
-          </Text>
+          <Pressable
+            accessibilityLabel={range ? "Clear date range" : "Clear selected date"}
+            accessibilityRole="button"
+            className="h-full justify-center"
+            onPress={() => {
+              haptic("light");
+              if (range) onRangeChange(null);
+              else onSelectedDateClear?.();
+            }}
+          >
+            <Text className="px-3 text-sm text-primary">
+              {range ? rangeLabel(range) : rangeLabel({ from: selectedDate!, to: selectedDate! })}
+            </Text>
+          </Pressable>
           <Pressable
             accessibilityLabel={range ? "Clear date range" : "Clear selected date"}
             accessibilityRole="button"

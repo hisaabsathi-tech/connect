@@ -4,6 +4,7 @@ import { FlatList, RefreshControl, View } from "react-native";
 
 import { type DateRange, rangeLabel, SearchRangeToolbar } from "@/components/modules/date-range";
 import { useDialog } from "@/components/modules/dialog";
+import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
 import {
@@ -28,7 +29,6 @@ import { lastPosition } from "@/lib/maps/last-position";
 import { DrsCard } from "./components/drs-card";
 import { DrsPicker } from "./components/drs-picker";
 import { FilterChips } from "./components/filter-chips";
-import { ListEmpty } from "./components/list-empty";
 import { OrderCard } from "./components/order-card";
 import { type PageTab, PageTabs } from "./components/page-tabs";
 import { useDrsPrint } from "./hooks/use-drs-print";
@@ -99,7 +99,9 @@ export function OrdersScreen() {
 
   const from = range?.from ?? selectedDate;
   const to = range?.to ?? selectedDate;
-  const data = useDrsSheets(viewer.canUpdateOrders ? token : null, { from, to });
+  // Starts with the role still loading, rather than after it: the screen leaves for Home if the
+  // role turns out not to have order edit.
+  const data = useDrsSheets(token, { from, to });
   const { load, replace, sheets } = data;
 
   const updated = useCallback(
@@ -341,14 +343,14 @@ export function OrdersScreen() {
   const empty = data.loading ? (
     <CardListSkeleton />
   ) : data.failed ? (
-    <ListEmpty
+    <EmptyBlock
       action={{ label: "Try again", onPress: () => void load() }}
       description="Check your connection and try again."
       title={onOrders ? "Couldn't load orders" : "Couldn't load DRS"}
     />
   ) : onOrders ? (
     !scopedOrders.length ? (
-      <ListEmpty
+      <EmptyBlock
         description={
           activeDrsId
             ? `There are no orders on ${activeDrsId}.`
@@ -357,7 +359,7 @@ export function OrdersScreen() {
         title={activeDrsId ? "No orders on this DRS" : `No orders ${period}`}
       />
     ) : (
-      <ListEmpty
+      <EmptyBlock
         description={
           searching
             ? `No order matches "${searching}".`
@@ -367,12 +369,12 @@ export function OrdersScreen() {
       />
     )
   ) : !sheets.length ? (
-    <ListEmpty
+    <EmptyBlock
       description={"There are no DRS yet.\nDRS issued to you will show here."}
       title={`No DRS ${period}`}
     />
   ) : (
-    <ListEmpty
+    <EmptyBlock
       description={
         searching
           ? `No DRS matches "${searching}".`
