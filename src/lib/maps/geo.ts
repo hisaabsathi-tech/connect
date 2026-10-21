@@ -22,6 +22,16 @@ export function distanceInMetres(a: Coordinates, b: Coordinates) {
   );
 }
 
+/** Compass bearing (degrees from north, 0–360) from `a` to `b`. */
+export function bearingBetween(a: Coordinates, b: Coordinates) {
+  const dLng = (b.longitude - a.longitude) * RADIANS;
+  const lat1 = a.latitude * RADIANS;
+  const lat2 = b.latitude * RADIANS;
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
 export function centerOf(points: Coordinates[]): Coordinates {
   if (!points.length) return INDIA_CENTER;
   return points.reduce(

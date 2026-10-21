@@ -37,6 +37,7 @@ export function TripMapScreen() {
   return (
     <View className="flex-1 bg-accent">
       <LiveTripMap
+        bearing={trip?.mine ? own.heading : undefined}
         controlsTop={insets.top + 12}
         legendBottom={insets.bottom + 180}
         nextStopId={order?.orderId ?? null}

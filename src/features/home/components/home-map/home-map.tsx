@@ -36,7 +36,7 @@ import { useMyVehicle } from "@/hooks/use-my-vehicle";
 import type { Point } from "@/lib/api/attendance";
 import { fetchRoute, type RoadRoute } from "@/lib/api/maps";
 import { useAuthSession } from "@/lib/auth/session";
-import { type Coordinates, distanceInMetres } from "@/lib/maps/geo";
+import { bearingBetween, type Coordinates, distanceInMetres } from "@/lib/maps/geo";
 import { googleMapsDirectionsUrl, googleMapsPlaceUrl } from "@/lib/maps/google-maps";
 import {
   loadOlaMapStyle,
@@ -63,6 +63,8 @@ type Props = {
   checkOut: Point | null;
   organization: Coordinates | null;
   live: Coordinates | null;
+  /** Direction of travel (degrees from north) to turn the self pin. */
+  heading?: number;
   /**
    * A delivery boy shows as the rider wherever they are; their map has no office pin and no
    * legend, only themselves and their deliveries (or the day's check-in and check-out).
@@ -88,6 +90,7 @@ type Props = {
     stops: TripStop[];
     vehicle: Coordinates | null;
     vehiclePin: VehiclePin;
+    bearing?: number;
     nextStopId: string | null;
     onExpand: () => void;
   } | null;
@@ -860,7 +863,7 @@ const at = (place: Coordinates, id: string, kind: PinKind): MapPoint => ({
  * The delivery boy's own pin: the truck, turned the way they are heading, while their live trip
  * is being tracked; the rider otherwise.
  */
-function useSelfPin(live: Coordinates | null) {
+function useSelfPin(live: Coordinates | null, heading?: number) {
   // A two-wheeler shows as the rider, a three- or four-wheeler as the truck (see vehicle-pins);
   // someone without a vehicle is the rider.
   const myVehicle = useMyVehicle();
@@ -868,12 +871,16 @@ function useSelfPin(live: Coordinates | null) {
   const previous = useRef<Coordinates | null>(null);
   const [bearing, setBearing] = useState<number | undefined>(undefined);
   useEffect(() => {
+    if (heading !== undefined) {
+      setBearing(heading);
+      return;
+    }
     if (!live) return;
     const before = previous.current;
     previous.current = live;
     const next = before ? travelBearing([before, live]) : undefined;
     if (next !== undefined) setBearing(next);
-  }, [live]);
+  }, [heading, live]);
   return useCallback(
     (place: Coordinates, id: string): MapPoint => ({ ...at(place, id, kind), bearing }),
     [bearing, kind],
@@ -898,6 +905,7 @@ export function HomeMap({
   deliveryBoy = false,
   height,
   live,
+  heading,
   orders,
   organization,
   resetKey = 0,
@@ -934,7 +942,7 @@ export function HomeMap({
   // they are now and a pin per order (exact address, or only its area). Otherwise, before
   // checking in: where the user is now; after, the check-in point replaces it, and a check-out
   // adds the destination pin.
-  const selfPin = useSelfPin(live);
+  const selfPin = useSelfPin(live, heading);
   const points = useMemo(() => {
     const here = live ? (deliveryBoy ? selfPin(live, "here") : at(live, "here", "start")) : null;
     const day: (MapPoint | null)[] = orders
@@ -955,6 +963,7 @@ export function HomeMap({
           {liveTrip ? (
             <LiveTripMap
               action="expand"
+              bearing={liveTrip.bearing}
               controlsTop={16}
               legendBottom={12}
               nextStopId={liveTrip.nextStopId}
@@ -1076,12 +1085,17 @@ export type OrderMapState = {
   deliveredAt: (Coordinates & { address?: string | null }) | null;
 };
 
-function useOrderMapView(live: Coordinates | null, order: OrderPoint | null, state: OrderMapState) {
+function useOrderMapView(
+  live: Coordinates | null,
+  order: OrderPoint | null,
+  state: OrderMapState,
+  heading?: number,
+) {
   const point = useMemo(() => (order ? orderMapPoint(order) : null), [order]);
   const { delivered, deliveredAt } = state;
   const route = useRoadRoute(delivered ? null : live, delivered ? null : order);
   const handedOver = delivered && deliveredAt ? deliveredAt : null;
-  const selfPin = useSelfPin(delivered ? null : live);
+  const selfPin = useSelfPin(delivered ? null : live, heading);
   const points = useMemo(
     () =>
       [
@@ -1108,16 +1122,18 @@ function useOrderMapView(live: Coordinates | null, order: OrderPoint | null, sta
  */
 export function OrderLocationMap({
   live,
+  heading,
   onClose,
   order,
   state = { delivered: false, deliveredAt: null },
 }: {
   live: Coordinates | null;
+  heading?: number;
   onClose: () => void;
   order: OrderPoint | null;
   state?: OrderMapState;
 }) {
-  const { point, points, route } = useOrderMapView(live, order, state);
+  const { point, points, route } = useOrderMapView(live, order, state, heading);
   const [focusId, setFocusId] = useState<string | null>(null);
   // Every order opens with its card showing.
   useEffect(() => {
@@ -1217,13 +1233,7 @@ function travelBearing(path: Coordinates[]) {
   for (let i = path.length - 2; i >= 0; i -= 1) {
     const from = path[i];
     if (!from || distanceInMetres(from, last) < BEARING_MIN_METRES) continue;
-    const toRadians = Math.PI / 180;
-    const dLng = (last.longitude - from.longitude) * toRadians;
-    const lat1 = from.latitude * toRadians;
-    const lat2 = last.latitude * toRadians;
-    const y = Math.sin(dLng) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-    return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+    return bearingBetween(from, last);
   }
   return undefined;
 }
@@ -1338,6 +1348,7 @@ function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[], firstId
  */
 export function LiveTripMap({
   action = "close",
+  bearing,
   controlsTop,
   legendBottom,
   nextStopId = null,
@@ -1349,6 +1360,8 @@ export function LiveTripMap({
 }: {
   /** How the vehicle is drawn, from its wheel count (`vehiclePinFor`). */
   vehiclePin?: VehiclePin;
+  /** Bearing in degrees from north, overriding path-calculated direction. */
+  bearing?: number;
   /** The stop the vehicle is heading to now; the predicted path goes there first. */
   nextStopId?: string | null;
   /** The corner control: close the full-screen map, or open it from a map in a page. */
@@ -1366,18 +1379,19 @@ export function LiveTripMap({
   const route = usePlannedRoute(vehicle, stops, nextStopId);
   const [focusId, setFocusId] = useState<string | null>(null);
   const points = useMemo(() => {
-    const heading = vehicle ? [...path, vehicle] : path;
+    const headingPath = vehicle ? [...path, vehicle] : path;
+    const computedBearing = bearing ?? travelBearing(headingPath);
     const items: (MapPoint | null)[] = [
       ...stops.map((stop) => ({
         ...at(stop, `trip-stop-${stop.id}`, "order" as const),
         info: { address: stop.address, title: stop.title },
       })),
       vehicle
-        ? { ...at(vehicle, "trip-vehicle", vehiclePin), bearing: travelBearing(heading) }
+        ? { ...at(vehicle, "trip-vehicle", vehiclePin), bearing: computedBearing }
         : null,
     ];
     return items.filter((item): item is MapPoint => item !== null);
-  }, [path, stops, vehicle, vehiclePin]);
+  }, [bearing, path, stops, vehicle, vehiclePin]);
   const trail = useMemo(
     () => path.map((point) => [point.longitude, point.latitude] as [number, number]),
     [path],

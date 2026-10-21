@@ -73,11 +73,18 @@ mock.module("expo-secure-store", () => ({
 // --- Network state and app state ---------------------------------------------------------------
 type NetworkListener = (state: { isConnected?: boolean; isInternetReachable?: boolean }) => void;
 const networkListeners: NetworkListener[] = [];
+let networkState = { isConnected: true, isInternetReachable: true };
 mock.module("expo-network", () => ({
   addNetworkStateListener: (listener: NetworkListener) => {
-    networkListeners.push(listener);
+    networkListeners.push((state) => {
+      if (state.isConnected !== undefined) networkState.isConnected = state.isConnected;
+      if (state.isInternetReachable !== undefined)
+        networkState.isInternetReachable = state.isInternetReachable;
+      listener(state);
+    });
     return { remove() {} };
   },
+  getNetworkStateAsync: async () => ({ ...networkState }),
 }));
 
 type AppListener = (state: string) => void;
@@ -174,6 +181,7 @@ class FakeXhr {
   appListeners,
   files,
   networkListeners,
+  networkState,
   secure,
   server,
 };

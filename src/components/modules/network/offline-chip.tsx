@@ -12,17 +12,23 @@ import { useNetwork } from "./network-provider";
  * go out, or "2 need attention" when the server refused some. Nothing when online and settled.
  */
 export function OfflineChip() {
-  const { status } = useConnectivity();
+  const { status, reason } = useConnectivity();
   const { items, sending } = useOutbox();
   const { showOffline, showSyncIssues } = useNetwork();
   const waiting = items.filter((item) => item.state === "pending").length;
   const failed = items.length - waiting;
   const offline = status === "offline";
+  const isServerDown = offline && reason === "server_unreachable";
 
   let label: string | null = null;
   let tone = "bg-[#FFF1F2] text-destructive";
-  if (offline) label = waiting ? `Offline · ${waiting} waiting` : "Offline";
-  else if (failed) label = `${failed} need${failed === 1 ? "s" : ""} attention`;
+  if (offline) {
+    if (isServerDown) {
+      label = waiting ? `Server unreachable · ${waiting} waiting` : "Server unreachable";
+    } else {
+      label = waiting ? `Offline · ${waiting} waiting` : "Offline";
+    }
+  } else if (failed) label = `${failed} need${failed === 1 ? "s" : ""} attention`;
   else if (waiting || sending) {
     label = `Syncing${waiting ? ` ${waiting}` : ""}`;
     tone = "bg-accent text-primary";

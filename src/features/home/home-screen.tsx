@@ -211,9 +211,11 @@ export function HomeScreen() {
           deliveryBoy={canUpdateOrders}
           height={mapHeight}
           live={live}
+          heading={location.heading}
           liveTrip={
             mapTrip
               ? {
+                  bearing: mapTrip.mine ? location.heading : undefined,
                   onExpand: () =>
                     router.push({
                       params: { tripId: mapTrip.id },

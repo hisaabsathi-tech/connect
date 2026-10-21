@@ -51,6 +51,7 @@ export function usePickupMap() {
   const element = (
     <OrderLocationMap
       live={live.location}
+      heading={live.heading}
       onClose={() => setShown(null)}
       order={shown}
       state={STILL_TO_COLLECT}

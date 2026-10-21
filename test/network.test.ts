@@ -4,6 +4,7 @@ import { apiRequest } from "@/lib/api/client";
 import { graphqlRequest } from "@/lib/api/graphql";
 import { isNetworkError, NetworkError, timedFetch } from "@/lib/api/network";
 import {
+  getConnectivity,
   isOnline,
   onReconnect,
   probe,
@@ -64,6 +65,25 @@ describe("connectivity", () => {
     for (const listener of fake.appListeners) listener("active");
     await settle(5);
     expect(isOnline()).toBe(true);
+  });
+
+  it("distinguishes device offline (no network) from server unreachable (server down)", async () => {
+    startConnectivity();
+    await settle();
+    const network = fake.networkListeners.at(-1);
+    if (!network) throw new Error("no network listener");
+
+    // Device network disconnected:
+    network({ isConnected: false });
+    expect(getConnectivity().status).toBe("offline");
+    expect(getConnectivity().reason).toBe("no_network");
+
+    // Device network connected, but server is down:
+    fake.server.offline = true;
+    network({ isConnected: true, isInternetReachable: true });
+    await settle(5);
+    expect(getConnectivity().status).toBe("offline");
+    expect(getConnectivity().reason).toBe("server_unreachable");
   });
 });
 

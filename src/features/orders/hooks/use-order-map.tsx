@@ -52,6 +52,7 @@ export function useOrderMap() {
   const element = (
     <OrderLocationMap
       live={live.location}
+      heading={live.heading}
       onClose={() => setShown(null)}
       order={shown}
       state={state}

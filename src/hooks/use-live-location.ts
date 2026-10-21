@@ -3,10 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Linking, Platform } from "react-native";
 
 import { useDialog } from "@/components/modules/dialog";
-import { type Coordinates, distanceInMetres } from "@/lib/maps/geo";
+import { bearingBetween, type Coordinates, distanceInMetres } from "@/lib/maps/geo";
 
 // Smaller moves are GPS jitter; ignoring them also keeps static-map requests down.
 const MIN_MOVE_METRES = 100;
+// Direction of travel updates on a much finer trail than the position itself does, so a pin
+// turns smoothly as it moves instead of snapping once every 100 m; closer than this is jitter.
+const MIN_HEADING_METRES = 8;
 
 // Never let expo-location raise the system "turn on location" dialog by itself; the app asks
 // with its own sheet first (see `switchOn`).
@@ -36,10 +39,14 @@ interface SyncOptions {
 export function useLiveLocation(enabled = true) {
   const dialog = useDialog();
   const [location, setLocation] = useState<Coordinates | null>(null);
+  // Direction of travel, degrees from north; updates far more often than `location` does.
+  const [heading, setHeading] = useState<number | undefined>(undefined);
   const [status, setStatus] = useState<LocationStatus>("checking");
   // A position request is in progress.
   const [locating, setLocating] = useState(false);
   const lastAccepted = useRef<Coordinates | null>(null);
+  // The last raw fix, kept regardless of `MIN_MOVE_METRES`, just to measure heading between fixes.
+  const lastRaw = useRef<Coordinates | null>(null);
   const watch = useRef<Location.LocationSubscription | null>(null);
   // One check at a time: the dialogs it opens background the app, which would start another.
   const running = useRef<Promise<LocationStatus> | null>(null);
@@ -47,6 +54,16 @@ export function useLiveLocation(enabled = true) {
 
   const accept = useCallback((coords: Location.LocationObjectCoords) => {
     const next = { latitude: coords.latitude, longitude: coords.longitude };
+    const previousRaw = lastRaw.current;
+    if (typeof coords.heading === "number" && coords.heading >= 0) {
+      lastRaw.current = next;
+      if (active.current) setHeading(coords.heading);
+    } else if (previousRaw && distanceInMetres(previousRaw, next) >= MIN_HEADING_METRES) {
+      lastRaw.current = next;
+      if (active.current) setHeading(bearingBetween(previousRaw, next));
+    } else if (!previousRaw) {
+      lastRaw.current = next;
+    }
     if (!lastAccepted.current || distanceInMetres(lastAccepted.current, next) >= MIN_MOVE_METRES) {
       lastAccepted.current = next;
       if (active.current) setLocation(next);
@@ -58,7 +75,11 @@ export function useLiveLocation(enabled = true) {
     watch.current?.remove();
     watch.current = null;
     lastAccepted.current = null;
-    if (active.current) setLocation(null);
+    lastRaw.current = null;
+    if (active.current) {
+      setLocation(null);
+      setHeading(undefined);
+    }
   }, []);
 
   /** The permission, after asking for it when `prompt` allows. */
@@ -124,7 +145,7 @@ export function useLiveLocation(enabled = true) {
       accept((await Location.getCurrentPositionAsync(FIX_OPTIONS)).coords);
       if (!watch.current) {
         const subscription = await Location.watchPositionAsync(
-          { ...FIX_OPTIONS, distanceInterval: 20, timeInterval: 30_000 },
+          { ...FIX_OPTIONS, distanceInterval: 5, timeInterval: 3000 },
           (next) => accept(next.coords),
         );
         if (active.current) watch.current = subscription;
@@ -210,7 +231,7 @@ export function useLiveLocation(enabled = true) {
     [sync],
   );
 
-  return { ensure, locating, location, resolve, status };
+  return { ensure, heading, locating, location, resolve, status };
 }
 
 export type LiveLocation = ReturnType<typeof useLiveLocation>;

@@ -1,4 +1,4 @@
-import { WifiDisconnected02Icon } from "@hugeicons/core-free-icons";
+import { ServerOffIcon, WifiDisconnected02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import {
   createContext,
@@ -18,7 +18,7 @@ import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { startMapNetwork } from "@/lib/maps/map-network";
-import { isOnline, startConnectivity, useConnectivity } from "@/lib/network/connectivity";
+import { isOnline, probe, startConnectivity, useConnectivity } from "@/lib/network/connectivity";
 import { onOutboxRefused, startOutbox, useOutbox } from "@/lib/offline/outbox";
 
 import { SyncIssuesSheet } from "./sync-issues-sheet";
@@ -60,10 +60,11 @@ async function openNetworkSettings() {
  */
 export function NetworkProvider({ children }: PropsWithChildren) {
   const toast = useToast();
-  const { status, since } = useConnectivity();
+  const { status, reason, since } = useConnectivity();
   const { items } = useOutbox();
   const [sheet, setSheet] = useState<{ action: string | null } | null>(null);
   const [issuesOpen, setIssuesOpen] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     startConnectivity();
@@ -122,6 +123,47 @@ export function NetworkProvider({ children }: PropsWithChildren) {
   );
 
   const action = sheet?.action ?? null;
+  const isServerDown = status === "offline" && reason === "server_unreachable";
+
+  const title = isServerDown
+    ? action
+      ? `${action} needs server connection`
+      : "Server unreachable"
+    : action
+      ? `${action} needs internet`
+      : "You're offline";
+
+  const description = isServerDown
+    ? action
+      ? "The server couldn't be reached right now. Deliveries and pickups can still be updated offline; they'll sync automatically once the server is back."
+      : "Your phone is connected, but our server couldn't be reached. Showing your last saved data. Deliveries and pickups you update are saved on the phone and sent automatically once the server is back."
+    : action
+      ? "Turn on mobile data or Wi-Fi, then try again. Deliveries and pickups can still be updated offline; they're sent automatically when you're back online."
+      : "Showing your last saved data. Deliveries and pickups you update are saved on the phone and sent automatically the moment you're back online.";
+
+  const primaryLabel = isServerDown
+    ? retrying
+      ? "Checking..."
+      : action
+        ? "Try again"
+        : "Retry connection"
+    : "Turn on internet";
+
+  const handlePrimaryPress = async () => {
+    if (isServerDown) {
+      setRetrying(true);
+      try {
+        await probe();
+      } finally {
+        setRetrying(false);
+        setSheet(null);
+      }
+    } else {
+      setSheet(null);
+      void openNetworkSettings();
+    }
+  };
+
   return (
     <NetworkContext.Provider value={api}>
       {children}
@@ -130,18 +172,16 @@ export function NetworkProvider({ children }: PropsWithChildren) {
           <View className="mt-5 h-12 w-12 items-center justify-center rounded-full bg-[#FFF1F2]">
             <HugeiconsIcon
               color={colors.destructive}
-              icon={WifiDisconnected02Icon}
+              icon={isServerDown ? ServerOffIcon : WifiDisconnected02Icon}
               size={26}
               strokeWidth={1.5}
             />
           </View>
           <Text className="mt-4 text-xl font-semibold text-foreground">
-            {action ? `${action} needs internet` : "You're offline"}
+            {title}
           </Text>
           <Text className="mt-2 text-base leading-6 text-muted-foreground">
-            {action
-              ? "Turn on mobile data or Wi-Fi, then try again. Deliveries and pickups can still be updated offline; they're sent automatically when you're back online."
-              : "Showing your last saved data. Deliveries and pickups you update are saved on the phone and sent automatically the moment you're back online."}
+            {description}
           </Text>
           <View className="mt-7 flex-row gap-3">
             <HapticButton
@@ -150,12 +190,10 @@ export function NetworkProvider({ children }: PropsWithChildren) {
               onPress={() => setSheet(null)}
             />
             <HapticButton
+              disabled={retrying}
               kind="medium"
-              label="Turn on internet"
-              onPress={() => {
-                setSheet(null);
-                void openNetworkSettings();
-              }}
+              label={primaryLabel}
+              onPress={handlePrimaryPress}
               tone="brand"
             />
           </View>

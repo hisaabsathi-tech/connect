@@ -12,6 +12,7 @@ export const fake = (
         isConnected?: boolean;
         isInternetReachable?: boolean;
       }) => void)[];
+      networkState: { isConnected: boolean; isInternetReachable: boolean };
       secure: Map<string, string>;
       server: {
         calls: Call[];
@@ -32,6 +33,8 @@ export function freshPhone() {
   fake.files.clear();
   fake.secure.clear();
   fake.secure.set("hisaabsathi.connector.auth-token", TOKEN);
+  fake.networkState.isConnected = true;
+  fake.networkState.isInternetReachable = true;
 }
 
 /** Lets queued promises and timers settle. */
