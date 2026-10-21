@@ -994,22 +994,25 @@ export function HomeMap({
     setExpanded(false);
     setFocusId(null);
   };
-  // Organisation: for everyone but delivery boys. A delivery boy with orders to deliver: where
-  // they are now and a pin per order (exact address, or only its area). Otherwise, before
-  // checking in: where the user is now; after, the check-in point replaces it, and a check-out
-  // adds the destination pin.
+  // A delivery boy with orders to deliver: where they are now and a pin per order (exact
+  // address, or only its area), no org pin. Otherwise (anyone, including a delivery boy before
+  // or between checking in/out): the org's pin stays alongside where the user is now; after
+  // checking in, the check-in point replaces it, and a check-out adds the destination pin.
   const selfPin = useSelfPin(live, heading);
   const points = useMemo(() => {
     const here = live ? (deliveryBoy ? selfPin(live, "here") : at(live, "here", "start")) : null;
     const day: (MapPoint | null)[] = orders
       ? [here, ...orders.map(orderMapPoint)]
       : [
-          // A delivery boy stays on the map after checking in, beside the day's pins.
+          // Once checked in, the check-in point stands in for a delivery boy's live pin; it
+          // only tracks them live before that, with no orders yet to show.
           checkIn ? at(checkIn, "check-in", "transit") : deliveryBoy ? null : here,
-          deliveryBoy ? here : null,
+          !checkIn && deliveryBoy ? here : null,
           checkOut ? at(checkOut, "check-out", "destination") : null,
         ];
-    const office = organization && !deliveryBoy ? at(organization, "office", "organization") : null;
+    // The org's pin stays on a delivery boy's map too, as long as there's no route of
+    // orders or a live trip taking over the map (those have their own pins to frame).
+    const office = organization && !orders ? at(organization, "office", "organization") : null;
     return [office, ...day].filter((point): point is MapPoint => point !== null);
   }, [checkIn, checkOut, deliveryBoy, live, orders, organization, selfPin]);
   return (
