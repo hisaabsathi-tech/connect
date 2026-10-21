@@ -90,8 +90,7 @@ export function DialogProvider({ children }: PropsWithChildren) {
       alert: async ({ actionLabel = "OK", ...options }) => {
         await open({ ...options, confirmLabel: actionLabel });
       },
-      confirm: ({ cancelLabel = "Cancel", ...options }) =>
-        open({ ...options, cancelLabel }),
+      confirm: ({ cancelLabel = "Cancel", ...options }) => open({ ...options, cancelLabel }),
     }),
     [open],
   );
@@ -99,16 +98,10 @@ export function DialogProvider({ children }: PropsWithChildren) {
   return (
     <DialogContext.Provider value={api}>
       {children}
-      <BottomSheet
-        onClose={() => close(false)}
-        onClosed={onClosed}
-        visible={visible}
-      >
+      <BottomSheet onClose={() => close(false)} onClosed={onClosed} visible={visible}>
         {dialog ? (
           <View accessibilityRole="alert">
-            <Text className="mt-5 text-xl font-semibold text-foreground">
-              {dialog.title}
-            </Text>
+            <Text className="mt-5 text-xl font-semibold text-foreground">{dialog.title}</Text>
             {dialog.details?.length ? (
               <View className="mt-4 border border-border bg-card">
                 {dialog.details.map((detail, index) => (

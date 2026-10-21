@@ -3,18 +3,11 @@ import { Redirect, router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 
-import {
-  type DateRange,
-  rangeLabel,
-  SearchRangeToolbar,
-} from "@/components/modules/date-range";
+import { type DateRange, rangeLabel, SearchRangeToolbar } from "@/components/modules/date-range";
 import { useDialog } from "@/components/modules/dialog";
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
-import {
-  LocationIndicator,
-  locationIndicatorState,
-} from "@/components/modules/location";
+import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
 import {
   CardListSkeleton,
   ListPageSkeleton,
@@ -25,6 +18,7 @@ import { StatCard } from "@/components/modules/stat-card";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { reloadLiveTrips } from "@/features/live-trips";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { type DrsSheet, type DrsStatus, patchDrs } from "@/lib/api/drs";
 import { useAuthSession } from "@/lib/auth/session";
@@ -33,6 +27,7 @@ import { formatDayLabel, useDateFilter } from "@/lib/date";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { lastPosition } from "@/lib/maps/last-position";
+import { useTrackingStatus } from "@/lib/tracking/status";
 
 import { DrsCard } from "./components/drs-card";
 import { DrsPicker } from "./components/drs-picker";
@@ -90,6 +85,7 @@ export function OrdersScreen() {
   const viewer = useViewer();
   // Deliveries are confirmed with the phone's location, so its state shows here as on Home.
   const location = useLiveLocation(viewer.canUpdateOrders);
+  const tracking = useTrackingStatus().running;
   const { resetToToday, selectedDate, today } = useDateFilter();
   const [tab, setTab] = useState<PageTab>("orders");
   const [range, setRange] = useState<DateRange | null>(null);
@@ -153,21 +149,16 @@ export function OrdersScreen() {
     if (!sure) return false;
     setAdvancing(sheet.id);
     try {
-      updated(
-        await patchDrs(token, sheet.id, { status, ...(await lastPosition()) }),
-      );
+      updated(await patchDrs(token, sheet.id, { status, ...(await lastPosition()) }));
+      // Out for delivery opens its live trip (when tracking is on): Home's blocks and this
+      // phone's location duty start without waiting for the socket.
+      void reloadLiveTrips(token);
       haptic("success");
-      toast.success(
-        "DRS updated",
-        `${sheet.id} is now ${status.toLowerCase()}.`,
-      );
+      toast.success("DRS updated", `${sheet.id} is now ${status.toLowerCase()}.`);
       return true;
     } catch (error) {
       haptic("error");
-      toast.error(
-        "Couldn't update the DRS",
-        errorMessage(error, "Please try again."),
-      );
+      toast.error("Couldn't update the DRS", errorMessage(error, "Please try again."));
       return false;
     } finally {
       setAdvancing(null);
@@ -219,21 +210,15 @@ export function OrdersScreen() {
   );
 
   // The chosen DRS only narrows the orders while it is among the range's sheets.
-  const activeDrsId =
-    drsId && sheets.some((sheet) => sheet.id === drsId) ? drsId : null;
+  const activeDrsId = drsId && sheets.some((sheet) => sheet.id === drsId) ? drsId : null;
 
-  const scopedOrders = useMemo(
-    () => ordersFromSheets(sheets, activeDrsId),
-    [activeDrsId, sheets],
-  );
+  const scopedOrders = useMemo(() => ordersFromSheets(sheets, activeDrsId), [activeDrsId, sheets]);
   // Orders still to deliver come first; delivered ones sink to the bottom.
   const orders = useMemo(
     () =>
       pendingFirst(
         scopedOrders.filter(
-          (order) =>
-            matchesOrderFilter(order, orderFilter) &&
-            matchesOrderSearch(order, query),
+          (order) => matchesOrderFilter(order, orderFilter) && matchesOrderSearch(order, query),
         ),
       ),
     [orderFilter, query, scopedOrders],
@@ -241,17 +226,9 @@ export function OrdersScreen() {
   const shownSheets = useMemo(
     () =>
       sheets
-        .filter(
-          (sheet) =>
-            matchesDrsFilter(sheet, drsFilter) &&
-            matchesDrsSearch(sheet, query),
-        )
+        .filter((sheet) => matchesDrsFilter(sheet, drsFilter) && matchesDrsSearch(sheet, query))
         // In Delivering, start with untouched runs; otherwise keep the full delivery work queue.
-        .sort(
-          drsFilter === "DELIVERING ORDERS"
-            ? compareDeliveringDrs
-            : compareDrsForDelivery,
-        ),
+        .sort(drsFilter === "DELIVERING ORDERS" ? compareDeliveringDrs : compareDrsForDelivery),
     [drsFilter, query, sheets],
   );
 
@@ -316,7 +293,7 @@ export function OrdersScreen() {
         <View className="mt-1">
           <LocationIndicator
             onPress={location.resolve}
-            state={locationIndicatorState(location)}
+            state={locationIndicatorState(location, tracking)}
           />
         </View>
       </View>
@@ -354,9 +331,7 @@ export function OrdersScreen() {
               active={drsFilter === "RESOLVED"}
               label="Completed DRS"
               onPress={() => toggleDrsFilter("RESOLVED")}
-              value={String(
-                sheets.filter((sheet) => !isDrsOngoing(sheet)).length,
-              )}
+              value={String(sheets.filter((sheet) => !isDrsOngoing(sheet)).length)}
             />
           </>
         )}
@@ -462,9 +437,7 @@ export function OrdersScreen() {
         data={data.loading ? [] : onOrders ? orders : shownSheets}
         ItemSeparatorComponent={Separator}
         keyboardShouldPersistTaps="handled"
-        keyExtractor={(item) =>
-          "orderId" in item ? `order-${item.orderId}` : `drs-${item.id}`
-        }
+        keyExtractor={(item) => ("orderId" in item ? `order-${item.orderId}` : `drs-${item.id}`)}
         ListEmptyComponent={empty}
         ListHeaderComponent={header}
         ref={listRef}

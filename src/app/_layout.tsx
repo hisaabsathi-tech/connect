@@ -1,4 +1,7 @@
 import "../../global.css";
+// Defines the live-trip location task at module scope: the OS may start the app in the
+// background just to hand it readings, before any screen mounts.
+import "@/lib/tracking/task";
 
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";

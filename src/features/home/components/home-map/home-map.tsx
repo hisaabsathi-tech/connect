@@ -87,11 +87,14 @@ type PinKind =
   | "organization"
   | "rider"
   | "order"
-  | "order-area";
+  | "order-area"
+  | "truck";
 
 type MapPoint = Coordinates & {
   id: string;
   kind: PinKind;
+  /** Degrees clockwise from north the pin is turned to (the live trip's truck). */
+  bearing?: number;
   /** An order's pin: tapping it opens the map full screen with this card along the bottom. */
   detail?: {
     title: string;
@@ -113,12 +116,16 @@ const pins: Record<PinKind, number> = {
   rider: require("@/assets/map-pin/delivery-pin.webp"),
   start: require("@/assets/map-pin/start.webp"),
   transit: require("@/assets/map-pin/transit.webp"),
+  truck: require("@/assets/map-pin/truck.webp"),
 };
 // The pin artwork is 90×110 with its tip at the bottom centre.
 const PIN_SIZE = { height: 44, width: 36 };
 const LEGEND_PIN_SIZE = { height: 13, width: 11 };
 // The rider (410×614, seen from above) sits centred on the spot rather than pointing at it.
 const RIDER_SIZE = { height: 48, width: 32 };
+// The truck (140×342, seen from above, facing up) is turned to the way it is driving.
+const TRUCK_SIZE = { height: 50, width: 20 };
+const centred = (kind: PinKind) => kind === "rider" || kind === "truck";
 
 // The user's own position needs no key; every other pin is named in the legend.
 const pinLabels: Partial<Record<PinKind, string>> = {
@@ -525,6 +532,8 @@ interface NativeOlaMapProps {
   resetKey: number;
   /** A road path (`[longitude, latitude]` pairs) drawn under the pins and framed with them. */
   route?: [number, number][] | null;
+  /** Where the vehicle has already driven, drawn fainter under the route. */
+  trail?: [number, number][] | null;
   /** Shown on an order's card: the route's distance and drive time. */
   trip?: string | null;
   /**
@@ -553,6 +562,7 @@ function NativeOlaMap({
   points,
   resetKey,
   route = null,
+  trail = null,
   showLegend,
   trip = null,
   zoomOnFocus = true,
@@ -712,6 +722,23 @@ function NativeOlaMap({
             }
             ref={camera}
           />
+          {trail && trail.length > 1 ? (
+            <GeoJSONSource
+              data={{
+                geometry: { coordinates: trail, type: "LineString" },
+                properties: {},
+                type: "Feature",
+              }}
+              id="trail"
+            >
+              <Layer
+                id="trail-line"
+                layout={{ "line-cap": "round", "line-join": "round" }}
+                paint={{ "line-color": colors.primary, "line-opacity": 0.4, "line-width": 4 }}
+                type="line"
+              />
+            </GeoJSONSource>
+          ) : null}
           {route ? (
             <GeoJSONSource
               data={{
@@ -738,7 +765,7 @@ function NativeOlaMap({
           ) : null}
           {points.map((point) => (
             <Marker
-              anchor={point.kind === "rider" ? "center" : "bottom"}
+              anchor={centred(point.kind) ? "center" : "bottom"}
               id={point.id}
               key={point.id}
               lngLat={[point.longitude, point.latitude]}
@@ -752,7 +779,14 @@ function NativeOlaMap({
               <Image
                 contentFit="contain"
                 source={pins[point.kind]}
-                style={point.kind === "rider" ? RIDER_SIZE : PIN_SIZE}
+                style={[
+                  point.kind === "truck"
+                    ? TRUCK_SIZE
+                    : point.kind === "rider"
+                      ? RIDER_SIZE
+                      : PIN_SIZE,
+                  point.bearing != null ? { transform: [{ rotate: `${point.bearing}deg` }] } : null,
+                ]}
               />
             </Marker>
           ))}
@@ -928,10 +962,14 @@ function tripLabel({ distanceMeters, durationSeconds }: RoadRoute) {
 }
 
 /** The road route from the user to the order, refetched as they move on (not on every step). */
-function useRoadRoute(from: Coordinates | null, to: Coordinates | null) {
+function useRoadRoute(
+  from: Coordinates | null,
+  to: Coordinates | null,
+  grid: number = ROUTE_GRID_DEGREES,
+) {
   const { token } = useAuthSession();
   const [route, setRoute] = useState<RoadRoute | null>(null);
-  const snap = (value: number) => Math.round(value / ROUTE_GRID_DEGREES) * ROUTE_GRID_DEGREES;
+  const snap = (value: number) => Math.round(value / grid) * grid;
   const fromLat = from ? snap(from.latitude) : null;
   const fromLng = from ? snap(from.longitude) : null;
   const toLat = to?.latitude ?? null;
@@ -1095,5 +1133,89 @@ export function OrderRouteMap({
         </View>
       ) : null}
     </View>
+  );
+}
+
+// A live trip's road ahead is fetched again only once the truck has moved about this far (≈ 500 m):
+// the server already measures the distance left, so the map needs only the rough way.
+const LIVE_ROUTE_GRID_DEGREES = 0.005;
+// Points closer than this give no reliable direction of travel.
+const BEARING_MIN_METRES = 10;
+
+/** Direction of travel (degrees from north) from the last two points far enough apart. */
+function travelBearing(path: Coordinates[]) {
+  const last = path.at(-1);
+  if (!last) return undefined;
+  for (let i = path.length - 2; i >= 0; i -= 1) {
+    const from = path[i];
+    if (!from || distanceInMetres(from, last) < BEARING_MIN_METRES) continue;
+    const toRadians = Math.PI / 180;
+    const dLng = (last.longitude - from.longitude) * toRadians;
+    const lat1 = from.latitude * toRadians;
+    const lat2 = last.latitude * toRadians;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  }
+  return undefined;
+}
+
+/**
+ * A live delivery trip on a full-size map: the way the vehicle has come (faint), the truck turned
+ * to its direction of travel, the order it is heading to, and the road between them.
+ */
+export function LiveTripMap({
+  controlsTop,
+  destination,
+  legendBottom,
+  onClose,
+  path,
+}: {
+  controlsTop: number;
+  legendBottom: number;
+  destination: (Coordinates & { title: string; address: string | null }) | null;
+  /** GPS points, oldest first; the last is where the vehicle is now. */
+  path: Coordinates[];
+  onClose: () => void;
+}) {
+  const vehicle = path.at(-1) ?? null;
+  const route = useRoadRoute(vehicle, destination, LIVE_ROUTE_GRID_DEGREES);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const points = useMemo(() => {
+    const start = path.length > 1 ? path[0] : undefined;
+    return [
+      start ? at(start, "trip-start", "start") : null,
+      destination
+        ? {
+            ...at(destination, "trip-destination", "order"),
+            info: { address: destination.address, title: destination.title },
+          }
+        : null,
+      vehicle ? { ...at(vehicle, "trip-truck", "truck"), bearing: travelBearing(path) } : null,
+    ].filter((item): item is MapPoint => item !== null);
+  }, [destination, path, vehicle]);
+  const trail = useMemo(
+    () => path.map((point) => [point.longitude, point.latitude] as [number, number]),
+    [path],
+  );
+  return (
+    <NativeOlaMap
+      anchorId={null}
+      callable={false}
+      controlsTop={controlsTop}
+      focusId={focusId}
+      legendBottom={legendBottom}
+      onFocus={(next) => setFocusId(next?.id ?? null)}
+      origin={vehicle}
+      points={points}
+      resetKey={0}
+      route={route?.coordinates ?? null}
+      showLegend={false}
+      trail={trail}
+      trip={route ? tripLabel(route) : null}
+      zoomOnFocus={false}
+    >
+      <MapControl icon={Cancel01Icon} label="Close map" onPress={onClose} />
+    </NativeOlaMap>
   );
 }

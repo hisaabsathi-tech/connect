@@ -8,6 +8,7 @@ import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { settleLiveTripOrder } from "@/features/live-trips";
 import { setShipmentStatus } from "@/lib/api/order-tracking";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
@@ -115,6 +116,8 @@ export function OrderReasonSheet({
         shipmentStatus: copy.status,
         ...(await lastPosition()),
       });
+      // Off the road now: its live-trip block on Home goes at once.
+      settleLiveTripOrder(order.orderId);
       haptic("success");
       toast.success(copy.done, `${order.awbNo}: ${selected}.`);
       onDone();

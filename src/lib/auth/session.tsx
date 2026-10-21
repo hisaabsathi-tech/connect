@@ -14,8 +14,7 @@ import { AppState } from "react-native";
 import { useToast } from "@/components/ui/toast";
 import { AuthApiError, authApi, type SessionPayload } from "@/lib/api/auth";
 import { onRejectedToken } from "@/lib/auth/session-expiry";
-
-const TOKEN_KEY = "hisaabsathi.connector.auth-token";
+import { TOKEN_KEY } from "@/lib/auth/token-key";
 
 type AuthSession = {
   isReady: boolean;

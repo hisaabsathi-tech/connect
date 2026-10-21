@@ -11,6 +11,7 @@ import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { settleLiveTripOrder } from "@/features/live-trips";
 import { uploadOrderPod } from "@/lib/api/media";
 import { resendDeliveryOtp, setShipmentStatus } from "@/lib/api/order-tracking";
 import { useAuthSession } from "@/lib/auth/session";
@@ -124,6 +125,8 @@ export function ConfirmDeliverySheet({
         scanCopy,
         shipmentStatus: "DELIVERED",
       });
+      // Delivered: its live-trip block on Home goes at once, ahead of the server's update.
+      settleLiveTripOrder(order.orderId);
       haptic("success");
       toast.success("Order delivered", `${order.awbNo} is marked delivered.`);
       onDelivered();

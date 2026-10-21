@@ -8,11 +8,13 @@ import { LocationIndicator, locationIndicatorState } from "@/components/modules/
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
+import { LiveTripBlocks, useLiveTrips } from "@/features/live-trips";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
 import { useViewer } from "@/lib/auth/viewer";
 import { formatDuration, formatTime, useDateFilter } from "@/lib/date";
+import { useTrackingStatus } from "@/lib/tracking/status";
 
 import { AttendanceAction } from "./components/attendance-action";
 import { AttendanceCard } from "./components/attendance-card";
@@ -43,7 +45,7 @@ const REVEAL_TIMEOUT_MS = 8000;
 export function HomeScreen() {
   const { token } = useAuthSession();
   const viewer = useViewer();
-  const { canCheckIn, canUpdateOrders, canViewAttendance } = viewer;
+  const { canCheckIn, canUpdateOrders, canViewAttendance, canViewOrders } = viewer;
   const screenTop = useScreenTop();
   const location = useLiveLocation(Boolean(token));
   const live = location.location;
@@ -60,6 +62,12 @@ export function HomeScreen() {
   // Loaded alongside the role rather than after it; dropped if the role has no order edit.
   const deliveries = useActiveOrders(!viewer.isLoaded || canUpdateOrders ? token : null, today);
   const showOrders = deliveries.active && selectedDate === today;
+  // Live delivery trips (today only): the driver's own, and every one for a role with order view.
+  // They take the place of the day's check-in / hours cards until the last order is done.
+  const liveTrips = useLiveTrips().trips.filter((trip) => trip.mine || canViewOrders);
+  const tracking = useTrackingStatus().running;
+  const liveBlocks =
+    selectedDate === today && liveTrips.length ? <LiveTripBlocks trips={liveTrips} /> : null;
   const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
   // Bumped by a pull to refresh, which recenters the map.
   const [mapResetKey, setMapResetKey] = useState(0);
@@ -164,7 +172,7 @@ export function HomeScreen() {
           <HomeHeader identity={home.identity}>
             <LocationIndicator
               onPress={location.resolve}
-              state={locationIndicatorState(location)}
+              state={locationIndicatorState(location, tracking)}
             />
           </HomeHeader>
         </View>
@@ -190,6 +198,7 @@ export function HomeScreen() {
               failed={day.failed}
               kind={day.kind}
               loading={day.loading}
+              liveTrips={liveBlocks}
               offDay={day.offDay}
               onOpenPhoto={(side) => {
                 if (day.record) setPhoto({ date: selectedDate, id: day.record.id, side });
@@ -197,8 +206,13 @@ export function HomeScreen() {
               record={day.record}
             />
           ) : (
-            <AttendanceCard />
+            <>
+              {liveBlocks ? <View className="mt-2">{liveBlocks}</View> : null}
+              <AttendanceCard />
+            </>
           )}
+          {/* A role without attendance view has no day record to stand in for. */}
+          {!canViewAttendance && liveBlocks ? <View className="mt-2">{liveBlocks}</View> : null}
           {/* Under the day's record; the page scrolls once the map is down to its smallest. */}
           {canUpdateOrders ? (
             <View onLayout={(event) => setOrdersCardHeight(event.nativeEvent.layout.height)}>

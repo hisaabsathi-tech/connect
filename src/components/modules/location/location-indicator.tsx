@@ -20,7 +20,7 @@ import { haptic } from "@/lib/haptics";
 /**
  * - `off`: no permission, or the device's location is switched off
  * - `on`: location is available
- * - `active`: location is being read right now
+ * - `active`: location is being read right now (continuously during a live delivery trip)
  */
 export type LocationIndicatorState = "off" | "on" | "active";
 
@@ -132,11 +132,14 @@ export function LocationIndicator({
   );
 }
 
-/** What the location button shows; the one place that decides when each state appears. */
-export function locationIndicatorState({
-  locating,
-  status,
-}: Pick<LiveLocation, "locating" | "status">): LocationIndicatorState {
+/**
+ * What the location button shows; the one place that decides when each state appears. While a
+ * live delivery trip is `tracking`, location is read continuously, so it ripples throughout.
+ */
+export function locationIndicatorState(
+  { locating, status }: Pick<LiveLocation, "locating" | "status">,
+  tracking = false,
+): LocationIndicatorState {
   if (status === "denied" || status === "blocked" || status === "disabled") return "off";
-  return locating || status === "checking" ? "active" : "on";
+  return tracking || locating || status === "checking" ? "active" : "on";
 }

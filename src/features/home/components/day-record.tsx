@@ -26,6 +26,11 @@ interface DayRecordProps {
   failed: boolean;
   /** Opens the record's check-in or check-out photo; only offered where one was taken. */
   onOpenPhoto?: (side: PhotoSide) => void;
+  /**
+   * Shown in place of the check-in / hours cards (or the day's state block) while a delivery
+   * trip is live; the day's record is still below the fold in Attendance.
+   */
+  liveTrips?: ReactNode;
 }
 
 export type PhotoSide = "checkIn" | "checkOut";
@@ -111,11 +116,13 @@ function useLiveNow(open: boolean) {
 function RecordCards({
   date,
   kind,
+  liveTrips,
   onOpenPhoto,
   record,
 }: {
   date: string;
   kind: DayKind;
+  liveTrips?: ReactNode;
   onOpenPhoto?: (side: PhotoSide) => void;
   record: AttendanceSession;
 }) {
@@ -129,22 +136,26 @@ function RecordCards({
       : "—";
   return (
     <>
-      <View className="flex-row gap-2">
-        <Stat
-          label="Check In"
-          onPress={onOpenPhoto && record.hasCheckInPhoto ? () => onOpenPhoto("checkIn") : undefined}
-          remarks={checkInRemarks(record)}
-          value={formatTime(record.checkInAt)}
-        />
-        <Stat
-          label={working ? "Hours Worked" : "Check Out"}
-          onPress={
-            onOpenPhoto && record.hasCheckOutPhoto ? () => onOpenPhoto("checkOut") : undefined
-          }
-          remarks={checkOutRemarks(record, kind)}
-          value={checkOutValue}
-        />
-      </View>
+      {liveTrips ?? (
+        <View className="flex-row gap-2">
+          <Stat
+            label="Check In"
+            onPress={
+              onOpenPhoto && record.hasCheckInPhoto ? () => onOpenPhoto("checkIn") : undefined
+            }
+            remarks={checkInRemarks(record)}
+            value={formatTime(record.checkInAt)}
+          />
+          <Stat
+            label={working ? "Hours Worked" : "Check Out"}
+            onPress={
+              onOpenPhoto && record.hasCheckOutPhoto ? () => onOpenPhoto("checkOut") : undefined
+            }
+            remarks={checkOutRemarks(record, kind)}
+            value={checkOutValue}
+          />
+        </View>
+      )}
       {record.checkOutAt ? (
         <View className="mt-4 border border-success bg-[#ECFDF5] px-4 py-4">
           <Text className="text-center text-base font-medium text-foreground">
@@ -170,6 +181,7 @@ export function DayRecord({
   date,
   failed,
   kind,
+  liveTrips,
   loading,
   offDay,
   onOpenPhoto,
@@ -185,8 +197,16 @@ export function DayRecord({
       <StateBlock label="Couldn't load attendance" tone="plain" value="Pull down to retry" />
     );
   else if (record)
-    content = <RecordCards date={date} kind={kind} onOpenPhoto={onOpenPhoto} record={record} />;
-  else content = <StateBlock {...dayStateWithoutRecord(kind, offDay)} />;
+    content = (
+      <RecordCards
+        date={date}
+        kind={kind}
+        liveTrips={liveTrips}
+        onOpenPhoto={onOpenPhoto}
+        record={record}
+      />
+    );
+  else content = liveTrips ?? <StateBlock {...dayStateWithoutRecord(kind, offDay)} />;
   return (
     <View
       className="mt-2"

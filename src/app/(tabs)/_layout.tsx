@@ -3,6 +3,7 @@ import { View } from "react-native";
 
 import { BottomNavigation } from "@/components/modules/layout";
 import { Loader, useStartupReady } from "@/components/modules/system";
+import { LiveTripHost } from "@/features/live-trips";
 import { useAuthSession } from "@/lib/auth/session";
 import { ViewerProvider } from "@/lib/auth/viewer";
 
@@ -40,6 +41,8 @@ export default function TabsLayout() {
           <Tabs.Screen name="attendance" />
           <Tabs.Screen name="profile" />
         </Tabs>
+        {/* Live trips: the server's feed, this phone's location duty and its location guard. */}
+        <LiveTripHost />
       </ViewerProvider>
     </View>
   );

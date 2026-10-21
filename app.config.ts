@@ -202,11 +202,18 @@ export default ({ config }: ConfigContext): ExpoConfig =>
                   recordAudioAndroid: false,
                 },
               ],
+              // Live delivery tracking keeps reading GPS with the app in the background, through an
+              // Android foreground service (a "Live tracking on" notification) while a DRS is out.
               [
                 "expo-location",
                 {
                   locationWhenInUsePermission:
                     "Allow Hisaab Sathi Connect to use your location for attendance.",
+                  locationAlwaysAndWhenInUsePermission:
+                    "Allow Hisaab Sathi Connect to share your location while you are out for delivery, even when the app is closed.",
+                  isAndroidBackgroundLocationEnabled: true,
+                  isAndroidForegroundServiceEnabled: true,
+                  isIosBackgroundLocationEnabled: true,
                 },
               ],
               [
