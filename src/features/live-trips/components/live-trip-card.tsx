@@ -144,7 +144,10 @@ export function LiveTripCard({
 }) {
   // The driver reads "You are …"; everyone else watching reads the driver's name.
   const driver = trip.mine ? null : trip.deliveryBoyName?.trim() || "The vehicle";
+  // With several orders out, the block follows the next stop and says how many are left.
+  const left = trip.orders.length;
   const facts = [
+    left > 1 ? `Next stop · ${left} orders left` : null,
     order.receiverName,
     `AWB ${order.awbNo}`,
     trip.mine ? null : trip.vehicleNo,
@@ -172,15 +175,18 @@ export function LiveTripCard({
   );
 }
 
-/** Every pending order of every live trip, nearest first within each trip. */
+/**
+ * One block per live trip (DRS), however many orders it carries: the next stop, i.e. the nearest
+ * order still pending (the server sends them nearest first). Once it is delivered the block moves
+ * on to the next one, and it goes when the last is done.
+ */
 export function LiveTripBlocks({ trips }: { trips: LiveTrip[] }) {
   return (
     <View className="gap-2">
-      {trips.flatMap((trip) =>
-        trip.orders.map((order) => (
-          <LiveTripCard key={`${trip.id}-${order.orderId}`} order={order} trip={trip} />
-        )),
-      )}
+      {trips.map((trip) => {
+        const next = trip.orders[0];
+        return next ? <LiveTripCard key={trip.id} order={next} trip={trip} /> : null;
+      })}
     </View>
   );
 }
