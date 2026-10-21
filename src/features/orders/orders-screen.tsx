@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 
 import { type DateRange, rangeLabel, SearchRangeToolbar } from "@/components/modules/date-range";
+import { useDialog } from "@/components/modules/dialog";
 import { TabScreen } from "@/components/modules/layout";
 import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
 import {
@@ -16,14 +17,16 @@ import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { useLiveLocation } from "@/hooks/use-live-location";
-import type { DrsSheet } from "@/lib/api/drs";
+import { type DrsSheet, type DrsStatus, patchDrs } from "@/lib/api/drs";
 import { useAuthSession } from "@/lib/auth/session";
 import { useViewer } from "@/lib/auth/viewer";
 import { formatDayLabel, useDateFilter } from "@/lib/date";
+import { errorMessage } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
+import { lastPosition } from "@/lib/maps/last-position";
 
 import { DrsCard } from "./components/drs-card";
 import { DrsPicker } from "./components/drs-picker";
-import { DrsStatusSheet } from "./components/drs-status-sheet";
 import { FilterChips } from "./components/filter-chips";
 import { ListEmpty } from "./components/list-empty";
 import { OrderCard } from "./components/order-card";
@@ -86,7 +89,6 @@ export function OrdersScreen() {
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const [drsFilter, setDrsFilter] = useState<DrsFilter>("all");
   const [drsId, setDrsId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<DrsSheet | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const listRef = useRef<FlatList<DrsOrder | DrsSheet>>(null);
 
@@ -111,8 +113,40 @@ export function OrdersScreen() {
   const scan = useDrsScan(updated);
   const orderMap = useOrderMap();
   const toast = useToast();
-  // An order tapped while its DRS was still issued: once the DRS is out, its scan opens.
-  const [scanAfterStart, setScanAfterStart] = useState<DrsOrder | null>(null);
+  const dialog = useDialog();
+  // The sheet whose status update (the card's bottom block) is being saved.
+  const [advancing, setAdvancing] = useState<string | null>(null);
+
+  /**
+   * Moves a sheet on to `status` after the delivery boy confirms; resolves true once saved. The
+   * server notes where it was done, when the phone knows.
+   */
+  const advance = async (sheet: DrsSheet, status: DrsStatus) => {
+    if (!token || advancing) return false;
+    const resolving = status === "RESOLVED";
+    const sure = await dialog.confirm({
+      cancelLabel: "Not now",
+      confirmLabel: resolving ? "Resolve" : "Start delivering",
+      description: resolving
+        ? `Close ${sheet.id}? It can't be updated once resolved.`
+        : `Set ${sheet.id} out for delivery, so its orders can be scanned and delivered.`,
+      title: resolving ? "Resolve this DRS?" : "Out for delivery?",
+    });
+    if (!sure) return false;
+    setAdvancing(sheet.id);
+    try {
+      updated(await patchDrs(token, sheet.id, { status, ...(await lastPosition()) }));
+      haptic("success");
+      toast.success("DRS updated", `${sheet.id} is now ${status.toLowerCase()}.`);
+      return true;
+    } catch (error) {
+      haptic("error");
+      toast.error("Couldn't update the DRS", errorMessage(error, "Please try again."));
+      return false;
+    } finally {
+      setAdvancing(null);
+    }
+  };
 
   const scanOrder = (order: DrsOrder) => {
     rememberOrder(order);
@@ -132,27 +166,12 @@ export function OrdersScreen() {
       scanOrder(order);
       return;
     }
+    // Its DRS is still issued: set it out for delivery first, then scan.
     const sheet = sheets.find((item) => item.id === order.drsId);
     if (!sheet) return;
-    toast.show({
-      description: `Set ${sheet.id} out for delivery to scan its orders.`,
-      title: "Start this DRS first",
-      type: "info",
+    void advance(sheet, "OUT FOR DELIVERY").then((started) => {
+      if (started) scanOrder({ ...order, drsStatus: "OUT FOR DELIVERY" });
     });
-    setScanAfterStart(order);
-    setEditing(sheet);
-  };
-
-  const statusUpdated = (sheet: DrsSheet) => {
-    updated(sheet);
-    const order = scanAfterStart;
-    if (
-      order &&
-      sheet.id === order.drsId &&
-      sheet.status !== "ISSUED" &&
-      sheet.status !== "RESOLVED"
-    )
-      scanOrder({ ...order, drsStatus: sheet.status });
   };
 
   // Coming back to the tab picks up deliveries made meanwhile, without a spinner.
@@ -246,7 +265,11 @@ export function OrdersScreen() {
           </Text>
         </View>
         {/* Home's location button: whether location is on, and a tap to fix it. */}
-        <LocationIndicator onPress={location.resolve} state={locationIndicatorState(location)} />
+        {/* A little room above: the active ripple reaches 2pt past the circle, and the list's top
+            edge would clip it. */}
+        <View className="mt-1">
+          <LocationIndicator onPress={location.resolve} state={locationIndicatorState(location)} />
+        </View>
       </View>
       <PageTabs onChange={changeTab} value={tab} />
       <View className="mt-5 flex-row gap-3">
@@ -400,7 +423,8 @@ export function OrdersScreen() {
             />
           ) : (
             <DrsCard
-              onEdit={() => setEditing(item)}
+              advancing={advancing === item.id}
+              onAdvance={(status) => void advance(item, status)}
               onOpen={() => openDrs(item)}
               onPrint={() => void printer.print(item.id)}
               onScan={() => scan.open(item)}
@@ -409,14 +433,6 @@ export function OrdersScreen() {
             />
           )
         }
-      />
-      <DrsStatusSheet
-        onClose={() => {
-          setEditing(null);
-          setScanAfterStart(null);
-        }}
-        onUpdated={statusUpdated}
-        sheet={editing}
       />
       {scan.element}
       {orderMap.element}

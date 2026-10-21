@@ -1,22 +1,7 @@
 import type { DrsSheet, DrsStatus } from "@/lib/api/drs";
 import type { Remark } from "@/lib/attendance/remarks";
 
-import { isDelivered } from "./orders";
-
-/**
- * The statuses a delivery boy can move a DRS on to, as the server allows. `DELIVERING ORDERS` is
- * set by the server once an order on the sheet is delivered, and a resolved sheet is final.
- */
-const NEXT_STATUSES: Record<DrsStatus, DrsStatus[]> = {
-  "DELIVERING ORDERS": ["RESOLVED"],
-  ISSUED: ["OUT FOR DELIVERY"],
-  "OUT FOR DELIVERY": ["RESOLVED"],
-  RESOLVED: [],
-};
-
-export function drsNextStatuses(status: DrsStatus): DrsStatus[] {
-  return NEXT_STATUSES[status] ?? [];
-}
+import { isDelivered, isPending } from "./orders";
 
 const STATUS_LABELS: Record<DrsStatus, string> = {
   "DELIVERING ORDERS": "Delivering",
@@ -75,6 +60,22 @@ export const deliveredOrderCount = (sheet: DrsSheet) => sheet.orders.filter(isDe
 /** Every order is delivered; an empty DRS is not considered complete. */
 export const areAllOrdersDelivered = (sheet: DrsSheet) =>
   sheet.orders.length > 0 && deliveredOrderCount(sheet) === sheet.orders.length;
+
+/** No order is left to hand over: each one is delivered, returned or cancelled. */
+export const areAllOrdersFinished = (sheet: DrsSheet) =>
+  sheet.orders.length > 0 &&
+  sheet.orders.every((order) => !isPending({ ...order, drsId: sheet.id, drsStatus: sheet.status }));
+
+/**
+ * The one step the card offers, within what the server allows a delivery boy (`DELIVERING
+ * ORDERS` is set by the server, and a resolved sheet is final): an issued sheet goes out for
+ * delivery; one on the road is resolved once no order is left to hand over. Null otherwise.
+ */
+export function drsAdvance(sheet: DrsSheet): DrsStatus | null {
+  if (sheet.status === "ISSUED") return "OUT FOR DELIVERY";
+  const onTheRoad = sheet.status === "OUT FOR DELIVERY" || sheet.status === "DELIVERING ORDERS";
+  return onTheRoad && areAllOrdersFinished(sheet) ? "RESOLVED" : null;
+}
 
 /** A delivery run has started, but none of its parcels have reached a recipient yet. */
 export const areNoOrdersDelivered = (sheet: DrsSheet) =>

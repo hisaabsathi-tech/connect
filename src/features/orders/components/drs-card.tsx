@@ -1,6 +1,6 @@
 import {
   CheckmarkCircle02Icon,
-  PencilEdit02Icon,
+  DeliveryTruck01Icon,
   PrinterIcon,
   Upload06Icon,
   ViewIcon,
@@ -11,21 +11,21 @@ import { ActivityIndicator, Pressable, View } from "react-native";
 import { RemarkBadge } from "@/components/modules/remark-badge";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
-import type { DrsSheet } from "@/lib/api/drs";
+import type { DrsSheet, DrsStatus } from "@/lib/api/drs";
+import type { RemarkVariant } from "@/lib/attendance/remarks";
 import { haptic } from "@/lib/haptics";
 
 import {
   areAllOrdersDelivered,
   deliveredOrderCount,
+  drsAdvance,
   drsAreas,
   drsBadge,
-  drsNextStatuses,
   drsPincodes,
 } from "../lib/drs";
 
-// The Figma's tinted action squares: print in grey, the scan in amber, editing in brand blue.
+// The Figma's tinted action squares: print in grey, the scan in amber.
 const ACTIONS = {
-  edit: { background: "#E1E5FF", color: colors.primary },
   print: { background: "#EEEFF2", color: colors.foreground },
   scan: { background: "#FFF1DD", color: "#E8900C" },
 } as const;
@@ -113,20 +113,75 @@ function DrsStatusBadge({ sheet }: { sheet: DrsSheet }) {
   );
 }
 
+// The status block takes the colours of the status it moves the sheet to (the badge's tones).
+const ADVANCE_TONES: Record<RemarkVariant, { background: string; border: string; color: string }> =
+  {
+    delivered: { background: "#ECFDF5", border: "#86EFAC", color: "#16A34A" },
+    destructive: { background: "#FFF1F2", border: "#FDA4AF", color: "#DC2626" },
+    rescheduled: { background: "#FFF8ED", border: "#F6C98A", color: "#D97706" },
+    transit: { background: "#EFF8FF", border: "#93C5FD", color: "#2563EB" },
+  };
+
+/** The full-width block that moves the sheet on to its next status, in that status's colours. */
+function AdvanceBlock({
+  busy,
+  onPress,
+  sheetId,
+  status,
+}: {
+  busy: boolean;
+  onPress: () => void;
+  sheetId: string;
+  status: DrsStatus;
+}) {
+  const { background, border, color } = ADVANCE_TONES[drsBadge(status).variant];
+  return (
+    <Pressable
+      accessibilityLabel={`Update DRS ${sheetId} status to ${status.toLowerCase()}`}
+      accessibilityRole="button"
+      className="mt-3 h-11 flex-row items-center justify-center gap-2 border active:opacity-70"
+      disabled={busy}
+      onPress={onPress}
+      onPressIn={() => haptic("light")}
+      style={{ backgroundColor: background, borderColor: border }}
+    >
+      {busy ? (
+        <ActivityIndicator color={color} size="small" />
+      ) : (
+        <>
+          <Text className="text-sm font-medium" style={{ color }}>
+            Update DRS status to {status}
+          </Text>
+          <HugeiconsIcon
+            color={color}
+            icon={status === "RESOLVED" ? CheckmarkCircle02Icon : DeliveryTruck01Icon}
+            size={18}
+            strokeWidth={1.8}
+          />
+        </>
+      )}
+    </Pressable>
+  );
+}
+
 /**
  * One delivery run sheet: its id and status, the areas and pincodes it covers, and how many
- * orders ride on it. Tapping the card shows those orders; the squares print it, attach (or show)
- * the scan of the signed sheet, and move its status on while it isn't resolved.
+ * orders ride on it. Tapping the card shows those orders; the squares print it and attach (or
+ * show) the scan of the signed sheet. A block along the bottom moves it on: out for delivery once
+ * issued, resolved once no order is left to deliver.
  */
 export function DrsCard({
-  onEdit,
+  advancing,
+  onAdvance,
   onOpen,
   onPrint,
   onScan,
   printing,
   sheet,
 }: {
-  onEdit: () => void;
+  /** The status update from the bottom block is being saved. */
+  advancing: boolean;
+  onAdvance: (status: DrsStatus) => void;
   onOpen: () => void;
   onPrint: () => void;
   /** Upload a scan, or view the one attached. */
@@ -136,11 +191,7 @@ export function DrsCard({
 }) {
   const pincodes = drsPincodes(sheet);
   const orders = sheet.orders.length;
-  const allDelivered = areAllOrdersDelivered(sheet);
-  const canResolve =
-    sheet.status === "DELIVERING ORDERS" &&
-    allDelivered &&
-    drsNextStatuses(sheet.status).includes("RESOLVED");
+  const next = drsAdvance(sheet);
   return (
     <Pressable
       accessibilityHint="Shows this DRS's orders"
@@ -189,27 +240,15 @@ export function DrsCard({
             onPress={onScan}
             tone="scan"
           />
-          {drsNextStatuses(sheet.status).length && !canResolve ? (
-            <ActionSquare
-              icon={PencilEdit02Icon}
-              label="Update the DRS status"
-              onPress={onEdit}
-              tone="edit"
-            />
-          ) : null}
         </View>
       </View>
-      {canResolve ? (
-        <Pressable
-          accessibilityLabel={`Update DRS ${sheet.id} status to resolved`}
-          accessibilityRole="button"
-          className="mt-3 h-11 flex-row items-center justify-center gap-2 border border-[#86EFAC] bg-[#ECFDF5] active:opacity-70"
-          onPress={onEdit}
-          onPressIn={() => haptic("light")}
-        >
-          <Text className="text-sm font-medium text-[#16A34A]">Update DRS status to RESOLVED</Text>
-          <HugeiconsIcon color="#16A34A" icon={CheckmarkCircle02Icon} size={18} strokeWidth={1.8} />
-        </Pressable>
+      {next ? (
+        <AdvanceBlock
+          busy={advancing}
+          onPress={() => onAdvance(next)}
+          sheetId={sheet.id}
+          status={next}
+        />
       ) : null}
     </Pressable>
   );
