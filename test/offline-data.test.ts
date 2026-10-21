@@ -63,7 +63,7 @@ describe("DRS sheets offline", () => {
     }));
     await loadDrsSheets("s", TOKEN, day);
     fake.server.offline = true;
-    reportUnreachable();
+    reportUnreachable("no_network");
     const error = await loadDrsSheets("s", TOKEN, day).catch((caught) => caught);
     expect(isNetworkError(error)).toBe(true);
     expect(cachedDrsSheets("s", day)?.[0]?.id).toBe("DRS1");

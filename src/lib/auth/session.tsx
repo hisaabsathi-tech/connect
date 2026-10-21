@@ -12,10 +12,11 @@ import {
 import { AppState } from "react-native";
 
 import { useToast } from "@/components/ui/toast";
-import { AuthApiError, authApi, type SessionPayload } from "@/lib/api/auth";
+import { AuthApiError, authApi, type SessionPayload, sessionScope } from "@/lib/api/auth";
 import { onRejectedToken } from "@/lib/auth/session-expiry";
 import { TOKEN_KEY } from "@/lib/auth/token-key";
 import { clearCache } from "@/lib/offline/cache";
+import { setTrackingIdentity } from "@/lib/tracking/store";
 
 type AuthSession = {
   isReady: boolean;
@@ -52,6 +53,15 @@ function rejectsSession(error: unknown) {
   return error instanceof AuthApiError && (error.status === 401 || error.status === 403);
 }
 
+/** Tells the GPS outbox which login's points may go out with this token. */
+function claimTracking(token: string) {
+  authApi
+    .getSession(token)
+    .then((result) => setTrackingIdentity(sessionScope(result.data)))
+    // Offline: the login saved last time still holds.
+    .catch(() => undefined);
+}
+
 export function AuthSessionProvider({ children }: PropsWithChildren) {
   const toast = useToast();
   const [isReady, setReady] = useState(false);
@@ -68,6 +78,8 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
       current.current = null;
       setToken(null);
       clearCache();
+      // Queued GPS points are kept for this login, just not sent until it signs back in.
+      setTrackingIdentity(null);
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       if (notice) toast.show(notice);
     },
@@ -87,6 +99,7 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
           return;
         }
         const refreshed = result.token ?? stored;
+        setTrackingIdentity(sessionScope(result.data));
         if (active) setToken(refreshed);
         if (refreshed !== stored) await SecureStore.setItemAsync(TOKEN_KEY, refreshed);
       } catch (error) {
@@ -122,7 +135,9 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
       authApi
         .getSession(active)
         .then((result) => {
-          if (current.current === active && !isUsable(result.data))
+          if (current.current !== active) return;
+          if (isUsable(result.data)) setTrackingIdentity(sessionScope(result.data));
+          else
             void endSession({
               description: "Please sign in again to continue.",
               title: "Your session has ended",
@@ -138,16 +153,25 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     if (!nextToken) throw new Error("The server did not return an authentication token.");
     // A new sign-in may be someone else: nothing saved carries over.
     clearCache();
+    setTrackingIdentity(null);
     await SecureStore.setItemAsync(TOKEN_KEY, nextToken);
     current.current = nextToken;
     setToken(nextToken);
+    claimTracking(nextToken);
   }, []);
 
   const switchOrganization = useCallback(async (organizationId: string) => {
     const active = current.current;
     if (!active) throw new Error("You are signed out. Please sign in again.");
-    const result = await authApi.setActiveOrganization(organizationId, active);
-    const nextToken = result.token ?? active;
+    // The previous organisation's queued points must not go out under the new one.
+    setTrackingIdentity(null);
+    let nextToken = active;
+    try {
+      const result = await authApi.setActiveOrganization(organizationId, active);
+      nextToken = result.token ?? active;
+    } finally {
+      claimTracking(nextToken);
+    }
     await SecureStore.setItemAsync(TOKEN_KEY, nextToken);
     // Saved screens belong to the previous organisation.
     clearCache();
@@ -168,6 +192,7 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
       }
     }
     clearCache();
+    setTrackingIdentity(null);
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     setToken(null);
   }, []);

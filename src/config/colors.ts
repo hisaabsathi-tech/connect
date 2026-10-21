@@ -3,6 +3,7 @@
  * (icons, spinners, cursors, Animated styles). Keep in sync with `:root` in global.css.
  */
 export const colors = {
+  border: "#E5E7EB",
   destructive: "#DC2626",
   foreground: "#161950",
   mutedForeground: "#5F6470",

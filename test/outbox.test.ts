@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("outbox while offline", () => {
   it("keeps updates on the phone, sends nothing, and survives a restart", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     enqueue(delivered("O1"));
     enqueue(delivered("O2"));
     await settle();
@@ -47,7 +47,7 @@ describe("outbox while offline", () => {
   });
 
   it("copies the photo out of the camera cache, so it is still there to send later", () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     fake.files.set("cache/camera/pod.jpg", "jpeg");
     const id = enqueue({ ...delivered("O1"), photo: "cache/camera/pod.jpg" });
     const item = outboxNow().items.find((held) => held.id === id);
@@ -58,7 +58,7 @@ describe("outbox while offline", () => {
 
 describe("outbox when back online", () => {
   it("sends everything in the order it happened, with its id and time", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     const first = enqueue(delivered("O1"));
     await settle(2);
     const second = enqueue(delivered("O2"));
@@ -78,7 +78,7 @@ describe("outbox when back online", () => {
 
   it("starts sending the moment the connection returns, without any tap", async () => {
     startOutbox();
-    reportUnreachable();
+    reportUnreachable("no_network");
     enqueue(delivered("O1"));
     await settle();
     expect(statusCalls()).toHaveLength(0);
@@ -89,7 +89,7 @@ describe("outbox when back online", () => {
   });
 
   it("uploads the proof photo at send time, then attaches it", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     fake.files.set("cache/pod.jpg", "jpeg");
     fake.server.routes.set("POST /media/upload-url", () => ({
       body: { data: { mediaId: "M1", uploadUrl: "http://storage.test/put" }, success: true },
@@ -112,7 +112,7 @@ describe("outbox when back online", () => {
   });
 
   it("stops at a dropped connection mid-way and keeps the rest for later", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     enqueue(delivered("O1"));
     enqueue(delivered("O2"));
     reportReachable();
@@ -133,7 +133,7 @@ describe("outbox when back online", () => {
   it("keeps an update the server refuses as needing attention, and carries on with the rest", async () => {
     const refused: string[] = [];
     const stop = onOutboxRefused((item) => refused.push(item.label));
-    reportUnreachable();
+    reportUnreachable("no_network");
     enqueue(delivered("O1"));
     enqueue(delivered("O2"));
     fake.server.routes.set("PATCH /orders/O1/shipment-status", () =>
@@ -151,7 +151,7 @@ describe("outbox when back online", () => {
   });
 
   it("drops an update the server says it already has (a resend after a lost answer)", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     enqueue(delivered("O1"));
     fake.server.routes.set("PATCH /orders/O1/shipment-status", () =>
       refuse("This update was already saved.", 409),
@@ -162,7 +162,7 @@ describe("outbox when back online", () => {
   });
 
   it("lets the rider retry or discard a refused update", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     const id = enqueue(delivered("O1"));
     let refuseIt = true;
     fake.server.routes.set("PATCH /orders/O1/shipment-status", () =>
@@ -176,14 +176,14 @@ describe("outbox when back online", () => {
     await settle(5);
     expect(outboxNow().items).toHaveLength(0);
 
-    reportUnreachable();
+    reportUnreachable("no_network");
     const other = enqueue(delivered("O2"));
     discardOutboxItem(other);
     expect(outboxNow().items).toHaveLength(0);
   });
 
   it("sends a pickup with when it was collected, and a DRS scan through its upload", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     enqueue({ kind: "pickup-picked-up", label: "Pickup", organizationId: "ORG", pickupId: "P1" });
     fake.files.set("cache/scan.jpg", "jpeg");
     fake.server.routes.set("POST /media/upload-url", () => ({
@@ -209,7 +209,7 @@ describe("outbox when back online", () => {
   });
 
   it("finds what is waiting for one order, pickup or sheet (the cards' badges)", () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     enqueue(delivered("O1"));
     const items = outboxNow().items;
     expect(pendingFor(items, "O1")).toHaveLength(1);
@@ -218,7 +218,7 @@ describe("outbox when back online", () => {
   });
 
   it("sends nothing without a signed-in session", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     enqueue(delivered("O1"));
     fake.secure.clear();
     reportReachable();

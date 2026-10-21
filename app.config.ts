@@ -202,6 +202,8 @@ export default ({ config }: ConfigContext): ExpoConfig =>
                 },
               ],
               "expo-secure-store",
+              // Durable WAL-backed live-trip outbox; queued GPS points survive process death.
+              "expo-sqlite",
               // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
               // A development/release build is required; this is not available in Expo Go.
               "@maplibre/maplibre-react-native",

@@ -27,6 +27,9 @@ type FeedHandlers = {
 
 const NAMESPACE = `${env.apiUrl}/vehicle-trips`;
 
+/** WebSocket first; long polling when a network (proxy, captive Wi-Fi) blocks the upgrade. */
+export const SOCKET_TRANSPORTS = ["websocket", "polling"];
+
 /**
  * The organisation's live trips as they open, move and close, pushed by the server. Without a
  * trip id the server joins this socket to the member's own trips and, with order view, to
@@ -36,7 +39,7 @@ export function connectTripFeed(token: string, handlers: FeedHandlers): () => vo
   const socket: Socket = io(NAMESPACE, {
     auth: { token },
     reconnectionDelayMax: 30_000,
-    transports: ["websocket"],
+    transports: SOCKET_TRANSPORTS,
   });
   socket.on("connect", handlers.onConnect);
   socket.on("trip.opened", handlers.onOpened);
@@ -53,6 +56,7 @@ export function connectTripChannel(
   token: string,
   tripId: string,
   handlers: {
+    onConnect?: () => void;
     onPoint: (event: TripPointEvent) => void;
     onProgress: (event: TripProgressEvent) => void;
     onEnded: () => void;
@@ -61,8 +65,10 @@ export function connectTripChannel(
   const socket: Socket = io(NAMESPACE, {
     auth: { token, tripId },
     reconnectionDelayMax: 30_000,
-    transports: ["websocket"],
+    transports: SOCKET_TRANSPORTS,
   });
+  // Every (re)connect: whatever was sent while the socket was down is reloaded.
+  if (handlers.onConnect) socket.on("connect", handlers.onConnect);
   socket.on("trip.point", handlers.onPoint);
   socket.on("trip.progress", handlers.onProgress);
   socket.on("trip.ended", handlers.onEnded);

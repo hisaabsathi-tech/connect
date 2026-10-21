@@ -2,9 +2,11 @@ import * as Location from "expo-location";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Linking, Platform } from "react-native";
 
+import { useDialogPresented } from "@/components/modules/dialog";
 import { prefetchOrderDetails } from "@/features/orders/hooks/use-order-details";
 import { useAuthSession } from "@/lib/auth/session";
 import { onReconnect } from "@/lib/network/connectivity";
+import { connectAppData } from "@/lib/realtime/app-data-socket";
 import { connectTripFeed } from "@/lib/realtime/vehicle-trips-socket";
 import {
   currentDuty,
@@ -26,16 +28,21 @@ import {
   useLiveTrips,
 } from "./lib/live-trips-store";
 
+const RECONCILE_MS = 30_000;
+
 /**
  * Keeps the live trips current and this phone's part in them:
- * - one socket to the server's trip feed while the app is open (no polling); every (re)connect
- *   reloads a snapshot, so nothing missed while away is lost
+ * - one socket to the server's trip feed while the app is open; every (re)connect reloads a
+ *   snapshot, so nothing missed while away is lost, and a 30 s snapshot heals a silently
+ *   dropped event
+ * - the app-data socket, which tells Home which of its saved data to reload
  * - while a trip this member drives is open, the background location task reports for it, and
  *   stops once the trip ends
  * - while that trip is on, a sheet nobody can dismiss asks for location whenever it is blocked
  */
 export function LiveTripHost() {
   const { token } = useAuthSession();
+  const dialogPresented = useDialogPresented();
   const { synced, trips } = useLiveTrips();
   const mine = trips.find((trip) => trip.mine && trip.drsId) ?? null;
   const [blocker, setBlocker] = useState<TrackingBlocker | null>(null);
@@ -46,6 +53,8 @@ export function LiveTripHost() {
   useEffect(() => {
     if (!token) return;
     let disconnect: (() => void) | null = null;
+    let disconnectAppData: (() => void) | null = null;
+    let watchdog: ReturnType<typeof setInterval> | null = null;
     const connect = () => {
       disconnect ??= connectTripFeed(token, {
         onClosed: (event) => removeLiveTrip(event.tripId),
@@ -53,18 +62,27 @@ export function LiveTripHost() {
         onOpened: () => void reloadLiveTrips(token),
         onProgress: applyTripProgress,
       });
+      disconnectAppData ??= connectAppData(token);
+      // Recovery only: a socket event lost without a disconnect (a Redis or proxy hiccup) is
+      // healed by the next snapshot instead of waiting for the screen to be reopened.
+      watchdog ??= setInterval(() => void reloadLiveTrips(token), RECONCILE_MS);
+    };
+    const pause = () => {
+      disconnect?.();
+      disconnect = null;
+      disconnectAppData?.();
+      disconnectAppData = null;
+      if (watchdog) clearInterval(watchdog);
+      watchdog = null;
     };
     connect();
     const change = AppState.addEventListener("change", (next) => {
       if (next === "active") connect();
-      else {
-        disconnect?.();
-        disconnect = null;
-      }
+      else pause();
     });
     return () => {
       change.remove();
-      disconnect?.();
+      pause();
       resetLiveTrips();
     };
   }, [token]);
@@ -151,5 +169,11 @@ export function LiveTripHost() {
     }
   };
 
-  return <LocationGuardSheet blocker={blocker} busy={fixing} onFix={() => void fix()} />;
+  return (
+    <LocationGuardSheet
+      blocker={dialogPresented ? null : blocker}
+      busy={fixing}
+      onFix={() => void fix()}
+    />
+  );
 }

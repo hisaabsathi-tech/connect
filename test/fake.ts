@@ -8,6 +8,7 @@ export const fake = (
     fake: {
       appListeners: ((state: string) => void)[];
       files: Map<string, string>;
+      sqliteRows: Map<string, Record<string, unknown>>;
       networkListeners: ((state: {
         isConnected?: boolean;
         isInternetReachable?: boolean;
@@ -31,6 +32,7 @@ export const TOKEN = "token-1";
 export function freshPhone() {
   fake.server.reset();
   fake.files.clear();
+  fake.sqliteRows.clear();
   fake.secure.clear();
   fake.secure.set("hisaabsathi.connector.auth-token", TOKEN);
   fake.networkState.isConnected = true;

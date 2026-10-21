@@ -72,6 +72,57 @@ export function bearingTowardsTarget(
   return bearingBetween(from, target);
 }
 
+/**
+ * Fewer points for drawing a long driven line (Douglas–Peucker, `toleranceMetres` off the line at
+ * most). The first and last points always stay. Short lines are returned as they are; the raw
+ * history is never changed, only what the map is handed.
+ */
+export function simplifyForDisplay<T extends Coordinates>(
+  points: readonly T[],
+  toleranceMetres = 4,
+  minPoints = 300,
+): T[] {
+  if (points.length <= minPoints) return [...points];
+  const first = points[0] as T;
+  // Local flat projection in metres: accurate enough over a city-sized trip.
+  const cos = Math.cos(first.latitude * RADIANS);
+  const metresPerDegree = (EARTH_DIAMETER_METRES / 2) * RADIANS;
+  const xy = points.map((point) => ({
+    x: (point.longitude - first.longitude) * metresPerDegree * cos,
+    y: (point.latitude - first.latitude) * metresPerDegree,
+  }));
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+  const stack: [number, number][] = [[0, points.length - 1]];
+  while (stack.length) {
+    const [from, to] = stack.pop() as [number, number];
+    const a = xy[from] as { x: number; y: number };
+    const b = xy[to] as { x: number; y: number };
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy);
+    let worst = -1;
+    let worstAt = -1;
+    for (let i = from + 1; i < to; i += 1) {
+      const p = xy[i] as { x: number; y: number };
+      const off =
+        length === 0
+          ? Math.hypot(p.x - a.x, p.y - a.y)
+          : Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / length;
+      if (off > worst) {
+        worst = off;
+        worstAt = i;
+      }
+    }
+    if (worstAt !== -1 && worst > toleranceMetres) {
+      keep[worstAt] = 1;
+      stack.push([from, worstAt], [worstAt, to]);
+    }
+  }
+  return points.filter((_, index) => keep[index] === 1);
+}
+
 export function centerOf(points: Coordinates[]): Coordinates {
   if (!points.length) return INDIA_CENTER;
   return points.reduce(

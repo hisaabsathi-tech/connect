@@ -49,7 +49,9 @@ export async function recordFixes(locations: Location.LocationObject[]) {
         longitude: fix.longitude,
         queuedAt: Date.now(),
         recordedAt: new Date(fix.at).toISOString(),
+        scope: state.identity,
         speed: fix.speed != null && fix.speed >= 0 ? fix.speed : null,
+        tripId: duty.tripId,
         vehicleId: duty.vehicleId,
       });
     }

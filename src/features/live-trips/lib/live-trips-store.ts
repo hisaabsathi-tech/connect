@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import { fetchLiveTrips, type LiveTrip } from "@/lib/api/live-trips";
+import { fetchLiveTrips, type LiveTrip, type LiveTripPoint } from "@/lib/api/live-trips";
 import { onCacheCleared, readCache, writeCache } from "@/lib/offline/cache";
 import type { TripProgressEvent } from "@/lib/realtime/vehicle-trips-socket";
 import { retryOnce } from "@/lib/retry";
@@ -52,7 +52,14 @@ export async function reloadLiveTrips(token: string) {
   const mine = ++generation;
   try {
     const trips = await retryOnce(() => fetchLiveTrips(token));
-    if (mine === generation) save({ loaded: true, synced: true, trips: withPending(trips) });
+    if (mine !== generation) return;
+    // A progress event can land while the snapshot is on its way: the newer position wins.
+    const held = new Map(state.trips.map((trip) => [trip.id, trip]));
+    const merged = trips.map((trip) => {
+      const before = held.get(trip.id);
+      return before ? { ...trip, lastPoint: newerPoint(trip.lastPoint, before.lastPoint) } : trip;
+    });
+    save({ loaded: true, synced: true, trips: withPending(merged) });
   } catch {
     if (mine === generation) set({ ...state, loaded: true, synced: false });
   }
@@ -66,7 +73,11 @@ export function applyTripProgress(event: TripProgressEvent) {
     trips: withPending(
       state.trips.map((trip) =>
         trip.id === event.tripId
-          ? { ...trip, lastPoint: event.lastPoint ?? trip.lastPoint, orders: event.orders }
+          ? {
+              ...trip,
+              lastPoint: newerPoint(event.lastPoint, trip.lastPoint),
+              orders: event.orders,
+            }
           : trip,
       ),
     ),
@@ -95,6 +106,13 @@ export function settleLiveTripOrder(orderId: string) {
 export function resetLiveTrips() {
   generation += 1;
   set({ loaded: false, synced: false, trips: [] });
+}
+
+/** The later of two fixes by capture time, so a stale answer never moves the vehicle back. */
+export function newerPoint(a: LiveTripPoint | null, b: LiveTripPoint | null) {
+  if (!a) return b;
+  if (!b) return a;
+  return Date.parse(a.recordedAt) >= Date.parse(b.recordedAt) ? a : b;
 }
 
 // A trip with every order settled is about to close on the server; it shows nothing meanwhile.

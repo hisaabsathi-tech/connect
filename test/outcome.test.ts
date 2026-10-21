@@ -41,7 +41,7 @@ describe("recording a delivery outcome", () => {
   });
 
   it("offline: saved for later, and the order shows delivered on the phone at once", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     const result = await submitOrderOutcome({
       input: { description: "Customer not home", shipmentStatus: "DELIVERY ATTEMPT FAILED" },
       order,
@@ -78,7 +78,7 @@ describe("recording a delivery outcome", () => {
   });
 
   it("an OTP delivery is never queued: offline it fails, saying so", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     const error = await submitOrderOutcome({
       input: { otp: "123456", shipmentStatus: "DELIVERED" },
       order,
@@ -105,7 +105,7 @@ describe("recording a delivery outcome", () => {
   });
 
   it("the live trip's block moves on at once, online or not", async () => {
-    reportUnreachable();
+    reportUnreachable("no_network");
     await submitOrderOutcome({ input: { shipmentStatus: "RTO_INITIATED" }, order, token: TOKEN });
     expect(liveTripsNow().trips.some((trip) => trip.orders.some((o) => o.orderId === "O7"))).toBe(
       false,

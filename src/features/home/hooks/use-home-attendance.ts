@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AppState } from "react-native";
 
 import { useDialog } from "@/components/modules/dialog";
 import { useAttendancePhoto } from "@/features/attendance-photo";
@@ -19,6 +20,7 @@ import type { Coordinates } from "@/lib/maps/geo";
 import { reverseGeocodeAddress } from "@/lib/maps/ola-maps";
 import { onReconnect } from "@/lib/network/connectivity";
 import { readCache, writeCache } from "@/lib/offline/cache";
+import { onAppDataChanged } from "@/lib/realtime/app-data-socket";
 
 import { useAttendanceSounds } from "./use-attendance-sounds";
 
@@ -78,54 +80,73 @@ export function useHomeAttendance(token: string | null, live: Coordinates | null
   }, [show]);
 
   /** Fetches the identity, today's attendance and the organisation's position from the server. */
-  const load = useCallback(async () => {
-    if (!token) return;
-    try {
-      const [nextIdentity, status] = await Promise.all([
-        fetchHomeIdentity(token),
-        fetchOpenAttendance(token),
-      ]);
-      const fresh: HomeSnapshot = { identity: nextIdentity, status };
-      show(fresh);
-      setSavedAt(null);
-      savedAtRef.current = Date.now();
-      // The office pin below doesn't change the layout, so the page needn't wait for it.
-      setSettled(true);
-      writeCache(HOME_CACHE, "home", {
-        ...fresh,
-        organization: readCache<HomeSnapshot>(HOME_CACHE, "home")?.data.organization,
-      });
-      // Its own step: a failed lookup only leaves the office pin off, never fails the page.
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!token) return;
       try {
-        const address = nextIdentity?.organization?.address;
-        const place = address ? await geocodeAddress(address, token) : null;
-        const organization = place ? { latitude: place.lat, longitude: place.lng } : null;
-        setOrganization(organization);
-        writeCache(HOME_CACHE, "home", { ...fresh, organization });
-      } catch {
-        // Keeps the office pin it had.
+        const [nextIdentity, status] = await Promise.all([
+          fetchHomeIdentity(token),
+          fetchOpenAttendance(token),
+        ]);
+        const fresh: HomeSnapshot = { identity: nextIdentity, status };
+        show(fresh);
+        setSavedAt(null);
+        savedAtRef.current = Date.now();
+        // The office pin below doesn't change the layout, so the page needn't wait for it.
+        setSettled(true);
+        writeCache(HOME_CACHE, "home", {
+          ...fresh,
+          organization: readCache<HomeSnapshot>(HOME_CACHE, "home")?.data.organization,
+        });
+        // Its own step: a failed lookup only leaves the office pin off, never fails the page.
+        try {
+          const address = nextIdentity?.organization?.address;
+          const place = address ? await geocodeAddress(address, token) : null;
+          const organization = place ? { latitude: place.lat, longitude: place.lng } : null;
+          setOrganization(organization);
+          writeCache(HOME_CACHE, "home", { ...fresh, organization });
+        } catch {
+          // Keeps the office pin it had.
+        }
+      } catch (error) {
+        // Offline the saved page stays up and the Offline chip says why; no alarm needed.
+        if (isNetworkError(error)) {
+          setSavedAt(savedAtRef.current);
+          return;
+        }
+        // A background refresh keeps the page as it is; the next one tries again.
+        if (quiet) return;
+        void dialog.alert({
+          description: errorMessage(error, "Please try again."),
+          title: "Could not load home",
+          tone: "danger",
+        });
+      } finally {
+        setSettled(true);
       }
-    } catch (error) {
-      // Offline the saved page stays up and the Offline chip says why; no alarm needed.
-      if (isNetworkError(error)) {
-        setSavedAt(savedAtRef.current);
-        return;
-      }
-      void dialog.alert({
-        description: errorMessage(error, "Please try again."),
-        title: "Could not load home",
-        tone: "danger",
-      });
-    } finally {
-      setSettled(true);
-    }
-  }, [dialog, show, token]);
+    },
+    [dialog, show, token],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
   // Back online: today's status may have changed meanwhile.
-  useEffect(() => onReconnect(() => void load()), [load]);
+  useEffect(() => onReconnect(() => void load(true)), [load]);
+  // Changed on the server (an admin edit, the auto checkout, another phone) or back in the
+  // foreground: only the attendance part of Home reloads, quietly.
+  useEffect(() => {
+    const stopChanges = onAppDataChanged((resources) => {
+      if (resources.includes("attendance")) void load(true);
+    });
+    const change = AppState.addEventListener("change", (next) => {
+      if (next === "active") void load(true);
+    });
+    return () => {
+      stopChanges();
+      change.remove();
+    };
+  }, [load]);
 
   /** Pull-to-refresh: reloads everything on the page in place. */
   const refresh = useCallback(async () => {

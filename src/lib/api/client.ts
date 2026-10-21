@@ -4,6 +4,26 @@ import { env } from "@/lib/env";
 
 const baseUrl = `${env.apiUrl}${env.apiPrefix}`;
 
+/** The server answered with an error status. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    /** From `Retry-After` (429 / 503), in ms. */
+    readonly retryAfterMs: number | null,
+  ) {
+    super(message);
+  }
+}
+
+function retryAfterMs(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const at = Date.parse(header);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
+}
+
 export async function apiRequest<T>(
   path: string,
   token: string,
@@ -26,7 +46,11 @@ export async function apiRequest<T>(
       payload && typeof payload === "object" && "message" in payload
         ? (payload as { message?: string }).message
         : null;
-    throw new Error(message || "Something went wrong. Please try again.");
+    throw new ApiError(
+      message || "Something went wrong. Please try again.",
+      response.status,
+      retryAfterMs(response.headers.get("Retry-After")),
+    );
   }
   if (
     payload &&

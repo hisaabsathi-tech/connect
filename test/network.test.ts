@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 
-import { apiRequest } from "@/lib/api/client";
+import { ApiError, apiRequest } from "@/lib/api/client";
 import { graphqlRequest } from "@/lib/api/graphql";
 import { isNetworkError, NetworkError, timedFetch } from "@/lib/api/network";
 import {
@@ -22,9 +22,13 @@ beforeEach(() => {
 });
 
 describe("connectivity", () => {
-  it("counts as online until a request proves otherwise", async () => {
+  it("counts as online until repeated probes prove the server is down", async () => {
     expect(isOnline()).toBe(true);
     fake.server.offline = true;
+    await probe();
+    // One failed answer is degraded connectivity, not "server down".
+    expect(isOnline()).toBe(true);
+    await probe();
     await probe();
     expect(isOnline()).toBe(false);
     fake.server.offline = false;
@@ -40,7 +44,7 @@ describe("connectivity", () => {
     reportReachable();
     reportReachable();
     expect(reconnects).toBe(0);
-    reportUnreachable();
+    reportUnreachable("no_network");
     reportReachable();
     reportReachable();
     expect(reconnects).toBe(1);
@@ -78,10 +82,12 @@ describe("connectivity", () => {
     expect(getConnectivity().status).toBe("offline");
     expect(getConnectivity().reason).toBe("no_network");
 
-    // Device network connected, but server is down:
+    // Device network connected, but server is down (confirmed by repeated probes):
     fake.server.offline = true;
     network({ isConnected: true, isInternetReachable: true });
     await settle(5);
+    await probe();
+    await probe();
     expect(getConnectivity().status).toBe("offline");
     expect(getConnectivity().reason).toBe("server_unreachable");
   });
@@ -92,7 +98,25 @@ describe("requests", () => {
     fake.server.offline = true;
     const error = await apiRequest("/anything", TOKEN).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(NetworkError);
-    expect(isOnline()).toBe(false);
+    // An isolated failure is not "offline" yet; probes confirm it first.
+    expect(isOnline()).toBe(true);
+  });
+
+  it("reports the status and Retry-After of a refusal", async () => {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ message: "Busy" }), {
+        headers: { "Retry-After": "30" },
+        status: 503,
+      })) as typeof fetch;
+    try {
+      const error = await apiRequest("/anything", TOKEN).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(503);
+      expect((error as ApiError).retryAfterMs).toBe(30_000);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 
   it("gives up after its timeout instead of hanging", async () => {

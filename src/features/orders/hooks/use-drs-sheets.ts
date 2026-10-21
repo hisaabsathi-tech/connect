@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppState } from "react-native";
 
 import type { DrsSheet } from "@/lib/api/drs";
 import { isNetworkError } from "@/lib/api/network";
 import { useAuthSession } from "@/lib/auth/session";
 import { onReconnect } from "@/lib/network/connectivity";
+import { onAppDataChanged } from "@/lib/realtime/app-data-socket";
 import { istDayBounds } from "../lib/drs";
 
 import {
@@ -87,6 +89,20 @@ export function useDrsSheets(token: string | null, { from, to }: { from: string;
   }, [load]);
   // Back online: refresh in place.
   useEffect(() => onReconnect(() => void load(true)), [load]);
+  // The server says a sheet or one of its orders changed (assigned, settled from another
+  // phone or the website), or the app came back to the foreground: refresh in place.
+  useEffect(() => {
+    const stopChanges = onAppDataChanged((resources) => {
+      if (resources.includes("drs") || resources.includes("orders")) void load(true);
+    });
+    const change = AppState.addEventListener("change", (next) => {
+      if (next === "active") void load(true);
+    });
+    return () => {
+      stopChanges();
+      change.remove();
+    };
+  }, [load]);
   // An order updated on this phone (saved offline) shows updated at once.
   useEffect(
     () =>

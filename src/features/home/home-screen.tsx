@@ -223,6 +223,7 @@ export function HomeScreen() {
                     }),
                   nextStopId: nextStopOf(mapTrip, nextStopPicks)?.orderId ?? null,
                   path: tripMap.path,
+                  start: tripMap.start,
                   vehiclePin: vehiclePinFor(mapTrip.vehicleWheelCount),
                   stops: tripMap.stops,
                   vehicle: tripMap.vehicle,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { bearingBetween, bearingTowardsTarget } from "@/lib/maps/geo";
+import { bearingTowardsTarget } from "@/lib/maps/geo";
 
 describe("bearingTowardsTarget", () => {
   const origin = { latitude: 22.88, longitude: 87.78 };

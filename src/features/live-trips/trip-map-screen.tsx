@@ -36,7 +36,7 @@ export function TripMapScreen() {
   const picks = useNextStopPicks();
   const order = trip ? nextStopOf(trip, picks) : null;
   const own = useLiveLocation(Boolean(trip?.mine));
-  const { ended, path, stops, vehicle } = useTripMap(trip, own.location);
+  const { ended, path, start, stops, vehicle } = useTripMap(trip, own.location);
   const [cardHeight, setCardHeight] = useState(INITIAL_CARD_HEIGHT);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
@@ -50,6 +50,7 @@ export function TripMapScreen() {
         nextStopId={order?.orderId ?? null}
         onAction={close}
         path={path}
+        start={start}
         stops={stops}
         vehicle={vehicle}
         vehiclePin={vehiclePinFor(trip?.vehicleWheelCount)}

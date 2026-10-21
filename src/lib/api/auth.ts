@@ -22,7 +22,17 @@ export class AuthApiError extends Error {
 export type SignInResult = { token?: string; twoFactorRedirect?: boolean };
 
 /** Better Auth's session payload; null when the token is no longer valid. */
-export type SessionPayload = { session?: { activeOrganizationId?: string | null } } | null;
+export type SessionPayload = {
+  session?: { activeOrganizationId?: string | null; userId?: string | null };
+  user?: { id?: string | null };
+} | null;
+
+/** `${userId}:${organizationId}` of a usable session (whose GPS points it may send). */
+export function sessionScope(payload: SessionPayload): string | null {
+  const userId = payload?.user?.id ?? payload?.session?.userId;
+  const orgId = payload?.session?.activeOrganizationId;
+  return userId && orgId ? `${userId}:${orgId}` : null;
+}
 
 export type AuthOrganization = {
   id: string;

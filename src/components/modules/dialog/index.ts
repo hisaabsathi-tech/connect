@@ -4,4 +4,5 @@ export {
   type ConfirmOptions,
   DialogProvider,
   useDialog,
+  useDialogPresented,
 } from "./dialog-provider";

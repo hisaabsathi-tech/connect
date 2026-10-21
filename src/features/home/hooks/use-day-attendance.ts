@@ -4,6 +4,7 @@ import { type AttendanceSession, fetchMyAttendanceOn } from "@/lib/api/attendanc
 import { type DayKind, dayKindOf } from "@/lib/attendance/remarks";
 import { onReconnect } from "@/lib/network/connectivity";
 import { readCache, writeCache } from "@/lib/offline/cache";
+import { onAppDataChanged } from "@/lib/realtime/app-data-socket";
 
 const DAY_CACHE = "day-attendance";
 
@@ -59,6 +60,13 @@ export function useDayAttendance(token: string | null, date: string, today: stri
     void load();
   }, [load]);
   useEffect(() => onReconnect(() => void load()), [load]);
+  useEffect(
+    () =>
+      onAppDataChanged((resources) => {
+        if (resources.includes("attendance")) void load();
+      }),
+    [load],
+  );
 
   return { failed, kind, loading, offDay, record, reload: load };
 }

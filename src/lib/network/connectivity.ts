@@ -29,6 +29,8 @@ const PING_URL = `${env.apiUrl}/ping`;
 const PING_TIMEOUT_MS = 5_000;
 // While offline, check this often whether the server is back.
 const RECHECK_MS = 30_000;
+const CONFIRM_RECHECK_MS = 5_000;
+const SERVER_FAILURE_THRESHOLD = 3;
 
 let state: Connectivity = { since: Date.now(), status: "unknown" };
 let lastDeviceConnected: boolean | null = null;
@@ -37,6 +39,20 @@ const reconnectListeners = new Set<() => void>();
 let recheck: ReturnType<typeof setInterval> | null = null;
 let started = false;
 let probing: Promise<void> | null = null;
+let serverFailures = 0;
+let confirmRecheck: ReturnType<typeof setTimeout> | null = null;
+
+function markServerFailure() {
+  serverFailures += 1;
+  if (serverFailures >= SERVER_FAILURE_THRESHOLD) {
+    set("offline", "server_unreachable");
+    return;
+  }
+  confirmRecheck ??= setTimeout(() => {
+    confirmRecheck = null;
+    void probe();
+  }, CONFIRM_RECHECK_MS);
+}
 
 function set(status: ConnectivityStatus, reason?: OfflineReason) {
   const resolvedReason =
@@ -62,25 +78,31 @@ function set(status: ConnectivityStatus, reason?: OfflineReason) {
 /** A request reached the server: the app is online. */
 export function reportReachable() {
   lastDeviceConnected = true;
+  serverFailures = 0;
+  if (confirmRecheck) clearTimeout(confirmRecheck);
+  confirmRecheck = null;
   set("online");
 }
 
 /** A request couldn't reach the server (no network, timeout, a captive portal). */
 export function reportUnreachable(reason?: OfflineReason) {
-  set("offline", reason);
-  if (!reason) {
+  if (reason === "no_network") {
+    set("offline", reason);
+    return;
+  }
+  if (reason === "server_unreachable") markServerFailure();
+  else {
     void Network.getNetworkStateAsync()
       .then((net) => {
-        if (state.status !== "offline") return;
         if (net.isConnected === false) {
           lastDeviceConnected = false;
           set("offline", "no_network");
         } else {
           lastDeviceConnected = true;
-          set("offline", "server_unreachable");
+          markServerFailure();
         }
       })
-      .catch(() => undefined);
+      .catch(markServerFailure);
   }
 }
 
@@ -103,7 +125,7 @@ export function probe(): Promise<void> {
         lastDeviceConnected = true;
         set("online");
       } else {
-        set("offline", "server_unreachable");
+        markServerFailure();
       }
     } catch {
       const net = await Network.getNetworkStateAsync().catch(() => null);
@@ -111,7 +133,7 @@ export function probe(): Promise<void> {
         lastDeviceConnected = false;
         set("offline", "no_network");
       } else {
-        set("offline", "server_unreachable");
+        markServerFailure();
       }
     } finally {
       clearTimeout(timer);

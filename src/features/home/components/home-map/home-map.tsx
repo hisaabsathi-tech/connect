@@ -30,6 +30,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Text } from "@/components/modules/typography";
+import { Switch } from "@/components/ui/switch";
 import { colors } from "@/config/colors";
 import { VEHICLE_PIN_ART, type VehiclePin, vehiclePinFor } from "@/config/vehicle-pins";
 import { useMyVehicle } from "@/hooks/use-my-vehicle";
@@ -92,6 +93,7 @@ type Props = {
    */
   liveTrip?: {
     path: Coordinates[];
+    start?: Coordinates | null;
     stops: TripStop[];
     vehicle: Coordinates | null;
     vehiclePin: VehiclePin;
@@ -158,6 +160,36 @@ const pinLabels: Partial<Record<PinKind, string>> = {
   organization: "Office",
   transit: "Check-in",
 };
+
+/**
+ * A vehicle pin that turns smoothly to its new bearing, always the short way round (350° → 10°
+ * turns 20° clockwise, not 340° back).
+ */
+function RotatingPin({
+  bearing,
+  size,
+  source,
+}: {
+  bearing: number;
+  size: { height: number; width: number };
+  source: number;
+}) {
+  const angle = useSharedValue(bearing);
+  useEffect(() => {
+    const current = angle.value;
+    const delta = ((((bearing - current) % 360) + 540) % 360) - 180;
+    angle.value = withTiming(current + delta, {
+      duration: 450,
+      easing: Easing.out(Easing.quad),
+    });
+  }, [angle, bearing]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${angle.value}deg` }] }));
+  return (
+    <Animated.View style={[size, style]}>
+      <Image contentFit="contain" source={source} style={size} />
+    </Animated.View>
+  );
+}
 
 /** Compact key in the bottom-left corner: what each kind of pin currently on the map means. */
 function MapLegend({ points, bottom }: { points: MapPoint[]; bottom: number }) {
@@ -757,6 +789,30 @@ function NativeOlaMap({
             }
             ref={camera}
           />
+          {/* The suggested road still ahead: lighter and dashed, under the way already driven. */}
+          {route ? (
+            <GeoJSONSource
+              data={{
+                geometry: { coordinates: route, type: "LineString" },
+                properties: {},
+                type: "Feature",
+              }}
+              id="route"
+            >
+              <Layer
+                id="route-line"
+                layout={{ "line-cap": "round", "line-join": "round" }}
+                paint={{
+                  "line-color": colors.primary,
+                  "line-dasharray": [1.5, 1.5],
+                  "line-opacity": 0.45,
+                  "line-width": 4,
+                }}
+                type="line"
+              />
+            </GeoJSONSource>
+          ) : null}
+          {/* The way actually driven: the deep solid line, with a white casing over busy streets. */}
           {trail && trail.length > 1 ? (
             <GeoJSONSource
               data={{
@@ -767,31 +823,13 @@ function NativeOlaMap({
               id="trail"
             >
               <Layer
-                id="trail-line"
-                layout={{ "line-cap": "round", "line-join": "round" }}
-                paint={{ "line-color": colors.primary, "line-opacity": 0.4, "line-width": 4 }}
-                type="line"
-              />
-            </GeoJSONSource>
-          ) : null}
-          {route ? (
-            <GeoJSONSource
-              data={{
-                geometry: { coordinates: route, type: "LineString" },
-                properties: {},
-                type: "Feature",
-              }}
-              id="route"
-            >
-              {/* A white casing under the brand-blue line keeps it clear over busy streets. */}
-              <Layer
-                id="route-casing"
+                id="trail-casing"
                 layout={{ "line-cap": "round", "line-join": "round" }}
                 paint={{ "line-color": "#FFFFFF", "line-width": 9 }}
                 type="line"
               />
               <Layer
-                id="route-line"
+                id="trail-line"
                 layout={{ "line-cap": "round", "line-join": "round" }}
                 paint={{ "line-color": colors.primary, "line-width": 5 }}
                 type="line"
@@ -811,18 +849,31 @@ function NativeOlaMap({
                 onFocus(point);
               }}
             >
-              <Image
-                contentFit="contain"
-                source={pins[point.kind]}
-                style={[
-                  point.kind === "truck"
-                    ? TRUCK_SIZE
-                    : point.kind === "rider"
-                      ? RIDER_SIZE
-                      : PIN_SIZE,
-                  point.bearing != null ? { transform: [{ rotate: `${point.bearing}deg` }] } : null,
-                ]}
-              />
+              {point.bearing != null ? (
+                <RotatingPin
+                  bearing={point.bearing}
+                  size={
+                    point.kind === "truck"
+                      ? TRUCK_SIZE
+                      : point.kind === "rider"
+                        ? RIDER_SIZE
+                        : PIN_SIZE
+                  }
+                  source={pins[point.kind]}
+                />
+              ) : (
+                <Image
+                  contentFit="contain"
+                  source={pins[point.kind]}
+                  style={
+                    point.kind === "truck"
+                      ? TRUCK_SIZE
+                      : point.kind === "rider"
+                        ? RIDER_SIZE
+                        : PIN_SIZE
+                  }
+                />
+              )}
             </Marker>
           ))}
         </Map>
@@ -974,6 +1025,7 @@ export function HomeMap({
               nextStopId={liveTrip.nextStopId}
               onAction={liveTrip.onExpand}
               path={liveTrip.path}
+              start={liveTrip.start}
               stops={liveTrip.stops}
               vehicle={liveTrip.vehicle}
               vehiclePin={liveTrip.vehiclePin}
@@ -1354,9 +1406,9 @@ function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[], firstId
 }
 
 /**
- * A live delivery trip on a full-size map: the way the vehicle has come (faint), the truck at
- * its current position turned to its direction of travel, every order on the sheet, and the
- * predicted road path from the truck through each stop to the last one.
+ * A live delivery trip on a full-size map: the trip's Start pin, the way the vehicle has come
+ * (deep solid), the truck at its current position facing its next delivery, every order on the
+ * sheet, and the suggested road from the truck through each stop (light, dashed).
  */
 export function LiveTripMap({
   action = "close",
@@ -1366,10 +1418,13 @@ export function LiveTripMap({
   nextStopId = null,
   onAction,
   path,
+  start = null,
   stops,
   vehicle,
   vehiclePin = "truck",
 }: {
+  /** The trip's earliest GPS fix; the Start pin stays there for the whole trip. */
+  start?: Coordinates | null;
   /** How the vehicle is drawn, from its wheel count (`vehiclePinFor`). */
   vehiclePin?: VehiclePin;
   /** Bearing in degrees from north, overriding path-calculated direction. */
@@ -1389,6 +1444,8 @@ export function LiveTripMap({
   onAction: () => void;
 }) {
   const route = usePlannedRoute(vehicle, stops, nextStopId);
+  // Off by default: the suggested road ahead only overlays the map once switched on.
+  const [showRoute, setShowRoute] = useState(false);
   // Keep the marker facing the same first stop used to build the displayed route. This matters
   // especially on the driver's Home map: a phone compass heading can be stale while the vehicle
   // is parked or turning, but the map should always make the intended delivery direction clear.
@@ -1404,6 +1461,12 @@ export function LiveTripMap({
         ? bearingTowardsTarget(vehicle, destination, route?.coordinates ?? null)
         : (bearing ?? travelBearing(headingPath));
     const items: (MapPoint | null)[] = [
+      start
+        ? {
+            ...at(start, "trip-start", "start" as const),
+            info: { address: null, title: "Trip started" },
+          }
+        : null,
       ...stops.map((stop) => ({
         ...at(stop, `trip-stop-${stop.id}`, "order" as const),
         info: { address: stop.address, title: stop.title },
@@ -1411,33 +1474,60 @@ export function LiveTripMap({
       vehicle ? { ...at(vehicle, "trip-vehicle", vehiclePin), bearing: computedBearing } : null,
     ];
     return items.filter((item): item is MapPoint => item !== null);
-  }, [bearing, destination, path, route, stops, vehicle, vehiclePin]);
-  const trail = useMemo(
-    () => path.map((point) => [point.longitude, point.latitude] as [number, number]),
-    [path],
-  );
+  }, [bearing, destination, path, route, start, stops, vehicle, vehiclePin]);
+  // The driven line runs right up to the vehicle, even when its newest fix came in the snapshot.
+  const trail = useMemo(() => {
+    const line = path.map((point) => [point.longitude, point.latitude] as [number, number]);
+    const last = line.at(-1);
+    if (
+      vehicle &&
+      line.length > 0 &&
+      !(last?.[0] === vehicle.longitude && last[1] === vehicle.latitude)
+    ) {
+      line.push([vehicle.longitude, vehicle.latitude]);
+    }
+    return line;
+  }, [path, vehicle]);
   return (
-    <NativeOlaMap
-      anchorId={null}
-      callable={false}
-      controlsTop={controlsTop}
-      focusId={focusId}
-      legendBottom={legendBottom}
-      onFocus={(next) => setFocusId(next?.id ?? null)}
-      origin={vehicle}
-      points={points}
-      resetKey={0}
-      route={route?.coordinates ?? null}
-      showLegend={false}
-      trail={trail}
-      trip={route ? tripLabel(route) : null}
-      zoomOnFocus={false}
-    >
-      {action === "expand" ? (
-        <MapControl icon={FullScreenIcon} label="Open the live trip map" onPress={onAction} />
-      ) : (
-        <MapControl icon={Cancel01Icon} label="Close map" onPress={onAction} />
-      )}
-    </NativeOlaMap>
+    <View className="flex-1">
+      <NativeOlaMap
+        anchorId={null}
+        callable={false}
+        controlsTop={controlsTop}
+        focusId={focusId}
+        legendBottom={legendBottom}
+        onFocus={(next) => setFocusId(next?.id ?? null)}
+        origin={vehicle}
+        points={points}
+        resetKey={0}
+        route={showRoute ? (route?.coordinates ?? null) : null}
+        showLegend={false}
+        trail={trail}
+        trip={route ? tripLabel(route) : null}
+        zoomOnFocus={false}
+      >
+        {action === "expand" ? (
+          <MapControl icon={FullScreenIcon} label="Open the live trip map" onPress={onAction} />
+        ) : (
+          <MapControl icon={Cancel01Icon} label="Close map" onPress={onAction} />
+        )}
+      </NativeOlaMap>
+      <View
+        className="absolute right-4 flex-row items-center gap-1.5 bg-white px-2 py-1"
+        style={{ elevation: 3, top: controlsTop }}
+      >
+        <HugeiconsIcon color={colors.primary} icon={Route01Icon} size={16} />
+        <Text className="text-xs font-medium text-foreground">Suggestive Route</Text>
+        <Switch
+          accessibilityLabel="Show the suggested road ahead"
+          ios_backgroundColor={colors.border}
+          onValueChange={setShowRoute}
+          size="sm"
+          thumbColor="white"
+          trackColor={{ false: colors.border, true: colors.primary }}
+          value={showRoute}
+        />
+      </View>
+    </View>
   );
 }

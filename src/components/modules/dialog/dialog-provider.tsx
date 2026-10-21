@@ -51,6 +51,7 @@ interface OpenDialog extends DialogOptions {
 }
 
 const DialogContext = createContext<DialogApi | null>(null);
+const DialogPresentedContext = createContext<boolean | null>(null);
 
 /**
  * App-styled replacement for the system `Alert`, opened through `useDialog()`: a bottom sheet that
@@ -60,6 +61,8 @@ const DialogContext = createContext<DialogApi | null>(null);
 export function DialogProvider({ children }: PropsWithChildren) {
   const [dialog, setDialog] = useState<OpenDialog | null>(null);
   const [visible, setVisible] = useState(false);
+  // Remains true during the closing animation, so another global sheet does not appear beneath it.
+  const [presented, setPresented] = useState(false);
   const resolver = useRef<((confirmed: boolean) => void) | null>(null);
   const choice = useRef(false);
 
@@ -73,6 +76,7 @@ export function DialogProvider({ children }: PropsWithChildren) {
     resolver.current?.(false);
     choice.current = false;
     setDialog(next);
+    setPresented(true);
     setVisible(true);
     return new Promise<boolean>((resolve) => {
       resolver.current = resolve;
@@ -80,6 +84,7 @@ export function DialogProvider({ children }: PropsWithChildren) {
   }, []);
 
   const onClosed = useCallback(() => {
+    setPresented(false);
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice.current);
@@ -97,7 +102,9 @@ export function DialogProvider({ children }: PropsWithChildren) {
 
   return (
     <DialogContext.Provider value={api}>
-      {children}
+      <DialogPresentedContext.Provider value={presented}>
+        {children}
+      </DialogPresentedContext.Provider>
       <BottomSheet onClose={() => close(false)} onClosed={onClosed} visible={visible}>
         {dialog ? (
           <View accessibilityRole="alert">
@@ -155,4 +162,11 @@ export function useDialog() {
   const api = useContext(DialogContext);
   if (!api) throw new Error("useDialog must be used inside DialogProvider");
   return api;
+}
+
+/** True until the shared dialog sheet has completely finished closing. */
+export function useDialogPresented() {
+  const presented = useContext(DialogPresentedContext);
+  if (presented === null) throw new Error("useDialogPresented must be used inside DialogProvider");
+  return presented;
 }

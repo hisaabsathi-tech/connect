@@ -62,6 +62,72 @@ mock.module("expo-file-system", () => ({
   Paths: { cache: new FakeDirectory("cache"), document: new FakeDirectory("doc") },
 }));
 
+// --- SQLite tracking outbox ------------------------------------------------------------------
+const sqliteRows = new Map<string, Record<string, unknown>>();
+const sqliteDb = {
+  execSync() {},
+  getAllSync(sql: string) {
+    if (sql.startsWith("PRAGMA table_info")) return [{ name: "scope" }];
+    return [...sqliteRows.values()]
+      .filter((row) => row.state === "pending")
+      .sort(
+        (a, b) =>
+          String(a.recorded_at).localeCompare(String(b.recorded_at)) ||
+          Number(a.queued_at) - Number(b.queued_at),
+      );
+  },
+  runSync(sql: string, ...params: unknown[]) {
+    if (sql.startsWith("INSERT OR IGNORE")) {
+      const [
+        client_point_id,
+        trip_id,
+        vehicle_id,
+        drs_id,
+        latitude,
+        longitude,
+        accuracy,
+        speed,
+        heading,
+        recorded_at,
+        queued_at,
+        scope,
+      ] = params;
+      const id = String(client_point_id);
+      if (!sqliteRows.has(id)) {
+        sqliteRows.set(id, {
+          accuracy,
+          client_point_id: id,
+          drs_id,
+          heading,
+          latitude,
+          longitude,
+          queued_at,
+          recorded_at,
+          scope: scope ?? null,
+          speed,
+          state: "pending",
+          trip_id,
+          vehicle_id,
+        });
+      }
+    } else if (sql.startsWith("DELETE FROM")) {
+      sqliteRows.delete(String(params[0]));
+    } else if (sql.startsWith("UPDATE tracking_outbox SET scope")) {
+      for (const row of sqliteRows.values()) {
+        if (row.scope == null && row.state === "pending") row.scope = params[0];
+      }
+    } else if (sql.startsWith("UPDATE tracking_outbox")) {
+      const row = sqliteRows.get(String(params[1]));
+      if (row) Object.assign(row, { error: params[0], state: "quarantined" });
+    }
+    return { changes: 1, lastInsertRowId: 0 };
+  },
+  withTransactionSync(task: () => void) {
+    task();
+  },
+};
+mock.module("expo-sqlite", () => ({ openDatabaseSync: () => sqliteDb }));
+
 // --- Secure store ----------------------------------------------------------------------------
 const secure = new Map<string, string>();
 mock.module("expo-secure-store", () => ({
@@ -180,6 +246,7 @@ class FakeXhr {
 (globalThis as { fake?: unknown }).fake = {
   appListeners,
   files,
+  sqliteRows,
   networkListeners,
   networkState,
   secure,

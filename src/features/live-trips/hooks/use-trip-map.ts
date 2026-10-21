@@ -1,47 +1,56 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { TripStop } from "@/features/home/components/home-map";
-import { fetchTripPath, type LiveTrip, type LiveTripPoint } from "@/lib/api/live-trips";
+import {
+  fetchTripPath,
+  type LiveTrip,
+  mergeTripPath,
+  type TripPathPoint,
+} from "@/lib/api/live-trips";
 import { useAuthSession } from "@/lib/auth/session";
-import type { Coordinates } from "@/lib/maps/geo";
+import { type Coordinates, simplifyForDisplay } from "@/lib/maps/geo";
 import { connectTripChannel } from "@/lib/realtime/vehicle-trips-socket";
 
-import { applyTripProgress } from "../lib/live-trips-store";
-
-const byTime = (a: LiveTripPoint, b: LiveTripPoint) =>
-  Date.parse(a.recordedAt) - Date.parse(b.recordedAt);
+import { applyTripProgress, newerPoint } from "../lib/live-trips-store";
 
 /**
- * What a live trip's map draws, kept current over the trip's socket: the way driven so far, the
- * truck's position, and every order still to deliver. Shared by the full-screen trip map and the
- * Home map while a trip is live. `own` is this phone's position, which places the truck for the
- * driver before the first point reaches the server.
+ * What a live trip's map draws, kept current over the trip's socket: the Start pin, the way driven
+ * so far, the truck's position, and every order still to deliver. Shared by the full-screen trip
+ * map and the Home map while a trip is live. `own` is this phone's position, which places the
+ * truck for the driver before the first point reaches the server.
  */
 export function useTripMap(trip: LiveTrip | null, own: Coordinates | null) {
   const { token } = useAuthSession();
   const tripId = trip?.id ?? null;
   const drsId = trip?.drsId ?? null;
-  const [path, setPath] = useState<LiveTripPoint[]>([]);
+  const [path, setPath] = useState<TripPathPoint[]>([]);
   const [ended, setEnded] = useState(false);
 
-  // The way driven so far once, then each new point as the server pushes it.
+  // The whole way driven (every page) on each (re)connect, then each new point as it is pushed.
+  // Points merge by id, so a replayed or resent point is never drawn twice.
   useEffect(() => {
     setPath([]);
     setEnded(false);
     if (!(token && tripId && drsId)) return;
     let current = true;
-    const add = (points: LiveTripPoint[]) =>
-      setPath((previous) => {
-        const seen = new Set(previous.map((point) => point.recordedAt));
-        const fresh = points.filter((point) => !seen.has(point.recordedAt));
-        return fresh.length ? [...previous, ...fresh].sort(byTime) : previous;
-      });
-    fetchTripPath(token, drsId)
-      .then((points) => {
-        if (current) add(points);
-      })
-      .catch(() => undefined);
+    let loading = false;
+    const add = (points: TripPathPoint[]) =>
+      setPath((previous) => (points.length ? mergeTripPath(previous, points) : previous));
+    const load = () => {
+      if (loading) return;
+      loading = true;
+      fetchTripPath(token, drsId)
+        .then((points) => {
+          if (current) add(points);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          loading = false;
+        });
+    };
+    load();
     const disconnect = connectTripChannel(token, tripId, {
+      onConnect: load,
       onEnded: () => {
         if (current) setEnded(true);
       },
@@ -75,19 +84,38 @@ export function useTripMap(trip: LiveTrip | null, own: Coordinates | null) {
       ),
     [orders],
   );
+  // Long trips are thinned for drawing only; the raw points stay as they are.
   const shownPath = useMemo(
-    () => path.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
+    () =>
+      simplifyForDisplay(path).map((point) => ({
+        latitude: point.latitude,
+        longitude: point.longitude,
+      })),
     [path],
   );
-  // Where the truck is: its latest point; before the first one reaches the server, the trip's
-  // last known point, or for the driver their own phone's position.
-  const lastPoint = trip?.lastPoint;
+  // Where the truck is: whichever is newer of the latest path point and the snapshot's last
+  // point (a reconnect can bring either first); before any, the driver's own phone.
+  const lastPoint = trip?.lastPoint ?? null;
   const mine = Boolean(trip?.mine);
+  const newest = path.at(-1) ?? null;
   const vehicle = useMemo(() => {
-    const latest = shownPath.at(-1) ?? lastPoint;
+    const latest = newerPoint(newest, lastPoint);
     if (latest) return { latitude: latest.latitude, longitude: latest.longitude };
     return mine ? own : null;
-  }, [lastPoint, mine, own, shownPath]);
+  }, [lastPoint, mine, newest, own]);
+  // The trip's earliest GPS fix, from the snapshot or the first point of the path; nothing is
+  // made up before the first fix exists.
+  const startPoint = trip?.startPoint ?? null;
+  const first = path[0] ?? null;
+  const start = useMemo(() => {
+    const earliest =
+      startPoint && first
+        ? Date.parse(startPoint.recordedAt) <= Date.parse(first.recordedAt)
+          ? startPoint
+          : first
+        : (startPoint ?? first);
+    return earliest ? { latitude: earliest.latitude, longitude: earliest.longitude } : null;
+  }, [first, startPoint]);
 
-  return { ended, path: shownPath, stops, vehicle };
+  return { ended, path: shownPath, start, stops, vehicle };
 }

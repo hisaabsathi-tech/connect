@@ -19,22 +19,21 @@ export const MAX_ACCURACY_METRES = 50;
 // The trip's first point and a parked heartbeat take a coarser reading (indoors, at the hub)
 // rather than none at all; the server drops anything vaguer than this.
 export const MAX_FIRST_ACCURACY_METRES = 100;
-// Faster than ~200 km/h between two kept points is a GPS jump, not driving.
-export const MAX_SPEED_MPS = 55;
+// Train testing and every road vehicle are valid through 350 km/h. Accuracy radii are subtracted
+// before this implied-speed check so two noisy but honest fixes are not mistaken for a jump.
+export const MAX_SPEED_MPS = 350 / 3.6;
 // Never two points closer in time than this, however fast the vehicle moves.
 export const MIN_GAP_MS = 5_000;
 // Standing still: one point this often, so the trip shows it is alive.
-export const HEARTBEAT_MS = 5 * 60_000;
+export const HEARTBEAT_MS = 60_000;
 // Below this speed and inside the stillness radius the vehicle counts as parked.
 const STILL_SPEED_MPS = 1;
 const STILL_RADIUS_METRES = 15;
-// Moving: the distance gate scales with speed (about 10 s of travel) within these bounds, so a
-// rider in town sends every ~25 m and a van on the highway every ~250 m.
-const GATE_SECONDS = 10;
+// Moving: the distance gate scales with speed and retains fewer samples on fast straight travel.
 const MIN_GATE_METRES = 25;
-const MAX_GATE_METRES = 250;
+const MAX_GATE_METRES = 1_000;
 // A turn this sharp keeps the path's shape even before the distance gate is reached.
-const TURN_DEGREES = 30;
+const TURN_DEGREES = 20;
 const TURN_MIN_METRES = 15;
 const TURN_MIN_SPEED_MPS = 2;
 
@@ -60,7 +59,9 @@ export function shouldKeep(fix: Fix, last: Fix | null): boolean {
   const elapsed = fix.at - last.at;
   if (elapsed <= 0) return false;
   const moved = distanceInMetres(last, fix);
-  if (moved / (elapsed / 1000) > MAX_SPEED_MPS) return false;
+  const accuracyAllowance = Math.max(0, fix.accuracy ?? 0) + Math.max(0, last.accuracy ?? 0);
+  const impliedSpeed = Math.max(0, moved - accuracyAllowance) / (elapsed / 1000);
+  if (impliedSpeed > MAX_SPEED_MPS) return false;
   if (elapsed < MIN_GAP_MS) return false;
   if (elapsed >= HEARTBEAT_MS) return true;
   if (accuracy > MAX_ACCURACY_METRES) return false;
@@ -69,7 +70,10 @@ export function shouldKeep(fix: Fix, last: Fix | null): boolean {
   const stillRadius = Math.max(STILL_RADIUS_METRES, fix.accuracy ?? 0);
   if (speed < STILL_SPEED_MPS && moved < stillRadius) return false;
 
-  const gate = Math.min(MAX_GATE_METRES, Math.max(MIN_GATE_METRES, speed * GATE_SECONDS));
+  // Roughly 5–10 seconds in town and 10–15 seconds at road/train speed. A sharp turn still wins
+  // immediately, preserving the path without sending every native GPS fix.
+  const gateSeconds = speed < 5 ? 7 : speed < 20 ? 10 : 12;
+  const gate = Math.min(MAX_GATE_METRES, Math.max(MIN_GATE_METRES, speed * gateSeconds));
   if (moved >= gate) return true;
   return (
     speed >= TURN_MIN_SPEED_MPS &&
