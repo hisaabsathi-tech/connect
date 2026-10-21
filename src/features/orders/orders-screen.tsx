@@ -353,6 +353,8 @@ export function OrdersScreen() {
       )}
       <View className="mt-3">
         <SearchRangeToolbar
+          // Sheets and pickups can be issued ahead, so upcoming days can be picked.
+          allowFuture
           autoCapitalize={onOrders ? "words" : "characters"}
           onQueryChange={setQuery}
           onSelectedDateClear={resetToToday}

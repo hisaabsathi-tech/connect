@@ -4,7 +4,8 @@ import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/components/modules/typography";
-import { LiveTripMap } from "@/features/home/components/home-map";
+import { LiveTripMap, type TripStop } from "@/features/home/components/home-map";
+import { useLiveLocation } from "@/hooks/use-live-location";
 import { fetchTripPath, type LiveTripPoint } from "@/lib/api/live-trips";
 import { useAuthSession } from "@/lib/auth/session";
 import { connectTripChannel } from "@/lib/realtime/vehicle-trips-socket";
@@ -61,27 +62,38 @@ export function TripMapScreen() {
 
   // The order picked on Home; once it is delivered, the nearest one still pending.
   const order = trip?.orders.find((item) => item.orderId === orderId) ?? trip?.orders[0] ?? null;
-  const destination = useMemo(
+  // Every order still to deliver on the sheet, so the whole run shows on the map.
+  const orders = trip?.orders;
+  const stops = useMemo(
     () =>
-      order?.latitude != null && order.longitude != null
-        ? {
-            address: order.address,
-            latitude: order.latitude,
-            longitude: order.longitude,
-            title: order.receiverName ?? `AWB ${order.awbNo}`,
-          }
-        : null,
-    [order],
+      (orders ?? []).flatMap((item): TripStop[] =>
+        item.latitude != null && item.longitude != null
+          ? [
+              {
+                address: item.address,
+                id: item.orderId,
+                latitude: item.latitude,
+                longitude: item.longitude,
+                title: `${item.receiverName ?? "Receiver"} · AWB ${item.awbNo}`,
+              },
+            ]
+          : [],
+      ),
+    [orders],
   );
-  // Before the path loads, the trip's latest point still places the truck.
   const shownPath = useMemo(
-    () =>
-      (path.length ? path : trip?.lastPoint ? [trip.lastPoint] : []).map((point) => ({
-        latitude: point.latitude,
-        longitude: point.longitude,
-      })),
-    [path, trip?.lastPoint],
+    () => path.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
+    [path],
   );
+  // Where the truck is: its latest point; before the first one reaches the server, the trip's
+  // last known point, or for the driver their own phone's position.
+  const own = useLiveLocation(Boolean(trip?.mine));
+  const lastPoint = trip?.lastPoint;
+  const vehicle = useMemo(() => {
+    const latest = shownPath.at(-1) ?? lastPoint;
+    if (latest) return { latitude: latest.latitude, longitude: latest.longitude };
+    return own.location;
+  }, [lastPoint, own.location, shownPath]);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -89,10 +101,11 @@ export function TripMapScreen() {
     <View className="flex-1 bg-accent">
       <LiveTripMap
         controlsTop={insets.top + 12}
-        destination={destination}
         legendBottom={insets.bottom + 180}
         onClose={close}
         path={shownPath}
+        stops={stops}
+        vehicle={vehicle}
       />
       <View className="absolute right-4 left-4" style={{ bottom: insets.bottom + 16 }}>
         {trip && order && !ended ? (

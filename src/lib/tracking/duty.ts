@@ -15,14 +15,25 @@ import { endDuty, LIVE_TRIP_TASK } from "./task";
  */
 export type TrackingBlocker = "permission" | "background" | "services";
 
-/** The first thing stopping background tracking, or null when it can run. */
+/**
+ * The first thing stopping background tracking, or null when it can run. Never throws: a check
+ * the phone rejects (e.g. a build without background location declared) counts as not allowed.
+ */
 export async function trackingBlocker(): Promise<TrackingBlocker | null> {
-  const foreground = await Location.getForegroundPermissionsAsync();
-  if (!foreground.granted) return "permission";
-  const background = await Location.getBackgroundPermissionsAsync();
-  if (!background.granted) return "background";
-  if (!(await Location.hasServicesEnabledAsync())) return "services";
-  return null;
+  try {
+    const foreground = await Location.getForegroundPermissionsAsync();
+    if (!foreground.granted) return "permission";
+  } catch {
+    return "permission";
+  }
+  try {
+    const background = await Location.getBackgroundPermissionsAsync();
+    if (!background.granted) return "background";
+  } catch {
+    return "background";
+  }
+  const on = await Location.hasServicesEnabledAsync().catch(() => false);
+  return on ? null : "services";
 }
 
 export function currentDuty() {

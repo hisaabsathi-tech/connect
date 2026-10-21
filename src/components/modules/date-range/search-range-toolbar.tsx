@@ -15,6 +15,7 @@ import { type DateRange, rangeLabel } from "./range-label";
  * a chip under the bar, with a cross that clears it. The range sheet is rendered here.
  */
 export function SearchRangeToolbar({
+  allowFuture = false,
   autoCapitalize = "words",
   onQueryChange,
   onSelectedDateClear,
@@ -25,6 +26,8 @@ export function SearchRangeToolbar({
   selectedDate = null,
   today,
 }: {
+  /** The calendar also offers upcoming days (and a Tomorrow preset). */
+  allowFuture?: boolean;
   autoCapitalize?: TextInputProps["autoCapitalize"];
   onQueryChange: (query: string) => void;
   /** Clears a single day chosen in the shared Home calendar. */
@@ -112,6 +115,7 @@ export function SearchRangeToolbar({
         </View>
       ) : null}
       <DateRangeSheet
+        allowFuture={allowFuture}
         onApply={(next) => {
           setOpen(false);
           onRangeChange(next);

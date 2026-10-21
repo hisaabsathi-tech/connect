@@ -75,20 +75,22 @@ export function LiveTripHost() {
     if (!synced) return;
     if (!(tripId && drsId && vehicleId)) {
       setBlocker(null);
+      setTrackingStatus({ blocked: null });
       if (currentDuty() || (await isDutyRunning())) await stopDuty();
       return;
     }
-    const missing = await trackingBlocker().catch(() => null);
+    const missing = await trackingBlocker();
     setBlocker(missing);
+    setTrackingStatus({ blocked: missing });
     if (missing) {
       setTrackingStatus({ running: false });
       return;
     }
-    await startDuty({ drsId, label: `DRS ${drsId}`, tripId, vehicleId });
+    await startDuty({ drsId, label: `DRS ${drsId}`, tripId, vehicleId }).catch(() => false);
   }, [drsId, synced, tripId, vehicleId]);
 
   useEffect(() => {
-    void reconcile();
+    void reconcile().catch(() => undefined);
   }, [reconcile]);
 
   // Location can be switched off or revoked at any time (quick settings, the Settings app);
@@ -97,10 +99,11 @@ export function LiveTripHost() {
   latest.current = reconcile;
   useEffect(() => {
     if (!tripId) return;
+    const recheck = () => void latest.current().catch(() => undefined);
     const change = AppState.addEventListener("change", (next) => {
-      if (next === "active") void latest.current();
+      if (next === "active") recheck();
     });
-    const focus = AppState.addEventListener("focus", () => void latest.current());
+    const focus = AppState.addEventListener("focus", recheck);
     return () => {
       change.remove();
       focus.remove();
@@ -123,9 +126,12 @@ export function LiveTripHost() {
       } else {
         await Linking.openSettings();
       }
+    } catch {
+      // The phone refused to ask (permission not declared in this build): Settings is the way.
+      await Linking.openSettings().catch(() => undefined);
     } finally {
       setFixing(false);
-      await reconcile();
+      await reconcile().catch(() => undefined);
     }
   };
 

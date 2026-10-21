@@ -298,6 +298,8 @@ export function PickupsScreen() {
       />
       <View className="mt-5">
         <SearchRangeToolbar
+          // Sheets and pickups can be issued ahead, so upcoming days can be picked.
+          allowFuture
           onQueryChange={setQuery}
           onRangeChange={setRange}
           onSelectedDateClear={resetToToday}

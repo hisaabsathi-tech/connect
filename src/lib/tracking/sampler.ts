@@ -14,8 +14,11 @@ export type Fix = {
   at: number;
 };
 
-// Readings vaguer than this would draw a wobbling path; the server drops > 100 m as well.
+// Readings vaguer than this would draw a wobbling path while moving.
 export const MAX_ACCURACY_METRES = 50;
+// The trip's first point and a parked heartbeat take a coarser reading (indoors, at the hub)
+// rather than none at all; the server drops anything vaguer than this.
+export const MAX_FIRST_ACCURACY_METRES = 100;
 // Faster than ~200 km/h between two kept points is a GPS jump, not driving.
 export const MAX_SPEED_MPS = 55;
 // Never two points closer in time than this, however fast the vehicle moves.
@@ -51,7 +54,8 @@ function turned(from: number | null, to: number | null) {
  * and nothing for jitter or jumps. Fewer points also means fewer map lookups on the server.
  */
 export function shouldKeep(fix: Fix, last: Fix | null): boolean {
-  if (fix.accuracy != null && fix.accuracy > MAX_ACCURACY_METRES) return false;
+  const accuracy = fix.accuracy ?? 0;
+  if (accuracy > MAX_FIRST_ACCURACY_METRES) return false;
   if (!last) return true;
   const elapsed = fix.at - last.at;
   if (elapsed <= 0) return false;
@@ -59,6 +63,7 @@ export function shouldKeep(fix: Fix, last: Fix | null): boolean {
   if (moved / (elapsed / 1000) > MAX_SPEED_MPS) return false;
   if (elapsed < MIN_GAP_MS) return false;
   if (elapsed >= HEARTBEAT_MS) return true;
+  if (accuracy > MAX_ACCURACY_METRES) return false;
 
   const speed = known(fix.speed) ?? moved / (elapsed / 1000);
   const stillRadius = Math.max(STILL_RADIUS_METRES, fix.accuracy ?? 0);

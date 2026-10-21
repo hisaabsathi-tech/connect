@@ -24,6 +24,8 @@ export async function recordFixes(locations: Location.LocationObject[]) {
   }
   const sorted = [...locations].sort((a, b) => a.timestamp - b.timestamp);
   if (sorted.length) setTrackingStatus({ lastFixAt: Date.now(), running: true });
+  // The trip's very first point goes out at once, so everyone watching sees the truck.
+  const first = readTracking().anchor === null;
   writeTracking((state) => {
     let anchor = state.anchor;
     const queue = [...state.queue];
@@ -54,7 +56,9 @@ export async function recordFixes(locations: Location.LocationObject[]) {
     return { ...state, anchor, queue };
   });
   // In the background each wake-up already batches readings, so send what is there.
-  const result = await flushTracking({ force: AppState.currentState !== "active" });
+  const result = await flushTracking({
+    force: first || AppState.currentState !== "active",
+  });
   // Signed out on this phone: nobody to report for any more.
   if (result === "trip-over" || result === "signed-out") await endDuty();
 }

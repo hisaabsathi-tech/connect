@@ -1160,40 +1160,144 @@ function travelBearing(path: Coordinates[]) {
   return undefined;
 }
 
+/** A delivery on a live trip's map. */
+export type TripStop = Coordinates & { id: string; title: string; address: string | null };
+
+const placeKey = (place: Coordinates) =>
+  `${place.latitude.toFixed(5)},${place.longitude.toFixed(5)}`;
+
 /**
- * A live delivery trip on a full-size map: the way the vehicle has come (faint), the truck turned
- * to its direction of travel, the order it is heading to, and the road between them.
+ * The order a vehicle will most likely take its stops in: always the nearest one left, starting
+ * from where it is (or the first stop while its position isn't known). Orders at the same place
+ * (two parcels to one station) are one stop.
+ */
+function visitOrder(from: Coordinates | null, stops: TripStop[]) {
+  // `Map` here is the map view; the built-in keyed collection is `globalThis.Map`.
+  const left = [...new globalThis.Map(stops.map((stop) => [placeKey(stop), stop])).values()];
+  const ordered: TripStop[] = [];
+  let here = from;
+  while (left.length) {
+    let best = 0;
+    if (here) {
+      const origin = here;
+      left.forEach((stop, index) => {
+        const current = left[best];
+        if (current && distanceInMetres(origin, stop) < distanceInMetres(origin, current)) {
+          best = index;
+        }
+      });
+    }
+    const [next] = left.splice(best, 1);
+    if (!next) break;
+    ordered.push(next);
+    here = next;
+  }
+  return ordered;
+}
+
+/**
+ * The predicted road path from the vehicle through every stop to the last, one routed leg per
+ * hop (each Redis-cached on the server). A leg the router can't find is drawn straight.
+ * Fetched again only when the vehicle has moved about 500 m or the stops change.
+ */
+function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[]) {
+  const { token } = useAuthSession();
+  const [route, setRoute] = useState<RoadRoute | null>(null);
+  const snap = (value: number) =>
+    Math.round(value / LIVE_ROUTE_GRID_DEGREES) * LIVE_ROUTE_GRID_DEGREES;
+  const start = vehicle
+    ? { latitude: snap(vehicle.latitude), longitude: snap(vehicle.longitude) }
+    : null;
+  const ordered = visitOrder(start, stops);
+  const hops = [...(start ? [start] : []), ...ordered];
+  const key = hops.map(placeKey).join("|");
+  useEffect(() => {
+    const places = key
+      ? key.split("|").map((part) => {
+          const [latitude, longitude] = part.split(",").map(Number);
+          return { latitude: latitude ?? 0, longitude: longitude ?? 0 };
+        })
+      : [];
+    if (!token || places.length < 2) {
+      setRoute(null);
+      return;
+    }
+    let current = true;
+    const legs = places.slice(1).map((to, index) => {
+      const from = places[index] as Coordinates;
+      return fetchRoute(token, from, to)
+        .catch(() => null)
+        .then(
+          (leg): RoadRoute =>
+            leg ?? {
+              coordinates: [
+                [from.longitude, from.latitude],
+                [to.longitude, to.latitude],
+              ],
+              distanceMeters: distanceInMetres(from, to),
+              durationSeconds: null,
+            },
+        );
+    });
+    void Promise.all(legs).then((parts) => {
+      if (!current) return;
+      const sum = (pick: (part: RoadRoute) => number | null) =>
+        parts.every((part) => pick(part) != null)
+          ? parts.reduce((total, part) => total + (pick(part) ?? 0), 0)
+          : null;
+      setRoute({
+        // Each leg starts where the last one ended; the shared point is drawn once.
+        coordinates: parts.flatMap((part, index) =>
+          index ? part.coordinates.slice(1) : part.coordinates,
+        ),
+        distanceMeters: sum((part) => part.distanceMeters),
+        durationSeconds: sum((part) => part.durationSeconds),
+      });
+    });
+    return () => {
+      current = false;
+    };
+  }, [key, token]);
+  return route;
+}
+
+/**
+ * A live delivery trip on a full-size map: the way the vehicle has come (faint), the truck at
+ * its current position turned to its direction of travel, every order on the sheet, and the
+ * predicted road path from the truck through each stop to the last one.
  */
 export function LiveTripMap({
   controlsTop,
-  destination,
   legendBottom,
   onClose,
   path,
+  stops,
+  vehicle,
 }: {
   controlsTop: number;
   legendBottom: number;
-  destination: (Coordinates & { title: string; address: string | null }) | null;
-  /** GPS points, oldest first; the last is where the vehicle is now. */
+  /** GPS points the server holds, oldest first. */
   path: Coordinates[];
+  /** Every order still to deliver on the trip. */
+  stops: TripStop[];
+  /** Where the vehicle is now: the latest point, or the driver's own phone before the first. */
+  vehicle: Coordinates | null;
   onClose: () => void;
 }) {
-  const vehicle = path.at(-1) ?? null;
-  const route = useRoadRoute(vehicle, destination, LIVE_ROUTE_GRID_DEGREES);
+  const route = usePlannedRoute(vehicle, stops);
   const [focusId, setFocusId] = useState<string | null>(null);
   const points = useMemo(() => {
     const start = path.length > 1 ? path[0] : undefined;
+    const heading = vehicle ? [...path, vehicle] : path;
     return [
       start ? at(start, "trip-start", "start") : null,
-      destination
-        ? {
-            ...at(destination, "trip-destination", "order"),
-            info: { address: destination.address, title: destination.title },
-          }
-        : null,
-      vehicle ? { ...at(vehicle, "trip-truck", "truck"), bearing: travelBearing(path) } : null,
+      ...stops.map((stop) => ({
+        ...at(stop, `trip-stop-${stop.id}`, "order" as const),
+        info: { address: stop.address, title: stop.title },
+      })),
+      vehicle ? { ...at(vehicle, "trip-truck", "truck"), bearing: travelBearing(heading) } : null,
     ].filter((item): item is MapPoint => item !== null);
-  }, [destination, path, vehicle]);
+  }, [path, stops, vehicle]);
   const trail = useMemo(
     () => path.map((point) => [point.longitude, point.latitude] as [number, number]),
     [path],

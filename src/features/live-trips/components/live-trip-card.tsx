@@ -14,6 +14,14 @@ import Animated, {
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import type { LiveTrip, LiveTripOrder } from "@/lib/api/live-trips";
+import { type TrackingStatus, useTrackingStatus } from "@/lib/tracking/status";
+
+// What the driver has to switch on before the first point can be sent.
+const blockedCopy: Record<NonNullable<TrackingStatus["blocked"]>, string> = {
+  background: "Set location to “Allow all the time” to start live tracking",
+  permission: "Allow location to start live tracking",
+  services: "Turn on your phone's location to start live tracking",
+};
 
 const truck = require("@/assets/map-pin/truck.webp");
 
@@ -100,12 +108,23 @@ function TripProgressBar({ progress }: { progress: number }) {
   );
 }
 
-function Headline({ driver, order }: { driver: string | null; order: LiveTripOrder }) {
+function Headline({
+  blocked,
+  driver,
+  order,
+}: {
+  /** The driver's own phone can't report yet (only set on the driver's card). */
+  blocked: TrackingStatus["blocked"];
+  driver: string | null;
+  order: LiveTripOrder;
+}) {
   const who = driver ? `${driver} is` : "You are";
   if (order.remainingMeters == null)
     return (
-      <Text className="mt-1 text-base leading-6 text-muted-foreground">
-        Waiting for the vehicle's location…
+      <Text
+        className={`mt-1 text-base leading-6 ${blocked ? "text-destructive" : "text-muted-foreground"}`}
+      >
+        {blocked ? blockedCopy[blocked] : "Waiting for the vehicle's location…"}
       </Text>
     );
   if (order.remainingMeters < ARRIVING_METRES)
@@ -144,6 +163,7 @@ export function LiveTripCard({
 }) {
   // The driver reads "You are …"; everyone else watching reads the driver's name.
   const driver = trip.mine ? null : trip.deliveryBoyName?.trim() || "The vehicle";
+  const { blocked } = useTrackingStatus();
   // With several orders out, the block follows the next stop and says how many are left.
   const left = trip.orders.length;
   const facts = [
@@ -166,7 +186,7 @@ export function LiveTripCard({
       }
     >
       <Text className="text-lg font-semibold leading-6 text-foreground">Tracking in Progress</Text>
-      <Headline driver={driver} order={order} />
+      <Headline blocked={trip.mine ? blocked : null} driver={driver} order={order} />
       <Text className="mt-1 text-xs text-muted-foreground" numberOfLines={1}>
         {facts.join(" · ")}
       </Text>

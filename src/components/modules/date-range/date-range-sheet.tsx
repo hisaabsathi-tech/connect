@@ -45,11 +45,16 @@ function monthGrid(month: string) {
   return cells;
 }
 
-function presetsFor(today: string): { label: string; range: DateRange }[] {
+// How far ahead the calendar goes where upcoming days are allowed (a DRS issued for tomorrow).
+const FUTURE_MONTHS = 12;
+
+function presetsFor(today: string, allowFuture: boolean): { label: string; range: DateRange }[] {
   const lastMonth = shiftMonth(startOfMonth(today), -1);
   const yesterday = addDays(today, -1);
+  const tomorrow = addDays(today, 1);
   return [
     { label: "Today", range: { from: today, to: today } },
+    ...(allowFuture ? [{ label: "Tomorrow", range: { from: tomorrow, to: tomorrow } }] : []),
     { label: "Yesterday", range: { from: yesterday, to: yesterday } },
     { label: "This Week", range: { from: startOfWeek(today), to: today } },
     { label: "This Month", range: { from: startOfMonth(today), to: today } },
@@ -64,18 +69,21 @@ function presetsFor(today: string): { label: string; range: DateRange }[] {
 type Draft = { from: string | null; to: string | null };
 
 function DayCell({
+  allowFuture,
   date,
   draft,
   onPress,
   today,
 }: {
+  allowFuture: boolean;
   date: string | null;
   draft: Draft;
   onPress: (date: string) => void;
   today: string;
 }) {
   if (!date) return <View className="h-11 w-[14.2857%]" />;
-  const future = date > today;
+  // Locked: a day after today, where only past days make sense (attendance).
+  const future = !allowFuture && date > today;
   const end = date === draft.from || date === draft.to;
   const between = Boolean(draft.from && draft.to && date > draft.from && date < draft.to);
   return (
@@ -99,15 +107,19 @@ function DayCell({
 /**
  * The app's own date range picker in a bottom sheet: quick presets, then a Monday-first month
  * calendar where the first tap picks the start and the second the end. Days after today can't be
- * picked. Apply hands the range back; Cancel or closing keeps the previous one.
+ * picked unless `allowFuture` (orders and pickups, which can be issued ahead, e.g. tomorrow's DRS).
+ * Apply hands the range back; Cancel or closing keeps the previous one.
  */
 export function DateRangeSheet({
+  allowFuture = false,
   onApply,
   onClose,
   range,
   today,
   visible,
 }: {
+  /** Upcoming days can be picked too, with a Tomorrow preset. */
+  allowFuture?: boolean;
   onApply: (range: DateRange) => void;
   onClose: () => void;
   range: DateRange | null;
@@ -135,8 +147,11 @@ export function DateRangeSheet({
     });
   };
 
-  const presets = presetsFor(today);
-  const currentMonth = startOfMonth(today);
+  const presets = presetsFor(today, allowFuture);
+  // The last month the calendar pages to.
+  const lastMonth = allowFuture
+    ? shiftMonth(startOfMonth(today), FUTURE_MONTHS)
+    : startOfMonth(today);
   const complete = draft.from && draft.to ? { from: draft.from, to: draft.to } : null;
   const monthIndex = Number(month.slice(5, 7)) - 1;
 
@@ -196,8 +211,8 @@ export function DateRangeSheet({
         <Pressable
           accessibilityLabel="Next month"
           accessibilityRole="button"
-          className={`h-9 w-9 items-center justify-center border border-border bg-card ${month >= currentMonth ? "opacity-40" : ""}`}
-          disabled={month >= currentMonth}
+          className={`h-9 w-9 items-center justify-center border border-border bg-card ${month >= lastMonth ? "opacity-40" : ""}`}
+          disabled={month >= lastMonth}
           onPress={() => setMonth(shiftMonth(month, 1))}
         >
           <HugeiconsIcon color={colors.foreground} icon={ArrowRight01Icon} size={18} />
@@ -217,6 +232,7 @@ export function DateRangeSheet({
       <View className="mt-1 flex-row flex-wrap">
         {monthGrid(month).map((date, index) => (
           <DayCell
+            allowFuture={allowFuture}
             date={date}
             draft={draft}
             key={date ?? `blank-${index}`}

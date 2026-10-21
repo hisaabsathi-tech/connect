@@ -158,7 +158,13 @@ export default ({ config }: ConfigContext): ExpoConfig =>
               },
               predictiveBackGestureEnabled: true,
               // Attendance photos (Image Confirmation module) open the phone's camera app.
-              permissions: ["android.permission.CAMERA"],
+              // The live-trip location task is a persisted job (it survives a reboot), which Android
+              // refuses without RECEIVE_BOOT_COMPLETED; WAKE_LOCK lets it run with the screen off.
+              permissions: [
+                "android.permission.CAMERA",
+                "android.permission.RECEIVE_BOOT_COMPLETED",
+                "android.permission.WAKE_LOCK",
+              ],
             },
             plugins: [
               "expo-router",

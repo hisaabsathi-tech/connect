@@ -6,4 +6,5 @@ export {
   type OrderMapState,
   type OrderPoint,
   OrderRouteMap,
+  type TripStop,
 } from "./home-map";
