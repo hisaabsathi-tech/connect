@@ -1,3 +1,4 @@
+import { NetworkError, readJson, timedFetch } from "@/lib/api/network";
 import { reportRejectedToken } from "@/lib/auth/session-expiry";
 import { env } from "@/lib/env";
 
@@ -33,20 +34,14 @@ export async function graphqlRequest<T>(options: {
   const headers = new Headers({ "Content-Type": "application/json" });
   if (options.token) headers.set("Authorization", `Bearer ${options.token}`);
 
-  let response: Response;
-  try {
-    response = await fetch(graphqlUrl, {
-      body: JSON.stringify({ query: options.query, variables: options.variables }),
-      headers,
-      method: "POST",
-    });
-  } catch {
-    throw new GraphqlApiError(
-      "Couldn't reach the server. Check your internet connection and try again.",
-    );
-  }
+  // Throws NetworkError when the server can't be reached (offline, timeout, captive portal).
+  const response = await timedFetch(graphqlUrl, {
+    body: JSON.stringify({ query: options.query, variables: options.variables }),
+    headers,
+    method: "POST",
+  });
 
-  const payload = (await response.json().catch(() => null)) as GraphqlResponse<T> | null;
+  const payload = (await readJson(response)) as GraphqlResponse<T> | null;
   // The server reports a revoked or expired session as HTTP 401 or as a 401 GraphQL error.
   const unauthorized =
     response.status === 401 ||

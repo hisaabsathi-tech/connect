@@ -1,3 +1,4 @@
+import { readJson, timedFetch, WRITE_TIMEOUT_MS } from "@/lib/api/network";
 import { reportRejectedToken } from "@/lib/auth/session-expiry";
 import { env } from "@/lib/env";
 
@@ -11,13 +12,14 @@ export async function apiRequest<T>(
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}${path}`, { ...init, headers });
-  } catch {
-    throw new Error("Couldn't reach the server. Check your internet connection and try again.");
-  }
-  const payload = (await response.json().catch(() => null)) as unknown;
+  const reading = !init.method || init.method === "GET";
+  // Throws NetworkError when the server can't be reached (offline, timeout, captive portal).
+  const response = await timedFetch(
+    `${baseUrl}${path}`,
+    { ...init, headers },
+    reading ? undefined : WRITE_TIMEOUT_MS,
+  );
+  const payload = await readJson(response);
   if (!response.ok) {
     if (response.status === 401) reportRejectedToken(token);
     const message =

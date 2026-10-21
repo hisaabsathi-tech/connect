@@ -1,0 +1,124 @@
+import { beforeEach, describe, expect, it } from "bun:test";
+
+import { apiRequest } from "@/lib/api/client";
+import { graphqlRequest } from "@/lib/api/graphql";
+import { isNetworkError, NetworkError, timedFetch } from "@/lib/api/network";
+import {
+  isOnline,
+  onReconnect,
+  probe,
+  reportReachable,
+  reportUnreachable,
+  startConnectivity,
+} from "@/lib/network/connectivity";
+import { retryOnce } from "@/lib/retry";
+
+import { fake, freshPhone, settle, TOKEN } from "./fake";
+
+beforeEach(() => {
+  freshPhone();
+  reportReachable();
+});
+
+describe("connectivity", () => {
+  it("counts as online until a request proves otherwise", async () => {
+    expect(isOnline()).toBe(true);
+    fake.server.offline = true;
+    await probe();
+    expect(isOnline()).toBe(false);
+    fake.server.offline = false;
+    await probe();
+    expect(isOnline()).toBe(true);
+  });
+
+  it("tells listeners once per return from offline, not on every success", async () => {
+    let reconnects = 0;
+    const stop = onReconnect(() => {
+      reconnects += 1;
+    });
+    reportReachable();
+    reportReachable();
+    expect(reconnects).toBe(0);
+    reportUnreachable();
+    reportReachable();
+    reportReachable();
+    expect(reconnects).toBe(1);
+    stop();
+  });
+
+  it("follows the phone's own network state, confirming recovery with the server", async () => {
+    startConnectivity();
+    await settle();
+    const network = fake.networkListeners.at(-1);
+    if (!network) throw new Error("no network listener");
+    network({ isConnected: false });
+    expect(isOnline()).toBe(false);
+    network({ isConnected: true, isInternetReachable: true });
+    await settle(5);
+    expect(isOnline()).toBe(true);
+  });
+
+  it("re-checks when the app comes back to the foreground", async () => {
+    startConnectivity();
+    reportUnreachable();
+    for (const listener of fake.appListeners) listener("active");
+    await settle(5);
+    expect(isOnline()).toBe(true);
+  });
+});
+
+describe("requests", () => {
+  it("throws NetworkError, not a generic error, when the server can't be reached", async () => {
+    fake.server.offline = true;
+    const error = await apiRequest("/anything", TOKEN).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(NetworkError);
+    expect(isOnline()).toBe(false);
+  });
+
+  it("gives up after its timeout instead of hanging", async () => {
+    fake.server.routes.set("GET /slow", () => "hang");
+    const started = Date.now();
+    const error = await timedFetch("http://api.test/slow", {}, 30).catch((caught) => caught);
+    expect(isNetworkError(error)).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("treats a Wi-Fi sign-in page as offline, not as the API's answer", async () => {
+    fake.server.portal = true;
+    const rest = await apiRequest("/anything", TOKEN).catch((caught) => caught);
+    const graph = await graphqlRequest({ query: "{ me { id } }", token: TOKEN }).catch(
+      (caught) => caught,
+    );
+    expect(isNetworkError(rest)).toBe(true);
+    expect(isNetworkError(graph)).toBe(true);
+  });
+
+  it("marks the app online again on any answer from the server", async () => {
+    reportUnreachable();
+    await apiRequest("/anything", TOKEN);
+    expect(isOnline()).toBe(true);
+  });
+
+  it("keeps the server's own refusal as a normal error with its message", async () => {
+    fake.server.routes.set("PATCH /orders/1/shipment-status", () => ({
+      body: { message: "Invalid delivery OTP" },
+      status: 422,
+    }));
+    const error = await apiRequest("/orders/1/shipment-status", TOKEN, {
+      body: "{}",
+      method: "PATCH",
+    }).catch((caught: Error) => caught);
+    expect(isNetworkError(error)).toBe(false);
+    expect((error as Error).message).toBe("Invalid delivery OTP");
+  });
+
+  it("doesn't wait out a second timeout when the first failure was the network", async () => {
+    let tries = 0;
+    const failing = () => {
+      tries += 1;
+      return Promise.reject(new NetworkError());
+    };
+    await retryOnce(failing).catch(() => undefined);
+    expect(tries).toBe(1);
+  });
+});

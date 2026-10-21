@@ -16,6 +16,10 @@ export type ShipmentStatusInput = {
   longitude?: number;
   /** That spot's street address, when it resolved. */
   address?: string;
+  /** This update's id on the phone; the server applies a resend of it only once. */
+  clientActionId?: string;
+  /** When it happened, for an update saved offline and sent later (ISO time). */
+  occurredAt?: string;
 };
 
 /** Records the order's last-mile outcome; the delivery boy on its DRS may do this. */

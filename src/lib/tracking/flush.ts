@@ -1,7 +1,9 @@
 import * as SecureStore from "expo-secure-store";
+import { AppState } from "react-native";
 
 import { apiRequest } from "@/lib/api/client";
 import { TOKEN_KEY } from "@/lib/auth/token-key";
+import { isOnline, onReconnect, probe } from "@/lib/network/connectivity";
 
 import { type QueuedPoint, readTracking, writeTracking } from "./store";
 
@@ -35,6 +37,12 @@ export function flushTracking({ force = false }: { force?: boolean } = {}) {
 async function send(force: boolean): Promise<FlushResult> {
   const state = readTracking();
   if (!state.queue.length) return "idle";
+  // Known offline: keep recording, and send the whole backlog the moment it's back. In the
+  // background no timer re-checks the connection, so ask the server once before waiting.
+  if (!isOnline()) {
+    await probe();
+    if (!isOnline()) return "waiting";
+  }
   const now = Date.now();
   if (!force) {
     if (now < state.retryAt) return "waiting";
@@ -70,8 +78,9 @@ async function send(force: boolean): Promise<FlushResult> {
   // Accepted and rejected alike are done with: a rejected point would be rejected again.
   drop(sameVehicle);
   writeTracking((current) => ({ ...current, failures: 0, retryAt: 0 }));
-  // More waiting (a long offline stretch): keep going.
-  if (readTracking().queue.length >= BATCH) return send(true);
+  // More waiting (a long offline stretch): keep going until it has all gone, so the server's view
+  // of the truck reaches its latest position now, not at the next reading.
+  if (readTracking().queue.length > 0) return send(true);
   return "sent";
 }
 
@@ -94,4 +103,23 @@ function toBody(point: QueuedPoint) {
     recordedAt: point.recordedAt,
     speed: point.speed,
   };
+}
+
+let watching = false;
+/**
+ * Sends the backlog right away when the network is back or the app returns to the foreground,
+ * instead of waiting for the next reading (which, parked, can be minutes away). Oldest first, so
+ * the server's view of the truck lands on its latest position.
+ */
+export function watchTrackingFlush() {
+  if (watching) return;
+  watching = true;
+  const flushNow = () => {
+    writeTracking((current) => ({ ...current, failures: 0, retryAt: 0 }));
+    void flushTracking({ force: true });
+  };
+  onReconnect(flushNow);
+  AppState.addEventListener("change", (next) => {
+    if (next === "active") void flushTracking({ force: true });
+  });
 }

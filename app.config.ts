@@ -146,6 +146,11 @@ export default ({ config }: ConfigContext): ExpoConfig =>
             icon: "./assets/logo/android/app.png",
             scheme: "hisaabsathi-connect",
             userInterfaceStyle: "light",
+            // Android-only app; this just satisfies `expo prebuild`, which needs both platforms
+            // identified even when only android/ is generated.
+            ios: {
+              bundleIdentifier: "in.hisaabsathi.connect",
+            },
             android: {
               package: "in.hisaabsathi.connect",
               versionCode: release.versionCode,
@@ -164,6 +169,8 @@ export default ({ config }: ConfigContext): ExpoConfig =>
                 "android.permission.CAMERA",
                 "android.permission.RECEIVE_BOOT_COMPLETED",
                 "android.permission.WAKE_LOCK",
+                // Offline mode: knowing when the phone loses or regains its connection.
+                "android.permission.ACCESS_NETWORK_STATE",
               ],
             },
             plugins: [

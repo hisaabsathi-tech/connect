@@ -5,6 +5,7 @@ import { OrderLocationMap, type OrderPoint } from "@/features/home/components/ho
 import { useLiveLocation } from "@/hooks/use-live-location";
 import type { PickupRequest } from "@/lib/api/pickups";
 import { useAuthSession } from "@/lib/auth/session";
+import { isOnline } from "@/lib/network/connectivity";
 
 import { placePickup } from "../lib/pickup-place";
 
@@ -32,10 +33,13 @@ export function usePickupMap() {
       try {
         const pin = await placePickup(token, request);
         if (pin) setShown(pin);
+        // Offline the place couldn't be looked up at all; that isn't a bad address.
         else
           toast.error(
-            "Address not found on the map",
-            "Use the address on the card, or call the customer.",
+            isOnline() ? "Address not found on the map" : "The map needs internet",
+            isOnline()
+              ? "Use the address on the card, or call the customer."
+              : "This address hasn't been found before. Use the address on the card for now.",
           );
       } finally {
         setLocating(null);

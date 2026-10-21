@@ -10,7 +10,11 @@ import {
 
 import { fetchViewer, type Viewer } from "@/lib/api/viewer";
 import { useAuthSession } from "@/lib/auth/session";
+import { onReconnect } from "@/lib/network/connectivity";
+import { readCache, writeCache } from "@/lib/offline/cache";
 import { retryOnce } from "@/lib/retry";
+
+const VIEWER_CACHE = "viewer";
 
 type ViewerState = {
   viewer: Viewer | null;
@@ -43,15 +47,20 @@ const ViewerContext = createContext<ViewerState | null>(null);
  */
 export function ViewerProvider({ children }: PropsWithChildren) {
   const { token } = useAuthSession();
-  const [viewer, setViewer] = useState<Viewer | null>(null);
-  const [isLoaded, setLoaded] = useState(false);
+  // The role saved last time: offline (or before the answer) the tabs keep their access.
+  const [viewer, setViewer] = useState<Viewer | null>(
+    () => readCache<Viewer>(VIEWER_CACHE, "me")?.data ?? null,
+  );
+  const [isLoaded, setLoaded] = useState(() => viewer !== null);
 
   const reload = useCallback(async () => {
     if (!token) return;
     try {
-      setViewer(await retryOnce(() => fetchViewer(token)));
+      const next = await retryOnce(() => fetchViewer(token));
+      setViewer(next);
+      writeCache(VIEWER_CACHE, "me", next);
     } catch {
-      // Keeps what was loaded; without it the role-gated tabs stay hidden.
+      // Keeps what was loaded (or saved); without it the role-gated tabs stay hidden.
     } finally {
       setLoaded(true);
     }
@@ -60,6 +69,8 @@ export function ViewerProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void reload();
   }, [reload]);
+  // Back online: a role changed meanwhile applies without reopening the app.
+  useEffect(() => onReconnect(() => void reload()), [reload]);
 
   const value = useMemo(
     () => ({

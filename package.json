@@ -23,6 +23,7 @@
     "expo-image": "~57.0.5",
     "expo-linking": "~57.0.12",
     "expo-location": "~57.0.21",
+    "expo-network": "~57.0.2",
     "expo-print": "~57.0.2",
     "expo-router": "~57.0.26",
     "expo-secure-store": "~57.0.4",
@@ -75,6 +76,7 @@
     "release": "bun scripts/release.ts",
     "credentials:generate": "bun scripts/generate-release-credentials.ts",
     "lint": "biome ci .",
+    "test": "bun test --isolate test",
     "fix": "biome check --write .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
     "doctor": "expo-doctor"

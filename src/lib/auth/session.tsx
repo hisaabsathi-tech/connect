@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { AuthApiError, authApi, type SessionPayload } from "@/lib/api/auth";
 import { onRejectedToken } from "@/lib/auth/session-expiry";
 import { TOKEN_KEY } from "@/lib/auth/token-key";
+import { clearCache } from "@/lib/offline/cache";
 
 type AuthSession = {
   isReady: boolean;
@@ -43,9 +44,12 @@ function isUsable(payload: SessionPayload) {
   return Boolean(payload?.session?.activeOrganizationId);
 }
 
-/** No answer from the server (offline, timeout): not a reason to end the session. */
-function isUnreachable(error: unknown) {
-  return error instanceof AuthApiError && error.status === 0;
+/**
+ * Only the server saying the session is gone ends it at launch. Offline, a timeout, a Wi-Fi
+ * sign-in page or the server failing (5xx) keep it; the next request or foreground check verifies.
+ */
+function rejectsSession(error: unknown) {
+  return error instanceof AuthApiError && (error.status === 401 || error.status === 403);
 }
 
 export function AuthSessionProvider({ children }: PropsWithChildren) {
@@ -63,6 +67,7 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     async (notice?: { title: string; description: string }) => {
       current.current = null;
       setToken(null);
+      clearCache();
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       if (notice) toast.show(notice);
     },
@@ -85,10 +90,8 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
         if (active) setToken(refreshed);
         if (refreshed !== stored) await SecureStore.setItemAsync(TOKEN_KEY, refreshed);
       } catch (error) {
-        // Offline at launch: keep the session; the next request or foreground check verifies it.
-        if (isUnreachable(error)) {
-          if (active) setToken(stored);
-        } else await SecureStore.deleteItemAsync(TOKEN_KEY);
+        if (rejectsSession(error)) await SecureStore.deleteItemAsync(TOKEN_KEY);
+        else if (active) setToken(stored);
       }
     })().finally(() => {
       if (active) setReady(true);
@@ -133,6 +136,8 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
 
   const completeSignIn = useCallback(async (nextToken: string | null | undefined) => {
     if (!nextToken) throw new Error("The server did not return an authentication token.");
+    // A new sign-in may be someone else: nothing saved carries over.
+    clearCache();
     await SecureStore.setItemAsync(TOKEN_KEY, nextToken);
     current.current = nextToken;
     setToken(nextToken);
@@ -144,6 +149,8 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     const result = await authApi.setActiveOrganization(organizationId, active);
     const nextToken = result.token ?? active;
     await SecureStore.setItemAsync(TOKEN_KEY, nextToken);
+    // Saved screens belong to the previous organisation.
+    clearCache();
     current.current = nextToken;
     setToken(nextToken);
     setOrganizationKey((key) => key + 1);
@@ -160,6 +167,7 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
         // Removing the local session is still the safest outcome.
       }
     }
+    clearCache();
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     setToken(null);
   }, []);

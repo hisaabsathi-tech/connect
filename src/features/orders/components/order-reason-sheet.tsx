@@ -8,14 +8,13 @@ import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
-import { settleLiveTripOrder } from "@/features/live-trips/lib/live-trips-store";
-import { setShipmentStatus } from "@/lib/api/order-tracking";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { lastPosition } from "@/lib/maps/last-position";
 
 import type { DrsOrder } from "../lib/orders";
+import { submitOrderOutcome } from "../lib/submit-outcome";
 
 export type ReasonKind = "rto" | "not-delivered";
 
@@ -111,15 +110,23 @@ export function OrderReasonSheet({
     setSaving(true);
     setMessage(null);
     try {
-      await setShipmentStatus(token, order.orderId, {
-        description: selected,
-        shipmentStatus: copy.status,
-        ...(await lastPosition()),
+      // Sent now, or saved on the phone and sent once back online; off the road at once either way.
+      const result = await submitOrderOutcome({
+        input: {
+          description: selected,
+          shipmentStatus: copy.status,
+          ...(await lastPosition()),
+        },
+        order,
+        token,
       });
-      // Off the road now: its live-trip block on Home goes at once.
-      settleLiveTripOrder(order.orderId);
       haptic("success");
-      toast.success(copy.done, `${order.awbNo}: ${selected}.`);
+      toast.success(
+        result === "queued" ? "Saved offline" : copy.done,
+        result === "queued"
+          ? `${order.awbNo}: ${selected}. It will sync as soon as you're back online.`
+          : `${order.awbNo}: ${selected}.`,
+      );
       onDone();
     } catch (error) {
       haptic("error");

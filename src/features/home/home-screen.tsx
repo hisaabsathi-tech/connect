@@ -5,6 +5,7 @@ import Animated, { FadeOut } from "react-native-reanimated";
 
 import { TabScreen, useScreenTop } from "@/components/modules/layout";
 import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
+import { LastUpdated, OfflineChip, useNetwork } from "@/components/modules/network";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
@@ -58,6 +59,7 @@ export function HomeScreen() {
   const home = useHomeAttendance(token, live);
   const { resetToToday, selectedDate, today } = useDateFilter();
   const toast = useToast();
+  const { requireOnline } = useNetwork();
   // The calendar picks whose pins and record show; the swipe button always acts on today. Not
   // fetched for a role without attendance view, which shows no record.
   const day = useDayAttendance(canViewAttendance ? token : null, selectedDate, today);
@@ -143,6 +145,8 @@ export function HomeScreen() {
   };
 
   const submit = async () => {
+    // Check in and out are stamped by the server at that moment, so they need it reachable.
+    if (!requireOnline(home.isCheckedIn ? "Check-out" : "Check-in")) return;
     // Location may have been switched off since it was last checked; this asks again if so.
     if (!(await location.ensure())) return;
     const session = await home.submit();
@@ -180,12 +184,23 @@ export function HomeScreen() {
           />
         }
       >
-        <View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
+        {/* Above the map, so the Offline chip floating under the location button stays visible. */}
+        <View
+          className="z-10"
+          onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+          style={{ elevation: 10 }}
+        >
           <HomeHeader identity={home.identity}>
-            <LocationIndicator
-              onPress={location.resolve}
-              state={locationIndicatorState(location, tracking)}
-            />
+            <View>
+              <LocationIndicator
+                onPress={location.resolve}
+                state={locationIndicatorState(location, tracking)}
+              />
+              {/* Floats under the button, so its coming and going never moves the page. */}
+              <View className="absolute top-14 right-0 w-56 items-end" pointerEvents="box-none">
+                <OfflineChip />
+              </View>
+            </View>
           </HomeHeader>
         </View>
         <HomeMap
@@ -216,6 +231,7 @@ export function HomeScreen() {
         />
         <View onLayout={(event) => setBelowHeight(event.nativeEvent.layout.height)}>
           <DateStrip />
+          <LastUpdated at={home.savedAt} />
           {/* A superadmin without Superadmin Attendance doesn't check in: the card leads to the
             organisation's attendance instead of their own day. A role without attendance view
             gets neither. */}

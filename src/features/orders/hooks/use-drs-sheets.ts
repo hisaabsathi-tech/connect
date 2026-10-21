@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { DrsSheet } from "@/lib/api/drs";
+import { isNetworkError } from "@/lib/api/network";
 import { useAuthSession } from "@/lib/auth/session";
-
+import { onReconnect } from "@/lib/network/connectivity";
 import { istDayBounds } from "../lib/drs";
-import { cachedDrsSheets, loadDrsSheets, replaceCachedDrsSheet } from "../lib/drs-cache";
+
+import {
+  cachedDrsSheets,
+  cachedRange,
+  loadDrsSheets,
+  onCachedOrderChange,
+  replaceCachedDrsSheet,
+} from "../lib/drs-cache";
 
 /**
  * The member's sheets issued between two days, with their orders. Both tabs of the page work
@@ -21,6 +29,8 @@ export function useDrsSheets(token: string | null, { from, to }: { from: string;
   );
   const [loading, setLoading] = useState(() => !(scope && cachedDrsSheets(scope, bounds)));
   const [failed, setFailed] = useState(false);
+  // When the shown sheets were loaded, while a refresh couldn't reach the server (offline).
+  const [staleSince, setStaleSince] = useState<number | null>(null);
   // A new range starts a new generation; answers for an older one are dropped.
   const generation = useRef(0);
 
@@ -43,9 +53,16 @@ export function useDrsSheets(token: string | null, { from, to }: { from: string;
       setFailed(false);
       try {
         const next = await loadDrsSheets(scope, token, bounds);
-        if (current === generation.current) setSheets(next);
-      } catch {
-        if (current === generation.current && !quiet && !cached) {
+        if (current === generation.current) {
+          setSheets(next);
+          setStaleSince(null);
+        }
+      } catch (error) {
+        if (current !== generation.current) return;
+        if (cached && isNetworkError(error)) {
+          // Offline: the saved sheets stay, marked with when they were loaded.
+          setStaleSince(cachedRange(scope, bounds)?.savedAt ?? null);
+        } else if (!quiet && !cached) {
           setSheets([]);
           setFailed(true);
         }
@@ -68,6 +85,19 @@ export function useDrsSheets(token: string | null, { from, to }: { from: string;
   useEffect(() => {
     void load();
   }, [load]);
+  // Back online: refresh in place.
+  useEffect(() => onReconnect(() => void load(true)), [load]);
+  // An order updated on this phone (saved offline) shows updated at once.
+  useEffect(
+    () =>
+      onCachedOrderChange(() => {
+        if (scope) {
+          const held = cachedDrsSheets(scope, bounds);
+          if (held) setSheets(held);
+        }
+      }),
+    [bounds, scope],
+  );
 
-  return { failed, load, loading, replace, sheets };
+  return { failed, load, loading, replace, sheets, staleSince };
 }

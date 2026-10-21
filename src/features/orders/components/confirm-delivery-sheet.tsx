@@ -6,20 +6,20 @@ import { Pressable, View } from "react-native";
 
 import { ActionButton, TextButton } from "@/components/modules/button";
 import { OtpField } from "@/components/modules/form";
+import { useNetwork } from "@/components/modules/network";
 import { type PhotoSource, photoPickError, pickPhoto } from "@/components/modules/photo";
 import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
-import { settleLiveTripOrder } from "@/features/live-trips/lib/live-trips-store";
-import { uploadOrderPod } from "@/lib/api/media";
-import { resendDeliveryOtp, setShipmentStatus } from "@/lib/api/order-tracking";
+import { resendDeliveryOtp } from "@/lib/api/order-tracking";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { handoverSpot } from "@/lib/maps/last-position";
 
 import type { DrsOrder } from "../lib/orders";
+import { submitOrderOutcome } from "../lib/submit-outcome";
 
 const OTP_LENGTH = 6;
 const OTP_CODE = /^\d{6}$/;
@@ -65,6 +65,7 @@ export function ConfirmDeliverySheet({
 }) {
   const { token } = useAuthSession();
   const toast = useToast();
+  const { requireOnline } = useNetwork();
   const [otp, setOtp] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -90,7 +91,7 @@ export function ConfirmDeliverySheet({
   };
 
   const resend = async () => {
-    if (!token || resending) return;
+    if (!token || resending || !requireOnline("Resending the OTP")) return;
     setResending(true);
     setMessage(null);
     try {
@@ -105,6 +106,8 @@ export function ConfirmDeliverySheet({
 
   const confirm = async () => {
     if (!token || saving) return;
+    // The OTP is checked by the server at that moment, so such a delivery can't wait offline.
+    if (order.deliveryOtpRequired && !requireOnline("Delivery with OTP")) return;
     const code = otp.trim();
     if (code && !OTP_CODE.test(code)) {
       setMessage("Enter all 6 digits of the delivery OTP.");
@@ -116,19 +119,28 @@ export function ConfirmDeliverySheet({
       // The spot where it is handed over, taken now: the delivery isn't saved without it, and its
       // map shows it later. Taken first, so a location problem stops before any upload.
       const spot = await handoverSpot();
-      const scanCopy = photo ? (await uploadOrderPod(token, photo)).objectKey : undefined;
-      await setShipmentStatus(token, order.orderId, {
-        address: spot.address ?? undefined,
-        latitude: spot.latitude,
-        longitude: spot.longitude,
-        otp: code || undefined,
-        scanCopy,
-        shipmentStatus: "DELIVERED",
+      // Sent now, or (without an OTP) saved on the phone and sent once back online. Its
+      // live-trip block on Home goes at once either way.
+      const result = await submitOrderOutcome({
+        input: {
+          address: spot.address ?? undefined,
+          latitude: spot.latitude,
+          longitude: spot.longitude,
+          otp: code || undefined,
+          shipmentStatus: "DELIVERED",
+        },
+        order,
+        photo,
+        queueable: !order.deliveryOtpRequired,
+        token,
       });
-      // Delivered: its live-trip block on Home goes at once, ahead of the server's update.
-      settleLiveTripOrder(order.orderId);
       haptic("success");
-      toast.success("Order delivered", `${order.awbNo} is marked delivered.`);
+      toast.success(
+        result === "queued" ? "Delivery saved offline" : "Order delivered",
+        result === "queued"
+          ? `${order.awbNo} will be marked delivered as soon as you're back online.`
+          : `${order.awbNo} is marked delivered.`,
+      );
       onDelivered();
     } catch (error) {
       haptic("error");

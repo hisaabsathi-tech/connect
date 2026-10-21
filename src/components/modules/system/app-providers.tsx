@@ -2,6 +2,7 @@ import type { PropsWithChildren } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { DialogProvider } from "@/components/modules/dialog";
+import { NetworkProvider } from "@/components/modules/network";
 import { GluestackUIProvider } from "@/components/ui/gluestack-ui-provider";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthSessionProvider } from "@/lib/auth/session";
@@ -15,7 +16,10 @@ export function AppProviders({ children }: PropsWithChildren) {
         <DateFilterProvider>
           <GluestackUIProvider mode="light">
             <ToastProvider>
-              <DialogProvider>{children}</DialogProvider>
+              <DialogProvider>
+                {/* Connection state, the offline sheet and sending what was saved offline. */}
+                <NetworkProvider>{children}</NetworkProvider>
+              </DialogProvider>
             </ToastProvider>
           </GluestackUIProvider>
         </DateFilterProvider>

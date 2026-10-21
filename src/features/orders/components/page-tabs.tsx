@@ -21,7 +21,7 @@ export function PageTabs({
   return (
     <View
       accessibilityRole="tablist"
-      className="mt-3 h-11 flex-row gap-1.5 border border-border bg-card p-1"
+      className="mt-3 h-12 flex-row gap-1.5 border border-border bg-card p-1"
     >
       {TABS.map((tab) => {
         const active = tab.id === value;

@@ -8,6 +8,7 @@ import { useDialog } from "@/components/modules/dialog";
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
+import { LastUpdated, OfflineChip, useNetwork } from "@/components/modules/network";
 import {
   CardListSkeleton,
   ListPageSkeleton,
@@ -27,6 +28,7 @@ import { formatDayLabel, useDateFilter } from "@/lib/date";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { lastPosition } from "@/lib/maps/last-position";
+import { drainOutbox, outboxNow, pendingFor } from "@/lib/offline/outbox";
 import { useTrackingStatus } from "@/lib/tracking/status";
 
 import { DrsCard } from "./components/drs-card";
@@ -37,6 +39,7 @@ import { type PageTab, PageTabs } from "./components/page-tabs";
 import { useDrsPrint } from "./hooks/use-drs-print";
 import { useDrsScan } from "./hooks/use-drs-scan";
 import { useDrsSheets } from "./hooks/use-drs-sheets";
+import { prefetchOrderDetails } from "./hooks/use-order-details";
 import { useOrderMap } from "./hooks/use-order-map";
 import { drsOnTheRoad, rememberOrder } from "./lib/active-order";
 import {
@@ -120,6 +123,7 @@ export function OrdersScreen() {
   const orderMap = useOrderMap();
   const toast = useToast();
   const dialog = useDialog();
+  const { requireOnline } = useNetwork();
   // The sheet whose status update (the card's bottom block) is being saved.
   const [advancing, setAdvancing] = useState<string | null>(null);
 
@@ -130,6 +134,22 @@ export function OrdersScreen() {
   const advance = async (sheet: DrsSheet, status: DrsStatus) => {
     if (!token || advancing) return false;
     const resolving = status === "RESOLVED";
+    // A sheet's status changes its orders and the live trip on the server: online only.
+    if (!requireOnline(resolving ? "Resolving a DRS" : "Taking a DRS out for delivery"))
+      return false;
+    // Orders updated offline must reach the server first; resolving would turn them back.
+    if (
+      resolving &&
+      pendingFor(outboxNow().items, sheet.id).some((item) => item.kind === "shipment-status")
+    ) {
+      await dialog.alert({
+        description:
+          "Some of its orders were updated offline and haven't synced yet. Wait for them to sync (or deal with those that need attention), then resolve.",
+        title: "Sync this DRS first",
+      });
+      void drainOutbox();
+      return false;
+    }
     const sure = await dialog.confirm({
       cancelLabel: "Not now",
       confirmLabel: resolving ? "Resolve" : "Start delivering",
@@ -153,6 +173,12 @@ export function OrdersScreen() {
       // Out for delivery opens its live trip (when tracking is on): Home's blocks and this
       // phone's location duty start without waiting for the socket.
       void reloadLiveTrips(token);
+      // Every order's page is saved now, so each opens on the road even without signal.
+      if (!resolving)
+        void prefetchOrderDetails(
+          token,
+          sheet.orders.map((order) => order.orderId),
+        );
       haptic("success");
       toast.success("DRS updated", `${sheet.id} is now ${status.toLowerCase()}.`);
       return true;
@@ -278,7 +304,9 @@ export function OrdersScreen() {
 
   const header = (
     <View className="pb-3">
-      <View className="flex-row items-start gap-3">
+      {/* Above the rows below it, so the Offline chip floating under the location button isn't
+          painted over by the tabs. */}
+      <View className="z-10 flex-row items-start gap-3" style={{ elevation: 10 }}>
         <View className="flex-1">
           <Text className="text-2xl font-semibold leading-8 text-foreground">
             Manage Orders & DRS
@@ -291,10 +319,16 @@ export function OrdersScreen() {
         {/* A little room above: the active ripple reaches 2pt past the circle, and the list's top
             edge would clip it. */}
         <View className="mt-1">
-          <LocationIndicator
-            onPress={location.resolve}
-            state={locationIndicatorState(location, tracking)}
-          />
+          <View>
+            <LocationIndicator
+              onPress={location.resolve}
+              state={locationIndicatorState(location, tracking)}
+            />
+            {/* Floats under the button, so its coming and going never moves the page. */}
+            <View className="absolute top-14 right-0 w-56 items-end" pointerEvents="box-none">
+              <OfflineChip />
+            </View>
+          </View>
         </View>
       </View>
       <PageTabs onChange={changeTab} value={tab} />
@@ -365,6 +399,7 @@ export function OrdersScreen() {
           selectedDate={selectedDate === today ? null : selectedDate}
           today={today}
         />
+        <LastUpdated at={data.staleSince} />
       </View>
       {/* The DRS picker's place is held while the sheets load, so the list doesn't jump down. */}
       {!onOrders ? null : data.loading ? (

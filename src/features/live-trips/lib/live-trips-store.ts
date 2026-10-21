@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
 import { fetchLiveTrips, type LiveTrip } from "@/lib/api/live-trips";
+import { onCacheCleared, readCache, writeCache } from "@/lib/offline/cache";
 import type { TripProgressEvent } from "@/lib/realtime/vehicle-trips-socket";
 import { retryOnce } from "@/lib/retry";
 
@@ -12,7 +13,25 @@ type LiveTripsState = {
   synced: boolean;
 };
 
-let state: LiveTripsState = { loaded: false, synced: false, trips: [] };
+const TRIPS_CACHE = "live-trips";
+
+// The last snapshot saved on the phone: offline (or before the first answer) the trip blocks and
+// map still show, marked unsynced so nothing acts on them as the server's word.
+const saved = readCache<LiveTrip[]>(TRIPS_CACHE, "trips");
+let state: LiveTripsState = {
+  loaded: Boolean(saved),
+  synced: false,
+  trips: saved?.data ?? [],
+};
+onCacheCleared(() => {
+  generation += 1;
+  set({ loaded: false, synced: false, trips: [] });
+});
+
+/** Keeps the shown trips on the phone. */
+function persist() {
+  writeCache(TRIPS_CACHE, "trips", state.trips, 1);
+}
 const listeners = new Set<() => void>();
 // Snapshots can overlap (a reconnect and a pull to refresh); only the newest one lands.
 let generation = 0;
@@ -22,12 +41,18 @@ function set(next: LiveTripsState) {
   for (const listener of listeners) listener();
 }
 
+/** As `set`, and saved on the phone. */
+function save(next: LiveTripsState) {
+  set(next);
+  persist();
+}
+
 /** A fresh snapshot of every open trip this member may watch. */
 export async function reloadLiveTrips(token: string) {
   const mine = ++generation;
   try {
     const trips = await retryOnce(() => fetchLiveTrips(token));
-    if (mine === generation) set({ loaded: true, synced: true, trips: withPending(trips) });
+    if (mine === generation) save({ loaded: true, synced: true, trips: withPending(trips) });
   } catch {
     if (mine === generation) set({ ...state, loaded: true, synced: false });
   }
@@ -36,7 +61,7 @@ export async function reloadLiveTrips(token: string) {
 /** The server's latest distances for a trip; a trip not held yet waits for the next snapshot. */
 export function applyTripProgress(event: TripProgressEvent) {
   if (!state.trips.some((trip) => trip.id === event.tripId)) return;
-  set({
+  save({
     ...state,
     trips: withPending(
       state.trips.map((trip) =>
@@ -50,12 +75,12 @@ export function applyTripProgress(event: TripProgressEvent) {
 
 export function removeLiveTrip(tripId: string) {
   if (!state.trips.some((trip) => trip.id === tripId)) return;
-  set({ ...state, trips: state.trips.filter((trip) => trip.id !== tripId) });
+  save({ ...state, trips: state.trips.filter((trip) => trip.id !== tripId) });
 }
 
 /** Delivered from this phone: its block goes at once, ahead of the server's update. */
 export function settleLiveTripOrder(orderId: string) {
-  set({
+  save({
     ...state,
     trips: withPending(
       state.trips.map((trip) => ({

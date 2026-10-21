@@ -1,0 +1,3 @@
+[test]
+# Native modules (file system, secure store, network) are faked for every test file.
+preload = ["./test/setup.ts"]

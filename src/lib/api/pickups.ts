@@ -35,13 +35,18 @@ export async function fetchMyPickupRequests(
   return payload.myPickupRequests.items;
 }
 
+/** `occurredAt` is when it was collected, for a pickup saved offline and sent later. */
 export function markPickupPickedUp(
   token: string,
   pickup: Pick<PickupRequest, "id" | "organizationId">,
+  occurredAt?: string,
 ) {
   return apiRequest<{ pickupRequest: { id: string } }>(
     `/pickup-requests/${encodeURIComponent(pickup.id)}/picked-up`,
     token,
-    { body: JSON.stringify({ organizationId: pickup.organizationId }), method: "PATCH" },
+    {
+      body: JSON.stringify({ occurredAt, organizationId: pickup.organizationId }),
+      method: "PATCH",
+    },
   );
 }

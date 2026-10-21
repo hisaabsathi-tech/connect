@@ -35,8 +35,8 @@ type TrackingState = {
   retryAt: number;
 };
 
-// Offline for a whole shift is ~1,000 points; past this the oldest go first.
-const MAX_QUEUE = 2_000;
+// A whole day offline stays well inside this; past it the oldest points go first.
+const MAX_QUEUE = 10_000;
 const EMPTY: TrackingState = { anchor: null, duty: null, failures: 0, queue: [], retryAt: 0 };
 
 // A file rather than secure storage: it is written on every kept reading and must survive the

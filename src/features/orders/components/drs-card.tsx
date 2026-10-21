@@ -8,6 +8,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { ActivityIndicator, Pressable, View } from "react-native";
 
+import { SyncBadge } from "@/components/modules/network";
 import { RemarkBadge } from "@/components/modules/remark-badge";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -209,7 +210,10 @@ export function DrsCard({
             {sheet.id}
           </Text>
         </View>
-        <DrsStatusBadge sheet={sheet} />
+        <View className="items-end gap-1">
+          <DrsStatusBadge sheet={sheet} />
+          <SyncBadge id={sheet.id} />
+        </View>
       </View>
       <View className="mt-4 flex-row">
         <Field align="left" label="Deliverable Areas" values={drsAreas(sheet)} />

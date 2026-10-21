@@ -4,6 +4,7 @@ import { useToast } from "@/components/ui/toast";
 import { OrderLocationMap, type OrderMapState } from "@/features/home/components/home-map";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { useAuthSession } from "@/lib/auth/session";
+import { isOnline } from "@/lib/network/connectivity";
 
 import { type OrderPin, placeOrder } from "../lib/order-place";
 import { type DrsOrder, isDelivered } from "../lib/orders";
@@ -32,10 +33,14 @@ export function useOrderMap() {
         if (pin) {
           setState({ delivered: isDelivered(order), deliveredAt });
           setShown(pin);
-        } else
+        }
+        // Offline the place couldn't be looked up at all; that isn't a bad address.
+        else
           toast.error(
-            "Address not found on the map",
-            "Use the address on the card, or call the receiver.",
+            isOnline() ? "Address not found on the map" : "The map needs internet",
+            isOnline()
+              ? "Use the address on the card, or call the receiver."
+              : "This address hasn't been found before. Use the address on the card for now.",
           );
       } finally {
         setLocating(null);

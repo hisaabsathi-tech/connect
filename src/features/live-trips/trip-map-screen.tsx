@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "@/components/modules/typography";
 import { LiveTripMap } from "@/features/home/components/home-map";
 import { useLiveLocation } from "@/hooks/use-live-location";
+import { useConnectivity } from "@/lib/network/connectivity";
 
 import { LiveTripCard } from "./components/live-trip-card";
 import { useTripMap } from "./hooks/use-trip-map";
@@ -19,7 +20,11 @@ import { nextStopOf, useNextStopPicks } from "./lib/next-stop";
 export function TripMapScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const insets = useSafeAreaInsets();
-  const trip = useLiveTrips().trips.find((item) => item.id === tripId) ?? null;
+  const { synced, trips } = useLiveTrips();
+  const trip = trips.find((item) => item.id === tripId) ?? null;
+  const { status } = useConnectivity();
+  // A trip missing from a list the server didn't confirm (offline) isn't over, only unknown.
+  const waiting = !trip && (status === "offline" || !synced);
   // The trip's next stop: the order the driver picked, or else the nearest one still pending.
   const picks = useNextStopPicks();
   const order = trip ? nextStopOf(trip, picks) : null;
@@ -44,9 +49,13 @@ export function TripMapScreen() {
           <LiveTripCard onMap order={order} trip={trip} />
         ) : (
           <View className="border border-[#E6E9F8] bg-card px-4 py-4">
-            <Text className="text-lg font-semibold text-foreground">Trip ended</Text>
+            <Text className="text-lg font-semibold text-foreground">
+              {waiting ? "Waiting for connection" : "Trip ended"}
+            </Text>
             <Text className="mt-1 text-base text-muted-foreground">
-              Every order on this trip has been settled.
+              {waiting
+                ? "This trip shows here as soon as the app is back online."
+                : "Every order on this trip has been settled."}
             </Text>
           </View>
         )}

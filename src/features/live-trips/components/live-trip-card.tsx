@@ -79,7 +79,11 @@ function TripProgressBar({ progress }: { progress: number }) {
         className="absolute left-0 items-center justify-center"
         pointerEvents="none"
         style={[
-          { height: TRUCK_LENGTH, top: (PIN - TRUCK_LENGTH) / 2, width: TRUCK_LENGTH },
+          {
+            height: TRUCK_LENGTH,
+            top: (PIN - TRUCK_LENGTH) / 2,
+            width: TRUCK_LENGTH,
+          },
           truckStyle,
         ]}
       >
@@ -184,10 +188,14 @@ export function LiveTripCard({
   };
   // With several orders out, the block follows the next stop and says how many are left.
   const left = trip.orders.length;
-  // Someone else's trip names who is driving which vehicle.
-  const crew = trip.mine
-    ? null
-    : [trip.deliveryBoyName?.trim(), trip.vehicleNo?.trim()].filter(Boolean).join(" · ");
+  // Someone else's trip names who is driving it too; your own just names the vehicle.
+  const vehicleNo = trip.vehicleNo?.trim();
+  const crew = [
+    trip.mine ? null : trip.deliveryBoyName?.trim(),
+    vehicleNo ? `Vehicle No: ${vehicleNo}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <Pressable
       accessibilityHint="Opens the live trip on the map"

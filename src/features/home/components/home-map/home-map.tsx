@@ -583,6 +583,10 @@ function NativeOlaMap({
   const camera = useRef<CameraRef>(null);
   // Camera commands only apply once the map has loaded; earlier ones find no native view.
   const loaded = useRef(false);
+  // Set once the user drags or pinch-zooms by hand: a live position arriving meanwhile then
+  // leaves the camera where they put it, instead of snapping back to the overview. Recenter, a
+  // page reload or picking a new focus all take the camera back and clear it.
+  const userAdjusted = useRef(false);
   const style = useOlaMapStyle();
   const bounds = useMemo(
     () =>
@@ -664,8 +668,10 @@ function NativeOlaMap({
       if (changed) showFocus(500);
       return;
     }
-    // Other reframes (the user moving, a card's height, a new route) ease too, never snap.
-    fitCamera(changed ? 500 : 300);
+    // Other reframes (the user moving, a card's height, a new route) ease too, never snap — but
+    // only while the user hasn't taken the camera into their own hands; a live point arriving
+    // then must not undo a manual zoom or pan.
+    if (changed || !userAdjusted.current) fitCamera(changed ? 500 : 300);
   }, [fitCamera, focusId, showFocus]);
 
   // A page reload shows the overview again (the page has already cleared any focus).
@@ -673,12 +679,14 @@ function NativeOlaMap({
   useEffect(() => {
     if (shownResetKey.current === resetKey) return;
     shownResetKey.current = resetKey;
+    userAdjusted.current = false;
     if (!focusRef.current) fitCamera(500);
   }, [fitCamera, resetKey]);
 
   // Clearing a zoomed-in focus reframes through the effect; otherwise reframe here (a card
   // that doesn't zoom stays open).
   const recenter = () => {
+    userAdjusted.current = false;
     if (focusRef.current) onFocus(null);
     else fitCamera(500);
   };
@@ -716,6 +724,11 @@ function NativeOlaMap({
             loaded.current = true;
             if (focusRef.current) showFocus(0);
             else fitCamera();
+          }}
+          // A real drag or pinch, not one of this file's own `easeTo`/`fitBounds` calls: the
+          // camera is the user's from here until they hit Recenter.
+          onRegionDidChange={(event) => {
+            if (event.nativeEvent.userInteraction) userAdjusted.current = true;
           }}
           preferredFramesPerSecond={60}
           style={{ flex: 1 }}
@@ -1256,7 +1269,8 @@ function visitOrder(from: Coordinates | null, stops: TripStop[], firstId: string
 
 /**
  * The predicted road path from the vehicle through every stop to the last, one routed leg per
- * hop (each Redis-cached on the server). A leg the router can't find is drawn straight.
+ * hop (each Redis-cached on the server). A leg the router can't find leaves the route as it was
+ * rather than draw a straight line across country for it.
  * Fetched again only when the vehicle has moved about 500 m or the stops change.
  */
 function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[], firstId: string | null) {
@@ -1284,29 +1298,21 @@ function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[], firstId
     let current = true;
     const legs = places.slice(1).map((to, index) => {
       const from = places[index] as Coordinates;
-      return fetchRoute(token, from, to)
-        .catch(() => null)
-        .then(
-          (leg): RoadRoute =>
-            leg ?? {
-              coordinates: [
-                [from.longitude, from.latitude],
-                [to.longitude, to.latitude],
-              ],
-              distanceMeters: distanceInMetres(from, to),
-              durationSeconds: null,
-            },
-        );
+      return fetchRoute(token, from, to).catch(() => null);
     });
     void Promise.all(legs).then((parts) => {
       if (!current) return;
+      // A leg the router couldn't find would otherwise draw as a straight line across country;
+      // the route just stays whatever it was (or unset) until a real one comes back.
+      if (parts.some((part) => part === null)) return;
+      const routed = parts as RoadRoute[];
       const sum = (pick: (part: RoadRoute) => number | null) =>
-        parts.every((part) => pick(part) != null)
-          ? parts.reduce((total, part) => total + (pick(part) ?? 0), 0)
+        routed.every((part) => pick(part) != null)
+          ? routed.reduce((total, part) => total + (pick(part) ?? 0), 0)
           : null;
       setRoute({
         // Each leg starts where the last one ended; the shared point is drawn once.
-        coordinates: parts.flatMap((part, index) =>
+        coordinates: routed.flatMap((part, index) =>
           index ? part.coordinates.slice(1) : part.coordinates,
         ),
         distanceMeters: sum((part) => part.distanceMeters),
@@ -1352,16 +1358,15 @@ export function LiveTripMap({
   const route = usePlannedRoute(vehicle, stops, nextStopId);
   const [focusId, setFocusId] = useState<string | null>(null);
   const points = useMemo(() => {
-    const start = path.length > 1 ? path[0] : undefined;
     const heading = vehicle ? [...path, vehicle] : path;
-    return [
-      start ? at(start, "trip-start", "start") : null,
+    const items: (MapPoint | null)[] = [
       ...stops.map((stop) => ({
         ...at(stop, `trip-stop-${stop.id}`, "order" as const),
         info: { address: stop.address, title: stop.title },
       })),
       vehicle ? { ...at(vehicle, "trip-truck", "truck"), bearing: travelBearing(heading) } : null,
-    ].filter((item): item is MapPoint => item !== null);
+    ];
+    return items.filter((item): item is MapPoint => item !== null);
   }, [path, stops, vehicle]);
   const trail = useMemo(
     () => path.map((point) => [point.longitude, point.latitude] as [number, number]),

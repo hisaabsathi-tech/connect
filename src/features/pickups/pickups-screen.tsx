@@ -15,6 +15,7 @@ import { type DateRange, SearchRangeToolbar } from "@/components/modules/date-ra
 import { useDialog } from "@/components/modules/dialog";
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
+import { LastUpdated, OfflineChip, SyncBadge } from "@/components/modules/network";
 import { RemarkBadge } from "@/components/modules/remark-badge";
 import { BottomSheet } from "@/components/modules/sheet";
 import { CardListSkeleton } from "@/components/modules/skeleton";
@@ -22,6 +23,7 @@ import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { FilterChips } from "@/features/orders/components/filter-chips";
+import { isNetworkError } from "@/lib/api/network";
 import {
   fetchMyPickupRequests,
   markPickupPickedUp,
@@ -33,6 +35,9 @@ import { useViewer } from "@/lib/auth/viewer";
 import { formatDayLabel, formatTime, useDateFilter } from "@/lib/date";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
+import { isOnline, onReconnect } from "@/lib/network/connectivity";
+import { readCache, writeCache } from "@/lib/offline/cache";
+import { enqueue } from "@/lib/offline/outbox";
 import { dialUrl, formatMobile } from "@/lib/phone";
 
 import { usePickupMap } from "./hooks/use-pickup-map";
@@ -60,6 +65,8 @@ const statusBadge: Record<
   CANCELLED: { label: "Cancelled", variant: "destructive" },
   OUTDATED: { label: "Outdated", variant: "destructive" },
 };
+
+const PICKUPS_CACHE = "pickups";
 
 function bounds(from: string, to: string) {
   return {
@@ -157,7 +164,10 @@ function PickupCard({
               {formatMobile(request.phoneNumber)}
             </Text>
           </View>
-          <RemarkBadge {...statusBadge[request.status]} />
+          <View className="items-end gap-1">
+            <RemarkBadge {...statusBadge[request.status]} />
+            <SyncBadge id={request.id} />
+          </View>
         </View>
         {/* The call and map buttons share the label's line, so the address below them gets the
           card's full width. */}
@@ -236,35 +246,55 @@ export function PickupsScreen() {
   const [requests, setRequests] = useState<PickupRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  // When the shown list was saved, while a refresh couldn't reach the server (offline).
+  const [staleSince, setStaleSince] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [selected, setSelected] = useState<PickupRequest | null>(null);
   const from = range?.from ?? selectedDate;
   const to = range?.to ?? selectedDate;
+  // The whole range is loaded (and saved on the phone); the search filters it here, so typing
+  // needs no request and works offline.
+  const rangeKey = `${from}|${to}`;
   const load = async (quiet = false) => {
     if (!token) return;
-    if (!quiet) setLoading(true);
+    const saved = readCache<PickupRequest[]>(PICKUPS_CACHE, rangeKey);
+    if (saved) {
+      setRequests(saved.data);
+      setLoading(false);
+    } else if (!quiet) setLoading(true);
     setFailed(false);
     try {
-      setRequests(
-        await fetchMyPickupRequests(token, { ...bounds(from, to), q: query.trim() || undefined }),
-      );
-    } catch {
-      setFailed(true);
+      const fresh = await fetchMyPickupRequests(token, bounds(from, to));
+      writeCache(PICKUPS_CACHE, rangeKey, fresh, 30);
+      setRequests(fresh);
+      setStaleSince(null);
+    } catch (error) {
+      if (saved && isNetworkError(error)) setStaleSince(saved.savedAt);
+      else if (!saved) setFailed(true);
     } finally {
       if (!quiet) setLoading(false);
     }
   };
   useEffect(() => {
     void load();
-  }, [from, to, token, query]);
+  }, [from, to, token]);
+  useEffect(() => onReconnect(() => void load(true)), [from, to, token]);
   useEffect(() => {
     setRange(null);
   }, [selectedDate]);
-  const shown = useMemo(
-    () => requests.filter((request) => matchesTab(request, tab)),
-    [requests, tab],
-  );
+  const shown = useMemo(() => {
+    const words = query.trim().toLowerCase();
+    return requests.filter(
+      (request) =>
+        matchesTab(request, tab) &&
+        (!words ||
+          [request.name, request.phoneNumber, request.address, request.pincode, request.note]
+            .join(" ")
+            .toLowerCase()
+            .includes(words)),
+    );
+  }, [query, requests, tab]);
   const confirmPickedUp = async (request: PickupRequest) => {
     if (!token || updating) return;
     const accepted = await dialog.confirm({
@@ -275,19 +305,46 @@ export function PickupsScreen() {
     });
     if (!accepted) return;
     setUpdating(request.id);
+    // Shown collected at once; offline it is saved and sent the moment the app is back online.
+    const collected = () => {
+      const next = requests.map((item) =>
+        item.id === request.id ? { ...item, status: "RESOLVED" as const } : item,
+      );
+      setRequests(next);
+      writeCache(PICKUPS_CACHE, rangeKey, next, 30);
+    };
+    const queue = () => {
+      enqueue({
+        kind: "pickup-picked-up",
+        label: `Pickup · ${request.name}`,
+        organizationId: request.organizationId,
+        pickupId: request.id,
+      });
+      collected();
+      toast.success("Saved offline", "The pickup will be marked picked up once you're online.");
+    };
     try {
+      if (!isOnline()) {
+        queue();
+        return;
+      }
       await markPickupPickedUp(token, request);
+      collected();
       toast.success("Pickup updated", "The pickup has been marked as picked up.");
       await load(true);
     } catch (error) {
-      toast.error("Couldn't update pickup", errorMessage(error, "Please try again."));
+      if (isNetworkError(error)) queue();
+      else toast.error("Couldn't update pickup", errorMessage(error, "Please try again."));
     } finally {
       setUpdating(null);
     }
   };
   const header = (
     <View className="pb-4">
-      <Text className="text-2xl font-semibold text-foreground">Order Pickup</Text>
+      <View className="flex-row items-center justify-between gap-3">
+        <Text className="text-2xl font-semibold text-foreground">Order Pickup</Text>
+        <OfflineChip />
+      </View>
       <Text className="mt-0.5 text-sm text-muted-foreground">
         See all your order pickup requests
       </Text>
@@ -309,6 +366,7 @@ export function PickupsScreen() {
           selectedDate={selectedDate === today ? null : selectedDate}
           today={today}
         />
+        <LastUpdated at={staleSince} />
       </View>
     </View>
   );

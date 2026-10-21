@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api/client";
+import { isNetworkError, readJson, timedFetch } from "@/lib/api/network";
 import { reportRejectedToken } from "@/lib/auth/session-expiry";
 import { env } from "@/lib/env";
 
@@ -52,23 +53,19 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   let response: Response;
-  try {
-    response = await fetch(`${tokenUrl}${path}`, { ...options, headers });
-  } catch {
-    throw new AuthApiError(
-      "Couldn't reach the server. Check your internet connection and try again.",
-      0,
-    );
-  }
-
-  const raw = await response.text();
   let payload: unknown = null;
-  if (raw) {
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      payload = { message: raw };
+  try {
+    response = await timedFetch(`${tokenUrl}${path}`, { ...options, headers });
+    payload = await readJson(response);
+  } catch (error) {
+    // Unreachable (status 0): offline, a timeout, or a Wi-Fi sign-in page instead of the API.
+    if (isNetworkError(error)) {
+      throw new AuthApiError(
+        "Couldn't reach the server. Check your internet connection and try again.",
+        0,
+      );
     }
+    throw error;
   }
   if (!response.ok) {
     if (response.status === 401) reportRejectedToken(token);

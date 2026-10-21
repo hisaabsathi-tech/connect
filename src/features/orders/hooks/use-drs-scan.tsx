@@ -4,8 +4,11 @@ import { PhotoDialog, usePhotoPicker } from "@/components/modules/photo";
 import { useToast } from "@/components/ui/toast";
 import { type DrsSheet, fetchViewUrl, patchDrs } from "@/lib/api/drs";
 import { uploadDrsScan } from "@/lib/api/media";
+import { isNetworkError } from "@/lib/api/network";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
+import { isOnline } from "@/lib/network/connectivity";
+import { enqueue } from "@/lib/offline/outbox";
 
 /**
  * The scan of a signed DRS. `open` uploads one when the sheet has none (camera or gallery, a
@@ -24,6 +27,18 @@ export function useDrsScan(onUpdated: (sheet: DrsSheet) => void) {
   const save = async (uri: string) => {
     const sheet = target.current;
     if (!(token && sheet)) return false;
+    // Offline the scan is kept on the phone and attached once the app is back online.
+    const queue = () => {
+      enqueue({
+        drsId: sheet.id,
+        kind: "drs-scan",
+        label: `DRS ${sheet.id} · Signed scan`,
+        photo: uri,
+      });
+      toast.success("Scan saved offline", `It will be attached to ${sheet.id} once you're online.`);
+      return true;
+    };
+    if (!isOnline()) return queue();
     try {
       const { objectKey } = await uploadDrsScan(token, uri);
       const updated = await patchDrs(token, sheet.id, { scanCopy: objectKey });
@@ -31,6 +46,7 @@ export function useDrsScan(onUpdated: (sheet: DrsSheet) => void) {
       onUpdated(updated);
       return true;
     } catch (error) {
+      if (isNetworkError(error)) return queue();
       toast.error("Couldn't upload the scan", errorMessage(error, "Please try again."));
       return false;
     }

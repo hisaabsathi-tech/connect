@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type AttendanceSession, fetchMyAttendanceOn } from "@/lib/api/attendance";
 import { type DayKind, dayKindOf } from "@/lib/attendance/remarks";
+import { onReconnect } from "@/lib/network/connectivity";
+import { readCache, writeCache } from "@/lib/offline/cache";
+
+const DAY_CACHE = "day-attendance";
+
+type DaySnapshot = Awaited<ReturnType<typeof fetchMyAttendanceOn>>;
 
 export type { DayKind };
 
@@ -25,22 +31,25 @@ export function useDayAttendance(token: string | null, date: string, today: stri
   const load = useCallback(async () => {
     const request = ++latestRequest.current;
     setFailed(false);
-    // Clear the previous day at once; its record must not show under the new date.
-    setRecord(null);
-    setOffDay(null);
+    // The day as saved last time shows at once (offline it stays); otherwise the previous day is
+    // cleared, as its record must not show under the new date.
+    const saved = readCache<DaySnapshot>(DAY_CACHE, date)?.data ?? null;
+    setRecord(saved?.record ?? null);
+    setOffDay(saved?.offDay ?? null);
     if (!token) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    setLoading(!saved);
     try {
       const next = await fetchMyAttendanceOn(token, date);
+      writeCache(DAY_CACHE, date, next, 60);
       if (request === latestRequest.current) {
         setRecord(next.record);
         setOffDay(next.offDay);
       }
     } catch {
-      if (request === latestRequest.current) setFailed(true);
+      if (request === latestRequest.current && !saved) setFailed(true);
     } finally {
       if (request === latestRequest.current) setLoading(false);
     }
@@ -49,6 +58,7 @@ export function useDayAttendance(token: string | null, date: string, today: stri
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => onReconnect(() => void load()), [load]);
 
   return { failed, kind, loading, offDay, record, reload: load };
 }

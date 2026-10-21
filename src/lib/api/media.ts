@@ -1,4 +1,6 @@
 import { apiRequest } from "@/lib/api/client";
+import { NetworkError } from "@/lib/api/network";
+import { reportUnreachable } from "@/lib/network/connectivity";
 
 const UPLOAD_FAILED =
   "The photo could not be uploaded. Check your internet connection and try again.";
@@ -11,7 +13,11 @@ function putObject(uploadUrl: string, body: Blob, mimeType: string) {
     xhr.setRequestHeader("Content-Type", mimeType);
     xhr.onload = () =>
       xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(UPLOAD_FAILED));
-    xhr.onerror = () => reject(new Error(UPLOAD_FAILED));
+    // No answer at all: offline, so the photo can be sent again later.
+    xhr.onerror = () => {
+      reportUnreachable();
+      reject(new NetworkError(UPLOAD_FAILED));
+    };
     xhr.send(body);
   });
 }

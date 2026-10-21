@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 
 import { HapticButton } from "@/components/modules/button";
+import { useNetwork } from "@/components/modules/network";
 import { OrganizationOption } from "@/components/modules/organization";
 import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
@@ -13,6 +14,7 @@ import type { AuthOrganization } from "@/lib/api/auth";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
+import { outboxNow } from "@/lib/offline/outbox";
 
 /**
  * "Switch" beside the company in the profile, shown only when there is more than one to choose
@@ -28,6 +30,7 @@ export function OrganizationSwitch({
   organizations: AuthOrganization[];
 }) {
   const { switchOrganization } = useAuthSession();
+  const { requireOnline } = useNetwork();
   const toast = useToast();
   const { height } = useWindowDimensions();
   const [open, setOpen] = useState(false);
@@ -40,6 +43,15 @@ export function OrganizationSwitch({
     const target = organizations.find((organization) => organization.id === picked);
     if (!target || target.id === activeId) {
       setOpen(false);
+      return;
+    }
+    if (!requireOnline("Switching organization")) return;
+    // Updates saved offline are for this organisation; they go out before leaving it.
+    if (outboxNow().items.length) {
+      toast.error(
+        "Sync your updates first",
+        "Some updates saved offline haven't reached the server yet. Switch once they've synced.",
+      );
       return;
     }
     setSwitching(true);

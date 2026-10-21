@@ -3,6 +3,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import type { ReactNode } from "react";
 import { ActivityIndicator, Linking, Pressable, View } from "react-native";
 
+import { SyncBadge } from "@/components/modules/network";
 import { RemarkBadge } from "@/components/modules/remark-badge";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -129,7 +130,11 @@ export function OrderCard({
             {order.awbNo}
           </Text>
         </View>
-        {badge ? <RemarkBadge {...badge} size="md" /> : null}
+        <View className="items-end gap-1">
+          {badge ? <RemarkBadge {...badge} size="md" /> : null}
+          {/* Updated offline: waiting to reach the server, or refused by it. */}
+          <SyncBadge id={order.orderId} />
+        </View>
       </View>
 
       <View className="mt-4 flex-row items-center justify-between gap-3">
