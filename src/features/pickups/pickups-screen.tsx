@@ -158,13 +158,10 @@ function PickupCard({
           </View>
           <RemarkBadge {...statusBadge[request.status]} />
         </View>
-        <View className="mt-4 flex-row items-start gap-3">
-          <View className="flex-1">
-            <Text className="text-xs text-muted-foreground">Address</Text>
-            <Text className="mt-1 text-base leading-6 text-foreground">
-              {request.address}, {request.pincode}
-            </Text>
-          </View>
+        {/* The call and map buttons share the label's line, so the address below them gets the
+          card's full width. */}
+        <View className="mt-4 flex-row items-center justify-between gap-3">
+          <Text className="text-sm text-muted-foreground mt-4">Address</Text>
           <View className="flex-row gap-2">
             {dial ? (
               <Pressable
@@ -189,6 +186,9 @@ function PickupCard({
             </Pressable>
           </View>
         </View>
+        <Text className="mt-2 text-base leading-6 text-foreground">
+          {request.address}, {request.pincode}
+        </Text>
         <Text className="mt-4 text-xs text-muted-foreground">PREFERRED DATE & TIME</Text>
         <Text className="mt-1 text-base font-semibold text-foreground">
           {formatDayLabel(request.preferredAt.slice(0, 10))} · {formatTime(request.preferredAt)}
