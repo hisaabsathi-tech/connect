@@ -22,7 +22,7 @@ export function StatCard({
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityState={onPress ? { selected: active } : undefined}
-      className={`flex-1 border px-4 py-4 ${active ? "border-primary bg-accent" : "border-border bg-card"} ${onPress ? (active ? "active:bg-accent" : "active:bg-[#F7F8FF]") : ""}`}
+      className={`flex-1 border px-4 py-3 ${active ? "border-primary bg-accent" : "border-border bg-card"} ${onPress ? (active ? "active:bg-accent" : "active:bg-[#F7F8FF]") : ""}`}
       disabled={!onPress}
       onPress={onPress}
       onPressIn={onPress ? () => haptic("selection") : undefined}
@@ -33,7 +33,7 @@ export function StatCard({
         {label}
       </Text>
       <Text
-        className={`mt-1.5 text-[26px] font-semibold leading-9 ${active ? "text-primary" : "text-foreground"}`}
+        className={`mt-1 text-2xl font-semibold leading-8 ${active ? "text-primary" : "text-foreground"}`}
         numberOfLines={1}
       >
         {value}

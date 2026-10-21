@@ -5,17 +5,20 @@ import { haptic } from "@/lib/haptics";
 
 /** A row of status filters that scrolls sideways; the chosen one is tinted brand blue. */
 export function FilterChips<T extends string>({
+  className = "mt-5",
   onChange,
   options,
   value,
 }: {
+  /** The row's spacing from what sits above it. */
+  className?: string;
   onChange: (value: T) => void;
   options: { id: T; label: string }[];
   value: T;
 }) {
   return (
     <ScrollView
-      className="mt-5 -mx-5"
+      className={`-mx-5 ${className}`}
       contentContainerClassName="gap-2 px-5"
       horizontal
       keyboardShouldPersistTaps="handled"

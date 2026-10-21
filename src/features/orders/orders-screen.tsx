@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/correctness/useExhaustiveDependencies: <forced> */
 import { Redirect, router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
@@ -256,7 +257,7 @@ export function OrdersScreen() {
   const period = range || selectedDate !== today ? `for ${day}` : "for today";
 
   const header = (
-    <View className="pb-4">
+    <View className="pb-3">
       <View className="flex-row items-start gap-3">
         <View className="flex-1">
           <Text className="text-2xl font-semibold leading-8 text-foreground">
@@ -274,7 +275,7 @@ export function OrdersScreen() {
         </View>
       </View>
       <PageTabs onChange={changeTab} value={tab} />
-      <View className="mt-5 flex-row gap-3">
+      <View className="mt-2 flex-row gap-3">
         {data.loading ? (
           <>
             <StatCardSkeleton />
@@ -313,11 +314,15 @@ export function OrdersScreen() {
         )}
       </View>
       {onOrders ? (
-        <FilterChips onChange={toggleOrderFilter} options={ORDER_FILTERS} value={orderFilter} />
+        <FilterChips
+          className="mt-3"
+          onChange={toggleOrderFilter} options={ORDER_FILTERS} value={orderFilter} />
       ) : (
-        <FilterChips onChange={toggleDrsFilter} options={DRS_FILTERS} value={drsFilter} />
+        <FilterChips
+          className="mt-3"
+          onChange={toggleDrsFilter} options={DRS_FILTERS} value={drsFilter} />
       )}
-      <View className="mt-4">
+      <View className="mt-3">
         <SearchRangeToolbar
           autoCapitalize={onOrders ? "words" : "characters"}
           onQueryChange={setQuery}

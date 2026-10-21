@@ -48,7 +48,7 @@ export function CardListSkeleton({ count = 3 }: { count?: number }) {
 /** A stat card's label and figure, still loading (same box as `StatCard`). */
 export function StatCardSkeleton() {
   return (
-    <View className="flex-1 border border-border bg-card px-4 py-4">
+    <View className="flex-1 border border-border bg-card px-4 py-3">
       <Skeleton height={12} width="70%" />
       <Skeleton className="mt-3" height={28} width={48} />
     </View>
@@ -67,23 +67,25 @@ export function ListPageSkeleton({
   chips?: boolean;
   tabs?: boolean;
 }) {
+  // The page with tabs (Orders) packs its header tighter, so its list starts higher.
+  const gap = tabs ? "mt-3" : "mt-5";
   return (
     <View className="px-5">
       <Skeleton height={26} width="62%" />
       <Skeleton className="mt-2" height={14} width="78%" />
-      {tabs ? <Skeleton className="mt-5" height={48} /> : null}
-      <View className="mt-5 flex-row gap-3">
+      {tabs ? <Skeleton className="mt-4" height={44} /> : null}
+      <View className={`${gap} flex-row gap-3`}>
         <StatCardSkeleton />
         <StatCardSkeleton />
       </View>
       {chips ? (
-        <View className="mt-5 flex-row gap-2">
+        <View className={`${gap} flex-row gap-2`}>
           <Skeleton height={40} width={92} />
           <Skeleton height={40} width={104} />
           <Skeleton height={40} width={84} />
         </View>
       ) : null}
-      <Skeleton className={chips ? "mt-4" : "mt-5"} height={48} />
+      <Skeleton className={tabs ? "mt-3" : chips ? "mt-4" : "mt-5"} height={48} />
       <View className="mt-4">
         <CardListSkeleton count={2} />
       </View>
