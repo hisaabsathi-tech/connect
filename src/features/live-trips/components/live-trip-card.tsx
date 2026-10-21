@@ -1,9 +1,9 @@
-import { Location01Icon } from "@hugeicons/core-free-icons";
+import { ArrowRight01Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -12,8 +12,13 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { Text } from "@/components/modules/typography";
+import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { openDrsOrder } from "@/features/orders/lib/open-order";
 import type { LiveTrip, LiveTripOrder } from "@/lib/api/live-trips";
+import { useAuthSession } from "@/lib/auth/session";
+import { errorMessage } from "@/lib/errors";
+import { haptic } from "@/lib/haptics";
 import { type TrackingStatus, useTrackingStatus } from "@/lib/tracking/status";
 
 // What the driver has to switch on before the first point can be sent.
@@ -164,14 +169,29 @@ export function LiveTripCard({
   // The driver reads "You are …"; everyone else watching reads the driver's name.
   const driver = trip.mine ? null : trip.deliveryBoyName?.trim() || "The vehicle";
   const { blocked } = useTrackingStatus();
+  const { token } = useAuthSession();
+  const toast = useToast();
+  const [opening, setOpening] = useState(false);
+  // The driver can open the next stop's order: the parcel scan first, then its update page.
+  const canOpen = trip.mine && Boolean(trip.drsId && token);
+  const openOrder = async () => {
+    if (!(canOpen && token && trip.drsId) || opening) return;
+    haptic("light");
+    setOpening(true);
+    try {
+      await openDrsOrder(token, trip.drsId, order.orderId);
+    } catch (error) {
+      toast.error("Couldn't open the order", errorMessage(error, "Please try again."));
+    } finally {
+      setOpening(false);
+    }
+  };
   // With several orders out, the block follows the next stop and says how many are left.
   const left = trip.orders.length;
-  const facts = [
-    left > 1 ? `Next stop · ${left} orders left` : null,
-    order.receiverName,
-    `AWB ${order.awbNo}`,
-    trip.mine ? null : trip.vehicleNo,
-  ].filter(Boolean);
+  // Someone else's trip names who is driving which vehicle.
+  const crew = trip.mine
+    ? null
+    : [trip.deliveryBoyName?.trim(), trip.vehicleNo?.trim()].filter(Boolean).join(" · ");
   return (
     <Pressable
       accessibilityHint="Opens the live trip on the map"
@@ -185,11 +205,52 @@ export function LiveTripCard({
         })
       }
     >
-      <Text className="text-lg font-semibold leading-6 text-foreground">Tracking in Progress</Text>
+      <View className="flex-row items-start justify-between gap-3">
+        <Text className="flex-1 text-lg font-semibold leading-6 text-foreground">
+          Tracking in Progress
+        </Text>
+        {/* How many deliveries the sheet still has, the next stop included. */}
+        <View className="h-6 flex-row items-center bg-accent px-2">
+          <Text className="text-xs font-medium text-primary">
+            {left} {left === 1 ? "order" : "orders"}
+          </Text>
+        </View>
+      </View>
+      {crew ? (
+        <Text className="mt-0.5 text-xs text-muted-foreground" numberOfLines={1}>
+          {crew}
+        </Text>
+      ) : null}
       <Headline blocked={trip.mine ? blocked : null} driver={driver} order={order} />
-      <Text className="mt-1 text-xs text-muted-foreground" numberOfLines={1}>
-        {facts.join(" · ")}
-      </Text>
+      {/* The order the distance is measured to, on its own so its AWB reads at a glance. */}
+      <Pressable
+        accessibilityHint={canOpen ? "Scans this order's parcel, then opens it" : undefined}
+        accessibilityRole={canOpen ? "button" : undefined}
+        className="mt-3 flex-row items-center justify-between gap-3 border border-[#E6E9F8] bg-[#F6F7FF] px-3 py-2 active:bg-accent"
+        disabled={!canOpen || opening}
+        onPress={() => void openOrder()}
+      >
+        <View className="flex-1">
+          <Text className="text-[11px] font-medium uppercase tracking-[0.3px] text-muted-foreground">
+            {left > 1 ? "Next stop" : "Destination"}
+          </Text>
+          <Text className="mt-0.5 text-base font-semibold text-foreground" numberOfLines={1}>
+            {order.awbNo}
+          </Text>
+        </View>
+        {order.receiverName ? (
+          <Text className="max-w-[45%] text-right text-sm text-muted-foreground" numberOfLines={2}>
+            {order.receiverName}
+          </Text>
+        ) : null}
+        {canOpen ? (
+          opening ? (
+            <ActivityIndicator color={colors.primary} size="small" />
+          ) : (
+            <HugeiconsIcon color={colors.primary} icon={ArrowRight01Icon} size={18} />
+          )
+        ) : null}
+      </Pressable>
       <TripProgressBar progress={order.progress ?? 0} />
     </Pressable>
   );

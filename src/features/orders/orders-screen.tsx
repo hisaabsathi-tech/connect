@@ -18,7 +18,7 @@ import { StatCard } from "@/components/modules/stat-card";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
-import { reloadLiveTrips } from "@/features/live-trips";
+import { reloadLiveTrips } from "@/features/live-trips/lib/live-trips-store";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { type DrsSheet, type DrsStatus, patchDrs } from "@/lib/api/drs";
 import { useAuthSession } from "@/lib/auth/session";

@@ -8,7 +8,7 @@ import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
-import { settleLiveTripOrder } from "@/features/live-trips";
+import { settleLiveTripOrder } from "@/features/live-trips/lib/live-trips-store";
 import { setShipmentStatus } from "@/lib/api/order-tracking";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";

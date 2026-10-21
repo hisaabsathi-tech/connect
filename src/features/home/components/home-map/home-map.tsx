@@ -43,6 +43,7 @@ import {
   reverseGeocodeAddress,
 } from "@/lib/maps/ola-maps";
 import { dialUrl, formatMobile } from "@/lib/phone";
+import { useTrackingStatus } from "@/lib/tracking/status";
 
 /** An order still to deliver; `exact` when its street address was found, else its area. */
 export type OrderPoint = Coordinates & {
@@ -77,6 +78,16 @@ type Props = {
   animateHeight?: boolean;
   /** Changes when the page reloads: the map drops a tapped pin and recenters. */
   resetKey?: number;
+  /**
+   * A live delivery trip to follow instead of the day's pins: the truck, every order on the sheet
+   * and the predicted road through them, as on the trip's own map, which the corner button opens.
+   */
+  liveTrip?: {
+    path: Coordinates[];
+    stops: TripStop[];
+    vehicle: Coordinates | null;
+    onExpand: () => void;
+  } | null;
 };
 
 type PinKind =
@@ -829,6 +840,28 @@ const at = (place: Coordinates, id: string, kind: PinKind): MapPoint => ({
   longitude: place.longitude,
 });
 
+/**
+ * The delivery boy's own pin: the truck, turned the way they are heading, while their live trip
+ * is being tracked; the rider otherwise.
+ */
+function useSelfPin(live: Coordinates | null) {
+  const tracking = useTrackingStatus().running;
+  const previous = useRef<Coordinates | null>(null);
+  const [bearing, setBearing] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!live) return;
+    const before = previous.current;
+    previous.current = live;
+    const next = before ? travelBearing([before, live]) : undefined;
+    if (next !== undefined) setBearing(next);
+  }, [live]);
+  return useCallback(
+    (place: Coordinates, id: string): MapPoint =>
+      tracking ? { ...at(place, id, "truck"), bearing } : at(place, id, "rider"),
+    [bearing, tracking],
+  );
+}
+
 /** An order's pin, with the card its tap opens (receiver, call, address and map links). */
 const orderMapPoint = (order: OrderPoint): MapPoint => ({
   ...at(order, `order-${order.orderId}`, order.exact ? "order" : "order-area"),
@@ -851,6 +884,7 @@ export function HomeMap({
   organization,
   resetKey = 0,
   animateHeight = true,
+  liveTrip = null,
 }: Props) {
   // Height changes (the page settling, the day's record growing) ease in rather than jump.
   const animatedHeight = useSharedValue(height);
@@ -882,8 +916,9 @@ export function HomeMap({
   // they are now and a pin per order (exact address, or only its area). Otherwise, before
   // checking in: where the user is now; after, the check-in point replaces it, and a check-out
   // adds the destination pin.
+  const selfPin = useSelfPin(live);
   const points = useMemo(() => {
-    const here = live ? at(live, "here", deliveryBoy ? "rider" : "start") : null;
+    const here = live ? (deliveryBoy ? selfPin(live, "here") : at(live, "here", "start")) : null;
     const day: (MapPoint | null)[] = orders
       ? [here, ...orders.map(orderMapPoint)]
       : [
@@ -894,29 +929,41 @@ export function HomeMap({
         ];
     const office = organization && !deliveryBoy ? at(organization, "office", "organization") : null;
     return [office, ...day].filter((point): point is MapPoint => point !== null);
-  }, [checkIn, checkOut, deliveryBoy, live, orders, organization]);
+  }, [checkIn, checkOut, deliveryBoy, live, orders, organization, selfPin]);
   return (
     <>
       <Animated.View style={heightStyle}>
         <View className="flex-1 border border-border overflow-hidden rounded-2xl bg-accent">
-          <NativeOlaMap
-            anchorId={anchorId}
-            controlsTop={16}
-            // Under the full-screen map the small one keeps the overview.
-            focusId={expanded ? null : focusId}
-            legendBottom={12}
-            onFocus={focusFromPage}
-            origin={live}
-            points={points}
-            resetKey={resetKey}
-            showLegend={!deliveryBoy}
-          >
-            <MapControl
-              icon={FullScreenIcon}
-              label="Maximize map"
-              onPress={() => setExpanded(true)}
+          {liveTrip ? (
+            <LiveTripMap
+              action="expand"
+              controlsTop={16}
+              legendBottom={12}
+              onAction={liveTrip.onExpand}
+              path={liveTrip.path}
+              stops={liveTrip.stops}
+              vehicle={liveTrip.vehicle}
             />
-          </NativeOlaMap>
+          ) : (
+            <NativeOlaMap
+              anchorId={anchorId}
+              controlsTop={16}
+              // Under the full-screen map the small one keeps the overview.
+              focusId={expanded ? null : focusId}
+              legendBottom={12}
+              onFocus={focusFromPage}
+              origin={live}
+              points={points}
+              resetKey={resetKey}
+              showLegend={!deliveryBoy}
+            >
+              <MapControl
+                icon={FullScreenIcon}
+                label="Maximize map"
+                onPress={() => setExpanded(true)}
+              />
+            </NativeOlaMap>
+          )}
         </View>
       </Animated.View>
       <Modal animationType="fade" onRequestClose={minimize} visible={expanded}>
@@ -1014,10 +1061,11 @@ function useOrderMapView(live: Coordinates | null, order: OrderPoint | null, sta
   const { delivered, deliveredAt } = state;
   const route = useRoadRoute(delivered ? null : live, delivered ? null : order);
   const handedOver = delivered && deliveredAt ? deliveredAt : null;
+  const selfPin = useSelfPin(delivered ? null : live);
   const points = useMemo(
     () =>
       [
-        delivered ? null : live ? at(live, "here", "rider") : null,
+        delivered ? null : live ? selfPin(live, "here") : null,
         point,
         handedOver
           ? {
@@ -1026,7 +1074,7 @@ function useOrderMapView(live: Coordinates | null, order: OrderPoint | null, sta
             }
           : null,
       ].filter((item): item is MapPoint => item !== null),
-    [delivered, handedOver, live, point],
+    [delivered, handedOver, live, point, selfPin],
   );
   return { point, points, route: delivered ? null : route };
 }
@@ -1267,13 +1315,16 @@ function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[]) {
  * predicted road path from the truck through each stop to the last one.
  */
 export function LiveTripMap({
+  action = "close",
   controlsTop,
   legendBottom,
-  onClose,
+  onAction,
   path,
   stops,
   vehicle,
 }: {
+  /** The corner control: close the full-screen map, or open it from a map in a page. */
+  action?: "close" | "expand";
   controlsTop: number;
   legendBottom: number;
   /** GPS points the server holds, oldest first. */
@@ -1282,7 +1333,7 @@ export function LiveTripMap({
   stops: TripStop[];
   /** Where the vehicle is now: the latest point, or the driver's own phone before the first. */
   vehicle: Coordinates | null;
-  onClose: () => void;
+  onAction: () => void;
 }) {
   const route = usePlannedRoute(vehicle, stops);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -1319,7 +1370,11 @@ export function LiveTripMap({
       trip={route ? tripLabel(route) : null}
       zoomOnFocus={false}
     >
-      <MapControl icon={Cancel01Icon} label="Close map" onPress={onClose} />
+      {action === "expand" ? (
+        <MapControl icon={FullScreenIcon} label="Open the live trip map" onPress={onAction} />
+      ) : (
+        <MapControl icon={Cancel01Icon} label="Close map" onPress={onAction} />
+      )}
     </NativeOlaMap>
   );
 }

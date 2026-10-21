@@ -1,4 +1,4 @@
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import Animated, { FadeOut } from "react-native-reanimated";
@@ -8,7 +8,7 @@ import { LocationIndicator, locationIndicatorState } from "@/components/modules/
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
-import { LiveTripBlocks, useLiveTrips } from "@/features/live-trips";
+import { LiveTripBlocks, useLiveTrips, useTripMap } from "@/features/live-trips";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
@@ -68,6 +68,11 @@ export function HomeScreen() {
   const tracking = useTrackingStatus().running;
   const liveBlocks =
     selectedDate === today && liveTrips.length ? <LiveTripBlocks trips={liveTrips} /> : null;
+  // The map at the top follows a live trip too (the driver's own first), the same map its block
+  // opens: truck, every order on the sheet and the road through them. Back to the day's pins once
+  // no trip is live.
+  const mapTrip = liveBlocks ? (liveTrips.find((trip) => trip.mine) ?? liveTrips[0] ?? null) : null;
+  const tripMap = useTripMap(mapTrip, live);
   const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
   // Bumped by a pull to refresh, which recenters the map.
   const [mapResetKey, setMapResetKey] = useState(0);
@@ -183,6 +188,20 @@ export function HomeScreen() {
           deliveryBoy={canUpdateOrders}
           height={mapHeight}
           live={live}
+          liveTrip={
+            mapTrip
+              ? {
+                  onExpand: () =>
+                    router.push({
+                      params: { tripId: mapTrip.id },
+                      pathname: "/live-trip/[tripId]",
+                    }),
+                  path: tripMap.path,
+                  stops: tripMap.stops,
+                  vehicle: tripMap.vehicle,
+                }
+              : null
+          }
           orders={showOrders ? deliveries.pins : null}
           organization={home.organization}
           resetKey={mapResetKey}

@@ -1,20 +1,14 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/components/modules/typography";
-import { LiveTripMap, type TripStop } from "@/features/home/components/home-map";
+import { LiveTripMap } from "@/features/home/components/home-map";
 import { useLiveLocation } from "@/hooks/use-live-location";
-import { fetchTripPath, type LiveTripPoint } from "@/lib/api/live-trips";
-import { useAuthSession } from "@/lib/auth/session";
-import { connectTripChannel } from "@/lib/realtime/vehicle-trips-socket";
 
 import { LiveTripCard } from "./components/live-trip-card";
-import { applyTripProgress, useLiveTrips } from "./lib/live-trips-store";
-
-const byTime = (a: LiveTripPoint, b: LiveTripPoint) =>
-  Date.parse(a.recordedAt) - Date.parse(b.recordedAt);
+import { useTripMap } from "./hooks/use-trip-map";
+import { useLiveTrips } from "./lib/live-trips-store";
 
 /**
  * One live trip on the map, following the vehicle as its points arrive over the trip's socket:
@@ -23,77 +17,12 @@ const byTime = (a: LiveTripPoint, b: LiveTripPoint) =>
  */
 export function TripMapScreen() {
   const { orderId, tripId } = useLocalSearchParams<{ orderId?: string; tripId: string }>();
-  const { token } = useAuthSession();
   const insets = useSafeAreaInsets();
   const trip = useLiveTrips().trips.find((item) => item.id === tripId) ?? null;
-  const drsId = trip?.drsId ?? null;
-  const [path, setPath] = useState<LiveTripPoint[]>([]);
-  const [ended, setEnded] = useState(false);
-
-  // The way driven so far once, then each new point as the server pushes it.
-  useEffect(() => {
-    if (!(token && tripId && drsId)) return;
-    let current = true;
-    const add = (points: LiveTripPoint[]) =>
-      setPath((previous) => {
-        const seen = new Set(previous.map((point) => point.recordedAt));
-        const fresh = points.filter((point) => !seen.has(point.recordedAt));
-        return fresh.length ? [...previous, ...fresh].sort(byTime) : previous;
-      });
-    fetchTripPath(token, drsId)
-      .then((points) => {
-        if (current) add(points);
-      })
-      .catch(() => undefined);
-    const disconnect = connectTripChannel(token, tripId, {
-      onEnded: () => {
-        if (current) setEnded(true);
-      },
-      onPoint: (event) => {
-        if (current) add([event.point]);
-      },
-      onProgress: applyTripProgress,
-    });
-    return () => {
-      current = false;
-      disconnect();
-    };
-  }, [drsId, token, tripId]);
-
   // The order picked on Home; once it is delivered, the nearest one still pending.
   const order = trip?.orders.find((item) => item.orderId === orderId) ?? trip?.orders[0] ?? null;
-  // Every order still to deliver on the sheet, so the whole run shows on the map.
-  const orders = trip?.orders;
-  const stops = useMemo(
-    () =>
-      (orders ?? []).flatMap((item): TripStop[] =>
-        item.latitude != null && item.longitude != null
-          ? [
-              {
-                address: item.address,
-                id: item.orderId,
-                latitude: item.latitude,
-                longitude: item.longitude,
-                title: `${item.receiverName ?? "Receiver"} · AWB ${item.awbNo}`,
-              },
-            ]
-          : [],
-      ),
-    [orders],
-  );
-  const shownPath = useMemo(
-    () => path.map((point) => ({ latitude: point.latitude, longitude: point.longitude })),
-    [path],
-  );
-  // Where the truck is: its latest point; before the first one reaches the server, the trip's
-  // last known point, or for the driver their own phone's position.
   const own = useLiveLocation(Boolean(trip?.mine));
-  const lastPoint = trip?.lastPoint;
-  const vehicle = useMemo(() => {
-    const latest = shownPath.at(-1) ?? lastPoint;
-    if (latest) return { latitude: latest.latitude, longitude: latest.longitude };
-    return own.location;
-  }, [lastPoint, own.location, shownPath]);
+  const { ended, path, stops, vehicle } = useTripMap(trip, own.location);
 
   const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -102,8 +31,8 @@ export function TripMapScreen() {
       <LiveTripMap
         controlsTop={insets.top + 12}
         legendBottom={insets.bottom + 180}
-        onClose={close}
-        path={shownPath}
+        onAction={close}
+        path={path}
         stops={stops}
         vehicle={vehicle}
       />
