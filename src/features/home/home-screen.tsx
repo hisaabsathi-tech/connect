@@ -8,7 +8,13 @@ import { LocationIndicator, locationIndicatorState } from "@/components/modules/
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
-import { LiveTripBlocks, useLiveTrips, useTripMap } from "@/features/live-trips";
+import {
+  LiveTripBlocks,
+  nextStopOf,
+  useLiveTrips,
+  useNextStopPicks,
+  useTripMap,
+} from "@/features/live-trips";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { checkInPointOf, checkOutPointOf } from "@/lib/api/attendance";
 import { useAuthSession } from "@/lib/auth/session";
@@ -73,6 +79,7 @@ export function HomeScreen() {
   // no trip is live.
   const mapTrip = liveBlocks ? (liveTrips.find((trip) => trip.mine) ?? liveTrips[0] ?? null) : null;
   const tripMap = useTripMap(mapTrip, live);
+  const nextStopPicks = useNextStopPicks();
   const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
   // Bumped by a pull to refresh, which recenters the map.
   const [mapResetKey, setMapResetKey] = useState(0);
@@ -196,6 +203,7 @@ export function HomeScreen() {
                       params: { tripId: mapTrip.id },
                       pathname: "/live-trip/[tripId]",
                     }),
+                  nextStopId: nextStopOf(mapTrip, nextStopPicks)?.orderId ?? null,
                   path: tripMap.path,
                   stops: tripMap.stops,
                   vehicle: tripMap.vehicle,

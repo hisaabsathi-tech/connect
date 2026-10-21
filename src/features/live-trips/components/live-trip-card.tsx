@@ -21,6 +21,10 @@ import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { type TrackingStatus, useTrackingStatus } from "@/lib/tracking/status";
 
+import { formatDistance } from "../lib/format";
+import { nextStopOf, useNextStopPicks } from "../lib/next-stop";
+import { NextStopSheet } from "./next-stop-sheet";
+
 // What the driver has to switch on before the first point can be sent.
 const blockedCopy: Record<NonNullable<TrackingStatus["blocked"]>, string> = {
   background: "Set location to “Allow all the time” to start live tracking",
@@ -38,15 +42,6 @@ const BAR = 10;
 const EASE = { duration: 600, easing: Easing.out(Easing.cubic) };
 // Closer than this the rider is at the door.
 const ARRIVING_METRES = 150;
-
-/** "850 m", "4.2 km", "12 km"; "~" marks a straight-line estimate. */
-export function formatDistance(metres: number, estimated = false) {
-  const value =
-    metres < 1000
-      ? `${Math.max(10, Math.round(metres / 10) * 10)} m`
-      : `${(metres / 1000).toFixed(metres < 10_000 ? 1 : 0)} km`;
-  return estimated ? `~${value}` : value;
-}
 
 /** The bar: the filled part is the way covered, the truck rides at its end, the pin waits. */
 function TripProgressBar({ progress }: { progress: number }) {
@@ -172,6 +167,7 @@ export function LiveTripCard({
   const { token } = useAuthSession();
   const toast = useToast();
   const [opening, setOpening] = useState(false);
+  const [choosing, setChoosing] = useState(false);
   // The driver can open the next stop's order: the parcel scan first, then its update page.
   const canOpen = trip.mine && Boolean(trip.drsId && token);
   const openOrder = async () => {
@@ -223,21 +219,36 @@ export function LiveTripCard({
       ) : null}
       <Headline blocked={trip.mine ? blocked : null} driver={driver} order={order} />
       {/* The order the distance is measured to, on its own so its AWB reads at a glance. */}
+      <View className="mt-3 flex-row items-center justify-between">
+        <Text className="text-[11px] font-medium uppercase tracking-[0.3px] text-muted-foreground">
+          {left > 1 ? "Next stop" : "Destination"}
+        </Text>
+        {/* The driver may head somewhere other than the nearest order. */}
+        {trip.mine && left > 1 ? (
+          <Pressable
+            accessibilityHint="Pick which order to go to next"
+            accessibilityRole="button"
+            className="-my-2 py-2 pl-3"
+            hitSlop={8}
+            onPress={() => {
+              haptic("light");
+              setChoosing(true);
+            }}
+          >
+            <Text className="text-sm font-medium text-primary">Change</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <Pressable
         accessibilityHint={canOpen ? "Scans this order's parcel, then opens it" : undefined}
         accessibilityRole={canOpen ? "button" : undefined}
-        className="mt-3 flex-row items-center justify-between gap-3 border border-[#E6E9F8] bg-[#F6F7FF] px-3 py-2 active:bg-accent"
+        className="mt-1.5 flex-row items-center justify-between gap-3 border border-[#E6E9F8] bg-[#F6F7FF] px-3 py-2.5 active:bg-accent"
         disabled={!canOpen || opening}
         onPress={() => void openOrder()}
       >
-        <View className="flex-1">
-          <Text className="text-[11px] font-medium uppercase tracking-[0.3px] text-muted-foreground">
-            {left > 1 ? "Next stop" : "Destination"}
-          </Text>
-          <Text className="mt-0.5 text-base font-semibold text-foreground" numberOfLines={1}>
-            {order.awbNo}
-          </Text>
-        </View>
+        <Text className="flex-1 text-base font-semibold text-foreground" numberOfLines={1}>
+          {order.awbNo}
+        </Text>
         {order.receiverName ? (
           <Text className="max-w-[45%] text-right text-sm text-muted-foreground" numberOfLines={2}>
             {order.receiverName}
@@ -252,20 +263,22 @@ export function LiveTripCard({
         ) : null}
       </Pressable>
       <TripProgressBar progress={order.progress ?? 0} />
+      <NextStopSheet onClose={() => setChoosing(false)} trip={choosing ? trip : null} />
     </Pressable>
   );
 }
 
 /**
- * One block per live trip (DRS), however many orders it carries: the next stop, i.e. the nearest
- * order still pending (the server sends them nearest first). Once it is delivered the block moves
+ * One block per live trip (DRS), however many orders it carries: the next stop, i.e. the order
+ * the driver picked or else the nearest one still pending. Once it is delivered the block moves
  * on to the next one, and it goes when the last is done.
  */
 export function LiveTripBlocks({ trips }: { trips: LiveTrip[] }) {
+  const picks = useNextStopPicks();
   return (
     <View className="gap-2">
       {trips.map((trip) => {
-        const next = trip.orders[0];
+        const next = nextStopOf(trip, picks);
         return next ? <LiveTripCard key={trip.id} order={next} trip={trip} /> : null;
       })}
     </View>

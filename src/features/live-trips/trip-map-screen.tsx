@@ -9,6 +9,7 @@ import { useLiveLocation } from "@/hooks/use-live-location";
 import { LiveTripCard } from "./components/live-trip-card";
 import { useTripMap } from "./hooks/use-trip-map";
 import { useLiveTrips } from "./lib/live-trips-store";
+import { nextStopOf, useNextStopPicks } from "./lib/next-stop";
 
 /**
  * One live trip on the map, following the vehicle as its points arrive over the trip's socket:
@@ -16,11 +17,12 @@ import { useLiveTrips } from "./lib/live-trips-store";
  * distance card along the bottom.
  */
 export function TripMapScreen() {
-  const { orderId, tripId } = useLocalSearchParams<{ orderId?: string; tripId: string }>();
+  const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const insets = useSafeAreaInsets();
   const trip = useLiveTrips().trips.find((item) => item.id === tripId) ?? null;
-  // The order picked on Home; once it is delivered, the nearest one still pending.
-  const order = trip?.orders.find((item) => item.orderId === orderId) ?? trip?.orders[0] ?? null;
+  // The trip's next stop: the order the driver picked, or else the nearest one still pending.
+  const picks = useNextStopPicks();
+  const order = trip ? nextStopOf(trip, picks) : null;
   const own = useLiveLocation(Boolean(trip?.mine));
   const { ended, path, stops, vehicle } = useTripMap(trip, own.location);
 
@@ -31,6 +33,7 @@ export function TripMapScreen() {
       <LiveTripMap
         controlsTop={insets.top + 12}
         legendBottom={insets.bottom + 180}
+        nextStopId={order?.orderId ?? null}
         onAction={close}
         path={path}
         stops={stops}

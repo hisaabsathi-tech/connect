@@ -6,4 +6,5 @@ export {
   settleLiveTripOrder,
   useLiveTrips,
 } from "./lib/live-trips-store";
+export { nextStopOf, useNextStopPicks } from "./lib/next-stop";
 export { LiveTripHost } from "./live-trip-host";

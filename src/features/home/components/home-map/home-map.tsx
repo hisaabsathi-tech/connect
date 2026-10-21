@@ -86,6 +86,7 @@ type Props = {
     path: Coordinates[];
     stops: TripStop[];
     vehicle: Coordinates | null;
+    nextStopId: string | null;
     onExpand: () => void;
   } | null;
 };
@@ -939,6 +940,7 @@ export function HomeMap({
               action="expand"
               controlsTop={16}
               legendBottom={12}
+              nextStopId={liveTrip.nextStopId}
               onAction={liveTrip.onExpand}
               path={liveTrip.path}
               stops={liveTrip.stops}
@@ -1215,15 +1217,24 @@ const placeKey = (place: Coordinates) =>
   `${place.latitude.toFixed(5)},${place.longitude.toFixed(5)}`;
 
 /**
- * The order a vehicle will most likely take its stops in: always the nearest one left, starting
- * from where it is (or the first stop while its position isn't known). Orders at the same place
- * (two parcels to one station) are one stop.
+ * The order a vehicle will most likely take its stops in: the stop the driver picked first (when
+ * they did), then always the nearest one left, starting from where it is (or the first stop while
+ * its position isn't known). Orders at the same place (two parcels to one station) are one stop.
  */
-function visitOrder(from: Coordinates | null, stops: TripStop[]) {
+function visitOrder(from: Coordinates | null, stops: TripStop[], firstId: string | null) {
   // `Map` here is the map view; the built-in keyed collection is `globalThis.Map`.
   const left = [...new globalThis.Map(stops.map((stop) => [placeKey(stop), stop])).values()];
   const ordered: TripStop[] = [];
   let here = from;
+  const picked = stops.find((stop) => stop.id === firstId);
+  const pickedAt = picked ? left.findIndex((stop) => placeKey(stop) === placeKey(picked)) : -1;
+  if (pickedAt >= 0) {
+    const [first] = left.splice(pickedAt, 1);
+    if (first) {
+      ordered.push(first);
+      here = first;
+    }
+  }
   while (left.length) {
     let best = 0;
     if (here) {
@@ -1248,7 +1259,7 @@ function visitOrder(from: Coordinates | null, stops: TripStop[]) {
  * hop (each Redis-cached on the server). A leg the router can't find is drawn straight.
  * Fetched again only when the vehicle has moved about 500 m or the stops change.
  */
-function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[]) {
+function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[], firstId: string | null) {
   const { token } = useAuthSession();
   const [route, setRoute] = useState<RoadRoute | null>(null);
   const snap = (value: number) =>
@@ -1256,7 +1267,7 @@ function usePlannedRoute(vehicle: Coordinates | null, stops: TripStop[]) {
   const start = vehicle
     ? { latitude: snap(vehicle.latitude), longitude: snap(vehicle.longitude) }
     : null;
-  const ordered = visitOrder(start, stops);
+  const ordered = visitOrder(start, stops, firstId);
   const hops = [...(start ? [start] : []), ...ordered];
   const key = hops.map(placeKey).join("|");
   useEffect(() => {
@@ -1318,11 +1329,14 @@ export function LiveTripMap({
   action = "close",
   controlsTop,
   legendBottom,
+  nextStopId = null,
   onAction,
   path,
   stops,
   vehicle,
 }: {
+  /** The stop the vehicle is heading to now; the predicted path goes there first. */
+  nextStopId?: string | null;
   /** The corner control: close the full-screen map, or open it from a map in a page. */
   action?: "close" | "expand";
   controlsTop: number;
@@ -1335,7 +1349,7 @@ export function LiveTripMap({
   vehicle: Coordinates | null;
   onAction: () => void;
 }) {
-  const route = usePlannedRoute(vehicle, stops);
+  const route = usePlannedRoute(vehicle, stops, nextStopId);
   const [focusId, setFocusId] = useState<string | null>(null);
   const points = useMemo(() => {
     const start = path.length > 1 ? path[0] : undefined;
