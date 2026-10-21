@@ -17,6 +17,8 @@ export type Viewer = {
   organization: ViewerOrganization | null;
   /** The member's granted `attendance` actions (GET, GET_ALL, CREATE, …); empty without any. */
   attendanceActions: string[];
+  /** The member's granted `order` actions (GET, UPDATE, …); empty without any. */
+  orderActions: string[];
 };
 
 const VIEWER_QUERY = `
@@ -52,9 +54,10 @@ export async function fetchViewer(token: string): Promise<Viewer> {
     } | null;
   }>({ query: VIEWER_QUERY, token });
   const organization = payload.organization;
-  const attendance = payload.me.permissions?.find((grant) => grant.resource === "attendance");
+  const actionsOn = (resource: string) =>
+    payload.me.permissions?.find((grant) => grant.resource === resource)?.actions ?? [];
   return {
-    attendanceActions: attendance?.actions ?? [],
+    attendanceActions: actionsOn("attendance"),
     name: payload.me.user.name,
     organization: organization
       ? {
@@ -67,6 +70,7 @@ export async function fetchViewer(token: string): Promise<Viewer> {
           state: organization.state ?? null,
         }
       : null,
+    orderActions: actionsOn("order"),
     roleSlug: payload.me.orgRole?.slug ?? null,
   };
 }

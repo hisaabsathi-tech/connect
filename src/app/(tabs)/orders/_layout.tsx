@@ -6,12 +6,12 @@ import { useViewer } from "@/lib/auth/viewer";
 const SCREEN_BACKGROUND = "#f9fbff";
 
 /**
- * The delivery boy's Orders tab: the list, then an order's barcode scan and its update, stacked
+ * The Orders tab, for a role with order edit: the list, then an order's barcode scan and its update, stacked
  * so back returns along the way. The bottom navigation stays in view throughout.
  */
 export default function OrdersLayout() {
-  const { isDeliveryBoy, isLoaded } = useViewer();
-  if (isLoaded && !isDeliveryBoy) return <Redirect href="/" />;
+  const { canUpdateOrders, isLoaded } = useViewer();
+  if (isLoaded && !canUpdateOrders) return <Redirect href="/" />;
   // Opaque screens, so nothing behind shows through while one slides in.
   return (
     <Stack

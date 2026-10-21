@@ -30,8 +30,8 @@ import { useHomeAttendance } from "./hooks/use-home-attendance";
 // the day's record and the swipe usually fit without scrolling.
 const MAP_MIN_HEIGHT = 200;
 const MAP_MAX_HEIGHT = 360;
-// A delivery boy's map shows their deliveries, so it gets more room: the Orders card may sit just
-// under the fold (the page scrolls to it), and the map fills the rest within these bounds.
+// With order edit the map shows the member's deliveries, so it gets more room: the Orders card
+// may sit just under the fold (the page scrolls to it), and the map fills the rest within these bounds.
 const DELIVERY_MAP_MIN_HEIGHT = 300;
 const DELIVERY_MAP_MAX_HEIGHT = 560;
 // The scroll content's bottom padding (`pb-4`), part of what has to fit with the map.
@@ -43,7 +43,7 @@ const REVEAL_TIMEOUT_MS = 8000;
 export function HomeScreen() {
   const { token } = useAuthSession();
   const viewer = useViewer();
-  const { canCheckIn, canViewAttendance, isDeliveryBoy } = viewer;
+  const { canCheckIn, canUpdateOrders, canViewAttendance } = viewer;
   const screenTop = useScreenTop();
   const location = useLiveLocation(Boolean(token));
   const live = location.location;
@@ -56,8 +56,8 @@ export function HomeScreen() {
   // Stable per record: the map re-frames its camera whenever its pins change.
   const dayCheckIn = useMemo(() => checkInPointOf(day.record), [day.record]);
   const dayCheckOut = useMemo(() => checkOutPointOf(day.record), [day.record]);
-  // A delivery boy's orders still to deliver; while there are any, today's map shows them.
-  const deliveries = useActiveOrders(isDeliveryBoy ? token : null, today);
+  // Orders still to deliver for a role with order edit; while there are any, today's map shows them.
+  const deliveries = useActiveOrders(canUpdateOrders ? token : null, today);
   const showOrders = deliveries.active && selectedDate === today;
   const [photo, setPhoto] = useState<PhotoViewerTarget | null>(null);
   // Bumped by a pull to refresh, which recenters the map.
@@ -70,12 +70,12 @@ export function HomeScreen() {
   const [belowHeight, setBelowHeight] = useState(0);
   // The Orders card's height (with its margin), left out of what must fit on screen.
   const [ordersCardHeight, setOrdersCardHeight] = useState(0);
-  const [minHeight, maxHeight] = isDeliveryBoy
+  const [minHeight, maxHeight] = canUpdateOrders
     ? [DELIVERY_MAP_MIN_HEIGHT, DELIVERY_MAP_MAX_HEIGHT]
     : [MAP_MIN_HEIGHT, MAP_MAX_HEIGHT];
   const measured = Boolean(viewportHeight && headerHeight && belowHeight);
   const onScreen =
-    headerHeight + belowHeight + CONTENT_BOTTOM_PADDING - (isDeliveryBoy ? ordersCardHeight : 0);
+    headerHeight + belowHeight + CONTENT_BOTTOM_PADDING - (canUpdateOrders ? ordersCardHeight : 0);
   const mapHeight = measured
     ? Math.min(maxHeight, Math.max(minHeight, viewportHeight - onScreen))
     : maxHeight;
@@ -165,7 +165,7 @@ export function HomeScreen() {
           animateHeight={revealed}
           checkIn={dayCheckIn}
           checkOut={dayCheckOut}
-          deliveryBoy={isDeliveryBoy}
+          deliveryBoy={canUpdateOrders}
           height={mapHeight}
           live={live}
           orders={showOrders ? deliveries.pins : null}
@@ -193,7 +193,7 @@ export function HomeScreen() {
             <AttendanceCard />
           )}
           {/* Under the day's record; the page scrolls once the map is down to its smallest. */}
-          {isDeliveryBoy ? (
+          {canUpdateOrders ? (
             <View onLayout={(event) => setOrdersCardHeight(event.nativeEvent.layout.height)}>
               <OrdersCard />
             </View>

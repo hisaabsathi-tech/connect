@@ -131,20 +131,18 @@ const pageHaptics: Record<keyof typeof items, HapticKind> = {
   profile: "light",
 };
 
-// Destinations only some roles get; everyone else never sees them in the bar.
-const DELIVERY_BOY_ONLY = new Set(["orders"]);
-
 /**
  * Home and Profile for every signed-in user; Attendance when the role grants attendance view;
- * Orders for delivery boys too.
+ * Orders when it grants order edit.
  */
 export function BottomNavigation({ insets, navigation, state }: BottomTabBarProps) {
-  const { canViewAttendance, isDeliveryBoy } = useViewer();
+  const { canUpdateOrders, canViewAttendance } = useViewer();
   return (
     <View className="flex-row bg-[#F0F2FF] px-5 pt-3" style={{ paddingBottom: insets.bottom + 8 }}>
       {state.routes.map((route, index) => {
         const item = items[route.name as keyof typeof items];
-        if (!item || (DELIVERY_BOY_ONLY.has(route.name) && !isDeliveryBoy)) return null;
+        if (!item) return null;
+        if (route.name === "orders" && !canUpdateOrders) return null;
         if (route.name === "attendance" && !canViewAttendance) return null;
         const active = state.index === index;
         const color = active ? colors.primary : colors.foreground;

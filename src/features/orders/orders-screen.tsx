@@ -72,7 +72,7 @@ function matchesDrsSearch(sheet: DrsSheet, search: string) {
 }
 
 /**
- * The delivery boy's Orders tab: their orders and their delivery run sheets (DRS) on one page,
+ * The Orders tab, for any role with order edit: their orders and their delivery run sheets (DRS) on one page,
  * Orders first. Both work from the sheets issued on the day picked on Home, or a range picked
  * here; the counts on top, the status chips and the search follow the tab. Tapping a DRS shows
  * its orders, and the Orders tab narrows to one DRS with the picker under the search.
@@ -81,7 +81,7 @@ export function OrdersScreen() {
   const { token } = useAuthSession();
   const viewer = useViewer();
   // Deliveries are confirmed with the phone's location, so its state shows here as on Home.
-  const location = useLiveLocation(viewer.isDeliveryBoy);
+  const location = useLiveLocation(viewer.canUpdateOrders);
   const { resetToToday, selectedDate, today } = useDateFilter();
   const [tab, setTab] = useState<PageTab>("orders");
   const [range, setRange] = useState<DateRange | null>(null);
@@ -99,7 +99,7 @@ export function OrdersScreen() {
 
   const from = range?.from ?? selectedDate;
   const to = range?.to ?? selectedDate;
-  const data = useDrsSheets(viewer.isDeliveryBoy ? token : null, { from, to });
+  const data = useDrsSheets(viewer.canUpdateOrders ? token : null, { from, to });
   const { load, replace, sheets } = data;
 
   const updated = useCallback(
@@ -243,7 +243,7 @@ export function OrdersScreen() {
         <ListPageSkeleton tabs />
       </TabScreen>
     );
-  if (!viewer.isDeliveryBoy) return <Redirect href="/" />;
+  if (!viewer.canUpdateOrders) return <Redirect href="/" />;
 
   const onOrders = tab === "orders";
   const day = range

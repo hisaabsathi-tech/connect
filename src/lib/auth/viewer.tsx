@@ -12,28 +12,15 @@ import { fetchViewer, type Viewer } from "@/lib/api/viewer";
 import { useAuthSession } from "@/lib/auth/session";
 import { retryOnce } from "@/lib/retry";
 
-// The server's delivery boy role slug (spelt "delhivery" there) and the spellings it also accepts.
-const DELIVERY_BOY_SLUGS = new Set([
-  "delhivery-boy",
-  "delivery-boy",
-  "delhiveryboy",
-  "deliveryboy",
-]);
-
-/** True for any of the slugs the server treats as the delivery boy role. */
-export function isDeliveryBoyRoleSlug(slug: string | null | undefined) {
-  const normalized = slug
-    ?.trim()
-    .toLowerCase()
-    .replace(/[\s_]+/g, "-");
-  return Boolean(normalized && DELIVERY_BOY_SLUGS.has(normalized));
-}
-
 type ViewerState = {
   viewer: Viewer | null;
   /** False until the first answer (or failure); role-gated screens wait for it. */
   isLoaded: boolean;
-  isDeliveryBoy: boolean;
+  /**
+   * The role grants order edit: the Orders tab, the day's deliveries on Home, and updating an
+   * order. Any role with it gets them, not only the delivery boy role.
+   */
+  canUpdateOrders: boolean;
   /** The role grants attendance view: the Attendance tab and the day's record on Home. */
   canViewAttendance: boolean;
   /** The role grants attendance create: the check-in / check-out swipe. */
@@ -75,7 +62,7 @@ export function ViewerProvider({ children }: PropsWithChildren) {
       canViewAttendance: viewer
         ? viewer.attendanceActions.some((action) => action === "GET" || action === "GET_ALL")
         : true,
-      isDeliveryBoy: isDeliveryBoyRoleSlug(viewer?.roleSlug),
+      canUpdateOrders: viewer?.orderActions.includes("UPDATE") ?? false,
       isLoaded,
       reload,
       viewer,
