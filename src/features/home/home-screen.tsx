@@ -8,6 +8,7 @@ import { LocationIndicator, locationIndicatorState } from "@/components/modules/
 import { LastUpdated, OfflineChip, useNetwork } from "@/components/modules/network";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { vehiclePinFor } from "@/config/vehicle-pins";
 import { PhotoViewer, type PhotoViewerTarget } from "@/features/attendance-photo";
 import {
   LiveTripBlocks,
@@ -220,6 +221,7 @@ export function HomeScreen() {
                     }),
                   nextStopId: nextStopOf(mapTrip, nextStopPicks)?.orderId ?? null,
                   path: tripMap.path,
+                  vehiclePin: vehiclePinFor(mapTrip.vehicleWheelCount),
                   stops: tripMap.stops,
                   vehicle: tripMap.vehicle,
                 }

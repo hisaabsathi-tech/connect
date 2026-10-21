@@ -14,6 +14,7 @@ import Animated, {
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
+import { VEHICLE_PIN_ART, type VehiclePin, vehiclePinFor } from "@/config/vehicle-pins";
 import { openDrsOrder } from "@/features/orders/lib/open-order";
 import type { LiveTrip, LiveTripOrder } from "@/lib/api/live-trips";
 import { useAuthSession } from "@/lib/auth/session";
@@ -32,33 +33,34 @@ const blockedCopy: Record<NonNullable<TrackingStatus["blocked"]>, string> = {
   services: "Turn on your phone's location to start live tracking",
 };
 
-const truck = require("@/assets/map-pin/truck.webp");
-
-// The truck artwork (140×342) faces up; turned a quarter it drives left to right along the bar.
-const TRUCK_LENGTH = 56;
-const TRUCK_WIDTH = Math.round((TRUCK_LENGTH * 140) / 342);
 const PIN = 44;
 const BAR = 10;
 const EASE = { duration: 600, easing: Easing.out(Easing.cubic) };
 // Closer than this the rider is at the door.
 const ARRIVING_METRES = 150;
 
-/** The bar: the filled part is the way covered, the truck rides at its end, the pin waits. */
-function TripProgressBar({ progress }: { progress: number }) {
+/**
+ * The bar: the filled part is the way covered, the vehicle (rider or truck, by its wheels) rides
+ * at its end, the pin waits. The artwork faces up; turned a quarter it drives left to right.
+ */
+function TripProgressBar({ pin, progress }: { pin: VehiclePin; progress: number }) {
+  const art = VEHICLE_PIN_ART[pin];
+  const vehicleLength = art.bar;
+  const vehicleWidth = Math.round(art.bar * art.aspect);
   const [width, setWidth] = useState(0);
   const shown = useSharedValue(progress);
   useEffect(() => {
     shown.value = withTiming(Math.min(1, Math.max(0, progress)), EASE);
   }, [progress, shown]);
-  // The bar runs under the pin's centre; the truck stops short of the pin.
+  // The bar runs under the pin's centre; the vehicle stops short of the pin.
   const track = Math.max(0, width - PIN / 2);
   const fillStyle = useAnimatedStyle(() => ({ width: shown.value * track }));
-  const truckStyle = useAnimatedStyle(() => ({
+  const vehicleStyle = useAnimatedStyle(() => ({
     transform: [
       {
         translateX: Math.min(
-          Math.max(0, shown.value * track - TRUCK_LENGTH + 8),
-          Math.max(0, width - PIN - TRUCK_LENGTH),
+          Math.max(0, shown.value * track - vehicleLength + 8),
+          Math.max(0, width - PIN - vehicleLength),
         ),
       },
     ],
@@ -80,20 +82,20 @@ function TripProgressBar({ progress }: { progress: number }) {
         pointerEvents="none"
         style={[
           {
-            height: TRUCK_LENGTH,
-            top: (PIN - TRUCK_LENGTH) / 2,
-            width: TRUCK_LENGTH,
+            height: vehicleLength,
+            top: (PIN - vehicleLength) / 2,
+            width: vehicleLength,
           },
-          truckStyle,
+          vehicleStyle,
         ]}
       >
         <Image
           contentFit="contain"
-          source={truck}
+          source={art.source}
           style={{
-            height: TRUCK_LENGTH,
+            height: vehicleLength,
             transform: [{ rotate: "90deg" }],
-            width: TRUCK_WIDTH,
+            width: vehicleWidth,
           }}
         />
       </Animated.View>
@@ -270,7 +272,7 @@ export function LiveTripCard({
           )
         ) : null}
       </Pressable>
-      <TripProgressBar progress={order.progress ?? 0} />
+      <TripProgressBar pin={vehiclePinFor(trip.vehicleWheelCount)} progress={order.progress ?? 0} />
       <NextStopSheet onClose={() => setChoosing(false)} trip={choosing ? trip : null} />
     </Pressable>
   );

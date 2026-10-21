@@ -88,7 +88,6 @@ export function LiveTripHost() {
   const vehicleId = mine?.vehicleId ?? null;
   const reconcile = useCallback(async () => {
     // Offline or not loaded yet: a missing trip proves nothing, so a running duty carries on.
-    console.log("[tracking] reconcile", { drsId, synced, tripId, vehicleId });
     if (!synced) return;
     if (!(tripId && drsId && vehicleId)) {
       setBlocker(null);
@@ -97,20 +96,13 @@ export function LiveTripHost() {
       return;
     }
     const missing = await trackingBlocker();
-    console.log("[tracking] blocker", missing);
     setBlocker(missing);
     setTrackingStatus({ blocked: missing });
     if (missing) {
       setTrackingStatus({ running: false });
       return;
     }
-    const started = await startDuty({ drsId, label: `DRS ${drsId}`, tripId, vehicleId }).catch(
-      (error) => {
-        console.log("[tracking] startDuty threw", error);
-        return false;
-      },
-    );
-    console.log("[tracking] startDuty ->", started);
+    await startDuty({ drsId, label: `DRS ${drsId}`, tripId, vehicleId }).catch(() => false);
   }, [drsId, synced, tripId, vehicleId]);
 
   useEffect(() => {

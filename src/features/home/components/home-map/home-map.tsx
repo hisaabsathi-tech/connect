@@ -31,6 +31,8 @@ import Animated, {
 
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
+import { VEHICLE_PIN_ART, type VehiclePin, vehiclePinFor } from "@/config/vehicle-pins";
+import { useMyVehicle } from "@/hooks/use-my-vehicle";
 import type { Point } from "@/lib/api/attendance";
 import { fetchRoute, type RoadRoute } from "@/lib/api/maps";
 import { useAuthSession } from "@/lib/auth/session";
@@ -43,7 +45,6 @@ import {
   reverseGeocodeAddress,
 } from "@/lib/maps/ola-maps";
 import { dialUrl, formatMobile } from "@/lib/phone";
-import { useTrackingStatus } from "@/lib/tracking/status";
 
 /** An order still to deliver; `exact` when its street address was found, else its area. */
 export type OrderPoint = Coordinates & {
@@ -86,6 +87,7 @@ type Props = {
     path: Coordinates[];
     stops: TripStop[];
     vehicle: Coordinates | null;
+    vehiclePin: VehiclePin;
     nextStopId: string | null;
     onExpand: () => void;
   } | null;
@@ -125,18 +127,18 @@ const pins: Record<PinKind, number> = {
   order: require("@/assets/map-pin/destination.webp"),
   "order-area": require("@/assets/map-pin/transit.webp"),
   organization: require("@/assets/map-pin/fallback.webp"),
-  rider: require("@/assets/map-pin/delivery-pin.webp"),
+  // Vehicle markers come from the one place that decides how vehicles are drawn.
+  rider: VEHICLE_PIN_ART.rider.source,
   start: require("@/assets/map-pin/start.webp"),
   transit: require("@/assets/map-pin/transit.webp"),
-  truck: require("@/assets/map-pin/truck.webp"),
+  truck: VEHICLE_PIN_ART.truck.source,
 };
 // The pin artwork is 90×110 with its tip at the bottom centre.
 const PIN_SIZE = { height: 44, width: 36 };
 const LEGEND_PIN_SIZE = { height: 13, width: 11 };
-// The rider (410×614, seen from above) sits centred on the spot rather than pointing at it.
-const RIDER_SIZE = { height: 48, width: 32 };
-// The truck (140×342, seen from above, facing up) is turned to the way it is driving.
-const TRUCK_SIZE = { height: 50, width: 20 };
+// Vehicles (seen from above, facing up) sit centred on the spot and turn the way they go.
+const RIDER_SIZE = VEHICLE_PIN_ART.rider.map;
+const TRUCK_SIZE = VEHICLE_PIN_ART.truck.map;
 const centred = (kind: PinKind) => kind === "rider" || kind === "truck";
 
 // The user's own position needs no key; every other pin is named in the legend.
@@ -859,7 +861,10 @@ const at = (place: Coordinates, id: string, kind: PinKind): MapPoint => ({
  * is being tracked; the rider otherwise.
  */
 function useSelfPin(live: Coordinates | null) {
-  const tracking = useTrackingStatus().running;
+  // A two-wheeler shows as the rider, a three- or four-wheeler as the truck (see vehicle-pins);
+  // someone without a vehicle is the rider.
+  const myVehicle = useMyVehicle();
+  const kind = myVehicle ? vehiclePinFor(myVehicle.wheelCount) : "rider";
   const previous = useRef<Coordinates | null>(null);
   const [bearing, setBearing] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -870,9 +875,8 @@ function useSelfPin(live: Coordinates | null) {
     if (next !== undefined) setBearing(next);
   }, [live]);
   return useCallback(
-    (place: Coordinates, id: string): MapPoint =>
-      tracking ? { ...at(place, id, "truck"), bearing } : at(place, id, "rider"),
-    [bearing, tracking],
+    (place: Coordinates, id: string): MapPoint => ({ ...at(place, id, kind), bearing }),
+    [bearing, kind],
   );
 }
 
@@ -958,6 +962,7 @@ export function HomeMap({
               path={liveTrip.path}
               stops={liveTrip.stops}
               vehicle={liveTrip.vehicle}
+              vehiclePin={liveTrip.vehiclePin}
             />
           ) : (
             <NativeOlaMap
@@ -1340,7 +1345,10 @@ export function LiveTripMap({
   path,
   stops,
   vehicle,
+  vehiclePin = "truck",
 }: {
+  /** How the vehicle is drawn, from its wheel count (`vehiclePinFor`). */
+  vehiclePin?: VehiclePin;
   /** The stop the vehicle is heading to now; the predicted path goes there first. */
   nextStopId?: string | null;
   /** The corner control: close the full-screen map, or open it from a map in a page. */
@@ -1364,10 +1372,12 @@ export function LiveTripMap({
         ...at(stop, `trip-stop-${stop.id}`, "order" as const),
         info: { address: stop.address, title: stop.title },
       })),
-      vehicle ? { ...at(vehicle, "trip-truck", "truck"), bearing: travelBearing(heading) } : null,
+      vehicle
+        ? { ...at(vehicle, "trip-vehicle", vehiclePin), bearing: travelBearing(heading) }
+        : null,
     ];
     return items.filter((item): item is MapPoint => item !== null);
-  }, [path, stops, vehicle]);
+  }, [path, stops, vehicle, vehiclePin]);
   const trail = useMemo(
     () => path.map((point) => [point.longitude, point.latitude] as [number, number]),
     [path],

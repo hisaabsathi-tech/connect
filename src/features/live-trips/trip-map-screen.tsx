@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Text } from "@/components/modules/typography";
+import { vehiclePinFor } from "@/config/vehicle-pins";
 import { LiveTripMap } from "@/features/home/components/home-map";
 import { useLiveLocation } from "@/hooks/use-live-location";
 import { useConnectivity } from "@/lib/network/connectivity";
@@ -43,6 +44,7 @@ export function TripMapScreen() {
         path={path}
         stops={stops}
         vehicle={vehicle}
+        vehiclePin={vehiclePinFor(trip?.vehicleWheelCount)}
       />
       <View className="absolute right-4 left-4" style={{ bottom: insets.bottom + 16 }}>
         {trip && order && !ended ? (

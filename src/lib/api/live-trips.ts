@@ -31,6 +31,8 @@ export type LiveTrip = {
   startedAt: string;
   /** This phone's user is the one driving it. */
   mine: boolean;
+  /** "2", "3" or "4" wheels; picks how the vehicle is drawn (config/vehicle-pins). */
+  vehicleWheelCount: string | null;
   lastPoint: LiveTripPoint | null;
   orders: LiveTripOrder[];
 };
@@ -38,7 +40,8 @@ export type LiveTrip = {
 const LIVE_TRIPS_QUERY = `
 query LiveVehicleTrips {
   liveVehicleTrips {
-    id drsId drsStatus vehicleId vehicleNo deliveryBoyId deliveryBoyName startedAt mine
+    id drsId drsStatus vehicleId vehicleNo vehicleWheelCount deliveryBoyId deliveryBoyName
+    startedAt mine
     lastPoint { latitude longitude recordedAt }
     orders {
       orderId awbNo receiverName address latitude longitude
