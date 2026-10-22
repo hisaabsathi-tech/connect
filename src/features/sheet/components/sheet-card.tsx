@@ -30,23 +30,32 @@ function OrganizationBadge({ name }: { name: string }) {
 
 /**
  * One sheet in the list: its name across the card, when it was last saved and how many orders
- * it holds, and a full-width button that downloads its Shipping Manifest. `showOrganization` adds
- * the organization it belongs to, for a list that holds more than one organization's sheets.
+ * it holds, and a full-width button that downloads its Shipping Manifest. Tapping the card opens
+ * its orders. `showOrganization` adds the organization it belongs to, for a list that holds more
+ * than one organization's sheets.
  */
 export function SheetCard({
   downloading,
   onDownload,
+  onOpen,
   sheet,
   showOrganization = false,
 }: {
   /** The button's spinner while the manifest is built. */
   downloading: boolean;
   onDownload: () => void;
+  onOpen: () => void;
   sheet: SmartSheetSummary;
   showOrganization?: boolean;
 }) {
   return (
-    <View className="border border-[#E4E6EE] bg-card p-4">
+    <Pressable
+      accessibilityHint="Opens the sheet's orders"
+      accessibilityRole="button"
+      className="border border-[#E4E6EE] bg-card p-4 active:bg-[#FAFBFF]"
+      onPress={onOpen}
+      onPressIn={() => haptic("light")}
+    >
       <View className="flex-row items-center gap-3">
         <SheetIcon size={34} />
         <Text className="flex-1 text-base font-semibold text-foreground" numberOfLines={2}>
@@ -78,6 +87,6 @@ export function SheetCard({
           </>
         )}
       </Pressable>
-    </View>
+    </Pressable>
   );
 }

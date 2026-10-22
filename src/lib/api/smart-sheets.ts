@@ -32,6 +32,8 @@ export type SheetOrganization = {
   canCreate: boolean;
   /** May see its clients. */
   canListClients: boolean;
+  /** May change and remove a sheet's orders. */
+  canUpdate: boolean;
 };
 
 /** A credit customer of an organization: who a new sheet's orders are for. */
@@ -110,5 +112,75 @@ export function appendSheetRow(
     `${LINKED}/${part(sheet.organizationId)}/${part(sheet.id)}/rows`,
     token,
     { body: JSON.stringify({ ...order, clientActionId }), method: "POST" },
+  );
+}
+
+/** One order of a sheet, as its table on the app shows it. */
+export type SheetOrderRow = {
+  /** Its row in the sheet; names it for an edit or a removal. */
+  row: number;
+  serial: number | null;
+  awbNo: string;
+  clientName: string;
+  clientCode: string;
+  /** `YYYY-MM-DD`, or null when the sheet's cell isn't a date. */
+  orderDate: string | null;
+  pincode: string;
+  receiverName: string;
+  receiverPhone: string;
+  receiverAddress: string;
+  weight: number | null;
+  volumetricWeight: number | null;
+};
+
+export type SheetOrderRows = {
+  id: string;
+  name: string;
+  organizationId: string;
+  organizationName: string;
+  rows: SheetOrderRow[];
+  /** The sheet's saved version; a change is made on it, so it never lands on a moved row. */
+  version: number;
+  /** May change and remove the orders (order update there). */
+  canUpdate: boolean;
+};
+
+/** The sheet's orders, top to bottom. */
+export function fetchSheetRows(token: string, sheet: { id: string; organizationId: string }) {
+  return apiRequest<SheetOrderRows>(
+    `${LINKED}/${part(sheet.organizationId)}/${part(sheet.id)}/rows`,
+    token,
+  );
+}
+
+type RowChange = { dataRows: number; id: string; version: number };
+
+/**
+ * Changes one order of the sheet, on the version the app read; refused (409) when the sheet has
+ * changed since, so the table is reloaded first.
+ */
+export function editSheetRow(
+  token: string,
+  sheet: { id: string; organizationId: string },
+  change: { row: number; version: number },
+  order: Omit<SheetOrderInput, "clientId">,
+) {
+  return apiRequest<RowChange>(
+    `${LINKED}/${part(sheet.organizationId)}/${part(sheet.id)}/rows/${change.row}`,
+    token,
+    { body: JSON.stringify({ ...order, version: change.version }), method: "PATCH" },
+  );
+}
+
+/** Removes one order of the sheet, on the version the app read; the rows under it move up. */
+export function removeSheetRow(
+  token: string,
+  sheet: { id: string; organizationId: string },
+  change: { row: number; version: number },
+) {
+  return apiRequest<RowChange>(
+    `${LINKED}/${part(sheet.organizationId)}/${part(sheet.id)}/rows/${change.row}?version=${change.version}`,
+    token,
+    { method: "DELETE" },
   );
 }

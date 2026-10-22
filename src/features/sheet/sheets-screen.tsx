@@ -211,6 +211,16 @@ export function SheetsScreen() {
           <SheetCard
             downloading={downloading === sheetKey(item)}
             onDownload={() => void download(item)}
+            onOpen={() =>
+              router.push({
+                params: {
+                  name: item.name,
+                  organizationId: item.organizationId,
+                  sheetId: item.id,
+                },
+                pathname: "/sheet/rows",
+              })
+            }
             sheet={item}
             showOrganization={manyOrganizations}
           />

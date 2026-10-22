@@ -1,5 +1,6 @@
 import {
   Calendar03Icon,
+  CheckmarkCircle02Icon,
   CirclePlusIcon,
   Location01Icon,
   Package04Icon,
@@ -22,8 +23,14 @@ import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { KEYBOARD_GAP, useKeyboardReveal } from "@/hooks/use-keyboard-reveal";
+import { ApiError } from "@/lib/api/client";
 import type { AddressSuggestion } from "@/lib/api/maps";
-import { appendSheetRow, createClientSheet, type SheetOrderInput } from "@/lib/api/smart-sheets";
+import {
+  appendSheetRow,
+  createClientSheet,
+  editSheetRow,
+  type SheetOrderInput,
+} from "@/lib/api/smart-sheets";
 import { useAuthSession } from "@/lib/auth/session";
 import { useDateFilter } from "@/lib/date";
 import { errorMessage } from "@/lib/errors";
@@ -102,30 +109,63 @@ function Section({
   );
 }
 
+type Params = {
+  clientCode: string;
+  clientId: string;
+  clientName: string;
+  organizationId: string;
+  organizationName: string;
+  /** "edit": change one order of a sheet (`sheetId`, `row`, `version`) instead of adding. */
+  mode?: string;
+  sheetId?: string;
+  row?: string;
+  version?: string;
+  // The order being edited, as its table read it.
+  orderDate?: string;
+  pincode?: string;
+  receiverName?: string;
+  receiverPhone?: string;
+  receiverAddress?: string;
+  weight?: string;
+  volumetricWeight?: string;
+};
+
+/** The order being edited, from the table's params. */
+function formFrom(params: Params): Form {
+  return {
+    pincode: params.pincode ?? "",
+    receiverAddress: params.receiverAddress ?? "",
+    receiverName: params.receiverName ?? "",
+    receiverPhone: mobileDigits(params.receiverPhone ?? "").slice(0, 10),
+    volumetricWeight: params.volumetricWeight ?? "",
+    weight: params.weight ?? "",
+  };
+}
+
 /**
  * Adding orders for one client to a new Smart Sheet, one at a time. The first save starts the
  * sheet in the client's organization, named after the client and today; each save writes the
  * order as a row of that sheet, which anyone with it open on the web sees at once, then clears
  * the form for the next. The chip counts the sheet's shipments. Change goes back to pick another
  * client, which starts another sheet.
+ *
+ * Opened from a sheet's table to edit one order, the form comes filled in and Update & Save
+ * changes that row; the page stays on the saved details, and back returns to the table.
  */
 export function AddOrderScreen() {
-  const params = useLocalSearchParams<{
-    clientCode: string;
-    clientId: string;
-    clientName: string;
-    organizationId: string;
-    organizationName: string;
-  }>();
+  const params = useLocalSearchParams<Params>();
+  const editing = params.mode === "edit" && Boolean(params.sheetId && params.row);
   const { token } = useAuthSession();
   const { requireOnline } = useNetwork();
   const toast = useToast();
   const keyboard = useKeyboardReveal();
   const { today } = useDateFilter();
   const { organizations } = useSheetOrganizations();
-  const [orderDate, setOrderDate] = useState(today);
+  const [orderDate, setOrderDate] = useState(() => (editing && params.orderDate) || today);
   const [dateOpen, setDateOpen] = useState(false);
-  const [form, setForm] = useState<Form>(EMPTY_FORM);
+  const [form, setForm] = useState<Form>(() => (editing ? formFrom(params) : EMPTY_FORM));
+  // The sheet version an edit is made on; each saved edit moves it on.
+  const [version, setVersion] = useState(() => Number(params.version ?? 0));
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [saving, setSaving] = useState(false);
   // The sheet this visit fills, once the first order started it.
@@ -162,7 +202,7 @@ export function AddOrderScreen() {
       haptic("error");
       return;
     }
-    if (!requireOnline("Saving an order")) return;
+    if (!requireOnline(editing ? "Updating the order" : "Saving an order")) return;
     const order: SheetOrderInput = {
       clientId: params.clientId,
       orderDate,
@@ -174,6 +214,33 @@ export function AddOrderScreen() {
       weight: Number(form.weight),
     };
     setSaving(true);
+    if (editing) {
+      try {
+        const { clientId: _client, ...details } = order;
+        const saved = await editSheetRow(
+          token,
+          { id: params.sheetId ?? "", organizationId: params.organizationId },
+          { row: Number(params.row), version },
+          details,
+        );
+        // Further edits here are made on the version this one saved.
+        setVersion(saved.version);
+        setAddressTyped(false);
+        haptic("success");
+        toast.success("Order updated", "The sheet shows the new details.");
+      } catch (error) {
+        haptic("error");
+        toast.error(
+          "Couldn't update the order",
+          error instanceof ApiError && error.status === 409
+            ? "The sheet changed meanwhile. Go back and open the order again."
+            : errorMessage(error, "Please try again."),
+        );
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     try {
       let target = sheet;
       if (!target) {
@@ -229,17 +296,23 @@ export function AddOrderScreen() {
         >
           <View className="flex-row items-start justify-between gap-3">
             <View className="flex-1">
-              <Text className="text-2xl font-semibold text-foreground">Add Order</Text>
-              <Text className="mt-0.5 text-sm text-muted-foreground">Fill the details below</Text>
-            </View>
-            <View
-              accessibilityLabel={`${shipments} shipments in this sheet`}
-              className="mt-1 h-9 justify-center border border-primary bg-accent px-3"
-            >
-              <Text className="text-sm font-semibold text-primary">
-                {shipments} {shipments === 1 ? "Shipment" : "Shipments"}
+              <Text className="text-2xl font-semibold text-foreground">
+                {editing ? "Update Order" : "Add Order"}
+              </Text>
+              <Text className="mt-0.5 text-sm text-muted-foreground">
+                {editing ? "Change the details below" : "Fill the details below"}
               </Text>
             </View>
+            {editing ? null : (
+              <View
+                accessibilityLabel={`${shipments} shipments in this sheet`}
+                className="mt-1 h-9 justify-center border border-primary bg-accent px-3"
+              >
+                <Text className="text-sm font-semibold text-primary">
+                  {shipments} {shipments === 1 ? "Shipment" : "Shipments"}
+                </Text>
+              </View>
+            )}
           </View>
 
           <View className="mt-5 flex-row items-center gap-3 border border-[#EEF0F6] bg-white p-4">
@@ -256,17 +329,20 @@ export function AddOrderScreen() {
                 </Text>
               ) : null}
             </View>
-            <Pressable
-              accessibilityLabel="Change client"
-              accessibilityRole="button"
-              className="h-10 flex-row items-center gap-2 bg-primary px-4 active:bg-primary-hover"
-              disabled={saving}
-              onPress={() => router.back()}
-              onPressIn={() => haptic("light")}
-            >
-              <Text className="text-sm font-medium text-primary-foreground">Change</Text>
-              <HugeiconsIcon color={colors.primaryForeground} icon={ShuffleIcon} size={16} />
-            </Pressable>
+            {/* An edited order keeps its client. */}
+            {editing ? null : (
+              <Pressable
+                accessibilityLabel="Change client"
+                accessibilityRole="button"
+                className="h-10 flex-row items-center gap-2 bg-primary px-4 active:bg-primary-hover"
+                disabled={saving}
+                onPress={() => router.back()}
+                onPressIn={() => haptic("light")}
+              >
+                <Text className="text-sm font-medium text-primary-foreground">Change</Text>
+                <HugeiconsIcon color={colors.primaryForeground} icon={ShuffleIcon} size={16} />
+              </Pressable>
+            )}
           </View>
 
           <Section icon={Package04Icon} title="Shipment Details">
@@ -411,9 +487,13 @@ export function AddOrderScreen() {
             ) : (
               <>
                 <Text className="text-base font-medium text-primary-foreground">
-                  Save & Add another order
+                  {editing ? "Update & Save" : "Save & Add another order"}
                 </Text>
-                <HugeiconsIcon color={colors.primaryForeground} icon={CirclePlusIcon} size={20} />
+                <HugeiconsIcon
+                  color={colors.primaryForeground}
+                  icon={editing ? CheckmarkCircle02Icon : CirclePlusIcon}
+                  size={20}
+                />
               </>
             )}
           </Pressable>
