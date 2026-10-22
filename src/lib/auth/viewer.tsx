@@ -23,8 +23,10 @@ type ViewerState = {
   /** False until the first answer (or failure); role-gated screens wait for it. */
   isLoaded: boolean;
   /**
-   * The role grants order edit: the Orders tab, the day's deliveries on Home, and updating an
-   * order. Any role with it gets them, not only the delivery boy role.
+   * Delivery work: the role grants order edit but not order create. It brings the Orders tab, the
+   * day's deliveries on Home, and updating an order. Any such role gets them, not only the
+   * delivery boy role; a role that also creates orders (office staff, who book them through the
+   * Sheet tab) doesn't.
    */
   canUpdateOrders: boolean;
   /**
@@ -89,7 +91,9 @@ export function ViewerProvider({ children }: PropsWithChildren) {
       canViewAttendance: viewer
         ? viewer.attendanceActions.some((action) => action === "GET" || action === "GET_ALL")
         : true,
-      canUpdateOrders: viewer?.orderActions.includes("UPDATE") ?? false,
+      canUpdateOrders:
+        (viewer?.orderActions.includes("UPDATE") ?? false) &&
+        !(viewer?.orderActions.includes("CREATE") ?? false),
       canViewOrders:
         viewer?.orderActions.some((action) => action === "GET" || action === "GET_ALL") ?? false,
       canViewPickups: viewer?.canViewPickups ?? false,

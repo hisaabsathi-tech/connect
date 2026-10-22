@@ -156,7 +156,8 @@ const pageHaptics: Record<keyof typeof items, HapticKind> = {
 
 /**
  * Home and Profile for every signed-in user; Attendance when the role grants attendance view;
- * Orders when it grants order edit; Sheet when it grants the Smart Sheet menu.
+ * Orders when it grants order edit without order create (delivery work); Sheet when it grants the
+ * Smart Sheet menu.
  */
 export function BottomNavigation({ insets, navigation, state }: BottomTabBarProps) {
   const { canUpdateOrders, canViewAttendance, canViewPickups, canViewSheets } = useViewer();
