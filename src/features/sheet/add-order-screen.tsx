@@ -38,11 +38,20 @@ import { haptic } from "@/lib/haptics";
 import { newActionId } from "@/lib/offline/outbox";
 
 import { useAddressSuggestions } from "./hooks/use-address-suggestions";
+import {
+  clashMessage,
+  type IdentifierCheck,
+  useIdentifierCheck,
+} from "./hooks/use-identifier-check";
 import { type PincodeCheck, usePincodeCheck } from "./hooks/use-pincode-check";
 import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
 import { formatOrderDay } from "./lib/format";
 
 type Form = {
+  /** Optional: the web fills it in otherwise. */
+  awbNo: string;
+  /** Optional, likewise. */
+  refNo: string;
   pincode: string;
   receiverName: string;
   receiverPhone: string;
@@ -54,7 +63,9 @@ type Form = {
 type Field = keyof Form;
 
 const EMPTY_FORM: Form = {
+  awbNo: "",
   pincode: "",
+  refNo: "",
   receiverAddress: "",
   receiverName: "",
   receiverPhone: "",
@@ -63,6 +74,17 @@ const EMPTY_FORM: Form = {
 };
 
 const WEIGHT = /^\d{1,6}(\.\d{1,3})?$/;
+// Letters, digits and dashes, up to 64: what the server and the web's duplicate check accept.
+const AWB = /^[A-Za-z0-9-]{1,64}$/;
+const AWB_MAX_LENGTH = 64;
+// What the server and the web's duplicate check accept for a reference number.
+const REF_MAX_LENGTH = 120;
+
+/** An edited order's AWB and reference numbers as the sheet has them (null when adding). */
+type Kept = { awbNo: string | null; refNo: string | null };
+
+/** The live checks of the AWB and reference numbers. */
+type Checks = { awbNo: IdentifierCheck; refNo: IdentifierCheck };
 
 /** The 10 digits of an Indian mobile number, without spaces or a +91 / 0 prefix. */
 function mobileDigits(value: string) {
@@ -72,9 +94,31 @@ function mobileDigits(value: string) {
   return digits;
 }
 
-/** What is wrong with each field, if anything. `pincode` is the postal check of the pincode. */
-function validate(form: Form, pincode: PincodeCheck): Partial<Record<Field, string>> {
+/** A well-formed AWB number, or one kept as the sheet has it (which isn't checked again). */
+function awbFormatError(awbNo: string, kept: string | null) {
+  const value = awbNo.trim();
+  if (!value || value === kept || AWB.test(value)) return null;
+  return "Use only letters, digits and dashes";
+}
+
+/**
+ * What is wrong with each field, if anything. `pincode` is the postal check of the pincode,
+ * `checks` the duplicate checks of the AWB and reference numbers, and `kept` an edited order's
+ * numbers as the sheet has them, which aren't checked again.
+ */
+function validate(
+  form: Form,
+  pincode: PincodeCheck,
+  kept: Kept,
+  checks: Checks,
+): Partial<Record<Field, string>> {
   const errors: Partial<Record<Field, string>> = {};
+  const awbFormat = awbFormatError(form.awbNo, kept.awbNo);
+  if (awbFormat) errors.awbNo = awbFormat;
+  else if (checks.awbNo.status === "invalid")
+    errors.awbNo = clashMessage("awbNo", checks.awbNo.clash) ?? undefined;
+  if (checks.refNo.status === "invalid")
+    errors.refNo = clashMessage("refNo", checks.refNo.clash) ?? undefined;
   if (!/^\d{6}$/.test(form.pincode.trim())) errors.pincode = "Enter a 6 digit pincode";
   else if (pincode.status === "invalid") errors.pincode = "This pincode doesn't exist";
   if (!form.receiverName.trim()) errors.receiverName = "Enter the receiver's name";
@@ -127,6 +171,8 @@ type Params = {
   row?: string;
   version?: string;
   // The order being edited, as its table read it.
+  awbNo?: string;
+  refNo?: string;
   orderDate?: string;
   pincode?: string;
   receiverName?: string;
@@ -139,7 +185,9 @@ type Params = {
 /** The order being edited, from the table's params. */
 function formFrom(params: Params): Form {
   return {
+    awbNo: params.awbNo ?? "",
     pincode: params.pincode ?? "",
+    refNo: params.refNo ?? "",
     receiverAddress: params.receiverAddress ?? "",
     receiverName: params.receiverName ?? "",
     receiverPhone: mobileDigits(params.receiverPhone ?? "").slice(0, 10),
@@ -206,6 +254,33 @@ export function AddOrderScreen() {
   // The id of an order whose save didn't come back: resending it can't add it twice.
   const pendingActionId = useRef<string | null>(null);
   const pincode = usePincodeCheck(token, form.pincode);
+  // An edited order's numbers as the sheet has them; kept as they are, they aren't sent or
+  // checked again.
+  const kept: Kept = {
+    awbNo: editing ? (params.awbNo ?? "").trim() : null,
+    refNo: editing ? (params.refNo ?? "").trim() : null,
+  };
+  // Checked against the orders and this sheet: the one opened or started, else none yet.
+  const checkIn = {
+    organizationId: params.organizationId,
+    row: editing ? Number(params.row) : undefined,
+    sheetId: sheet?.id ?? params.sheetId,
+    token,
+  };
+  const checks: Checks = {
+    awbNo: useIdentifierCheck({
+      ...checkIn,
+      field: "awbNo",
+      skip: form.awbNo.trim() === kept.awbNo || awbFormatError(form.awbNo, kept.awbNo) !== null,
+      value: form.awbNo,
+    }),
+    refNo: useIdentifierCheck({
+      ...checkIn,
+      field: "refNo",
+      skip: form.refNo.trim() === kept.refNo,
+      value: form.refNo,
+    }),
+  };
   // Suggestions follow typing in the address; a pick (or leaving the field) puts them away.
   const [addressTyped, setAddressTyped] = useState(false);
   const suggestions = useAddressSuggestions(token, form.receiverAddress, addressTyped);
@@ -228,14 +303,23 @@ export function AddOrderScreen() {
 
   const save = async () => {
     if (saving || !token) return;
-    const found = validate(form, pincode);
+    const found = validate(form, pincode, kept, checks);
     setErrors(found);
     if (Object.values(found).some(Boolean)) {
       haptic("error");
       return;
     }
     if (!requireOnline(editing ? "Updating the order" : "Saving an order")) return;
+    const awbNo = form.awbNo.trim().toUpperCase();
+    const refNo = form.refNo.trim();
+    // A new order sends a number only when entered. An edit sends a changed one, empty to clear
+    // it, and leaves out one kept as it was, so the sheet's cell stays exactly as the web wrote
+    // it.
+    const send = (value: string, keptValue: string | null) =>
+      editing ? value !== keptValue : Boolean(value);
     const order: SheetOrderInput = {
+      ...(send(form.awbNo.trim(), kept.awbNo) ? { awbNo } : {}),
+      ...(send(refNo, kept.refNo) ? { refNo } : {}),
       clientId: params.clientId,
       orderDate,
       pincode: form.pincode.trim(),
@@ -400,6 +484,31 @@ export function AddOrderScreen() {
                 />
               </Pressable>
             </View>
+            <FormField
+              {...field("awbNo")}
+              autoCapitalize="characters"
+              // Wrong as typed, or already taken: said at once, as the pincode is.
+              error={
+                errors.awbNo ??
+                awbFormatError(form.awbNo, kept.awbNo) ??
+                clashMessage("awbNo", checks.awbNo.clash)
+              }
+              label="AWB No"
+              maxLength={AWB_MAX_LENGTH}
+              // Upper case and no spaces, as AWB numbers are written; the scanner's paste too.
+              onChangeText={(value) => update("awbNo")(value.replace(/\s+/g, "").toUpperCase())}
+              placeholder="Enter AWB number"
+              status={checks.awbNo.status}
+            />
+            <FormField
+              {...field("refNo")}
+              autoCapitalize="none"
+              error={errors.refNo ?? clashMessage("refNo", checks.refNo.clash)}
+              label="Reference No"
+              maxLength={REF_MAX_LENGTH}
+              placeholder="Enter reference number"
+              status={checks.refNo.status}
+            />
             <FormField
               {...field("pincode")}
               hint={

@@ -293,6 +293,8 @@ export function SheetRowsScreen() {
       params: {
         clientCode: order.clientCode,
         clientName: order.clientName,
+        awbNo: order.awbNo,
+        refNo: order.refNo,
         mode: "edit",
         orderDate: order.orderDate ?? "",
         organizationId: data.organizationId,

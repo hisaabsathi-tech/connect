@@ -55,9 +55,33 @@ export type SheetOrderInput = {
   receiverAddress: string;
   weight: number;
   volumetricWeight: number;
+  /** Optional. On an edit, empty clears the sheet's AWB cell. */
+  awbNo?: string;
+  /** Optional, likewise. */
+  refNo?: string;
 };
 
 const LINKED = "/orders/smart-sheets/linked";
+
+/** Where a number is already taken: by an order, or by another order of the sheet. */
+export type IdentifierClash = "order" | "sheet" | null;
+
+/**
+ * Whether an AWB or reference number is free, as the web Smart Sheet checks it: not an order's
+ * already (AWB numbers across organizations, reference numbers in this one), nor another order's
+ * in the sheet (leaving out `row`, the one being edited).
+ */
+export function checkSheetIdentifiers(
+  token: string,
+  organizationId: string,
+  input: { awbNo?: string; refNo?: string; row?: number; sheetId?: string },
+) {
+  return apiRequest<{ awbNo: IdentifierClash; refNo: IdentifierClash }>(
+    `${LINKED}/${encodeURIComponent(organizationId)}/check`,
+    token,
+    { body: JSON.stringify(input), method: "POST" },
+  );
+}
 const part = encodeURIComponent;
 
 /**
@@ -121,6 +145,7 @@ export type SheetOrderRow = {
   row: number;
   serial: number | null;
   awbNo: string;
+  refNo: string;
   clientName: string;
   clientCode: string;
   /** `YYYY-MM-DD`, or null when the sheet's cell isn't a date. */
