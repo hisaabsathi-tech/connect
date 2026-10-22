@@ -547,14 +547,18 @@ export function SheetRowsScreen() {
       ) : null}
       <SheetImages
         onClose={() => setImagesOpen(false)}
-        onDelete={async (scan) => {
-          if (!token) return;
-          await deleteSheetLabelScan(token, sheet.organizationId, scan.id);
-          const left = scans.filter((item) => item.id !== scan.id);
-          setScans(left);
-          // The last photo gone, the empty Images screen closes too.
-          if (!left.length) setImagesOpen(false);
-        }}
+        onDelete={
+          organization?.canDelete
+            ? async (scan) => {
+                if (!token) return;
+                await deleteSheetLabelScan(token, sheet.organizationId, scan.id);
+                const left = scans.filter((item) => item.id !== scan.id);
+                setScans(left);
+                // The last photo gone, the empty Images screen closes too.
+                if (!left.length) setImagesOpen(false);
+              }
+            : undefined
+        }
         scans={scans}
         sheetName={data?.name ?? params.name ?? ""}
         visible={imagesOpen}

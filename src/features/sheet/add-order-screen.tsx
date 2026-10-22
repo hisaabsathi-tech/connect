@@ -358,6 +358,9 @@ export function AddOrderScreen() {
   const keyboard = useKeyboardReveal();
   const { today } = useDateFilter();
   const { organizations } = useSheetOrganizations();
+  // Deleting a label photo needs order delete in the sheet's organization.
+  const canDeleteScans =
+    organizations.find((item) => item.id === params.organizationId)?.canDelete ?? false;
   const [orderDate, setOrderDate] = useState(() => (editing && params.orderDate) || today);
   const [dateOpen, setDateOpen] = useState(false);
   const [form, setForm] = useState<Form>(() => (editing ? formFrom(params) : EMPTY_FORM));
@@ -1123,15 +1126,19 @@ export function AddOrderScreen() {
       </View>
       <SheetImages
         onClose={() => setImagesOpen(false)}
-        onDelete={async (scan) => {
-          if (!token) return;
-          await deleteSheetLabelScan(token, params.organizationId, scan.id);
-          const left = sheetScans.filter((item) => item.id !== scan.id);
-          setSheetScans(left);
-          // The last photo gone, the empty Images screen closes too.
-          if (!left.length) setImagesOpen(false);
-          reloadSheetScans();
-        }}
+        onDelete={
+          canDeleteScans
+            ? async (scan) => {
+                if (!token) return;
+                await deleteSheetLabelScan(token, params.organizationId, scan.id);
+                const left = sheetScans.filter((item) => item.id !== scan.id);
+                setSheetScans(left);
+                // The last photo gone, the empty Images screen closes too.
+                if (!left.length) setImagesOpen(false);
+                reloadSheetScans();
+              }
+            : undefined
+        }
         scans={sheetScans}
         sheetName={sheetName}
         visible={imagesOpen}

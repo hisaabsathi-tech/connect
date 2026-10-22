@@ -34,6 +34,8 @@ export type SheetOrganization = {
   canListClients: boolean;
   /** May change and remove a sheet's orders. */
   canUpdate: boolean;
+  /** May delete a sheet's label photos for good (order delete there). */
+  canDelete: boolean;
 };
 
 /** A credit customer of an organization: who a new sheet's orders are for. */

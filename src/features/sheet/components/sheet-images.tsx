@@ -65,7 +65,7 @@ function ScanCard({ onOpen, scan }: { onOpen: () => void; scan: SheetLabelScan }
 
 /**
  * Every label photo scanned for this sheet, two to a row; a tap shows one large (pinch to zoom).
- * Photos whose order was saved carry "On sheet".
+ * Photos whose order was saved carry "On sheet". Without `onDelete` the large photo has no Delete.
  */
 export function SheetImages({
   onClose,
@@ -75,8 +75,8 @@ export function SheetImages({
   visible,
 }: {
   onClose: () => void;
-  /** Deletes the photo for good on the server. */
-  onDelete: (scan: SheetLabelScan) => Promise<void>;
+  /** Deletes the photo for good on the server; left out when the member may not delete. */
+  onDelete?: (scan: SheetLabelScan) => Promise<void>;
   scans: SheetLabelScan[];
   sheetName: string;
   visible: boolean;
@@ -88,7 +88,7 @@ export function SheetImages({
 
   // Delete on the large photo, once its own sheet has asked; then back to the photos.
   const remove = async (scan: SheetLabelScan) => {
-    if (deleting) return;
+    if (deleting || !onDelete) return;
     setDeleting(true);
     try {
       await onDelete(scan);
@@ -146,7 +146,7 @@ export function SheetImages({
       </View>
       <PhotoDialog
         action={
-          open
+          open && onDelete
             ? {
                 busy: deleting,
                 confirm: {
