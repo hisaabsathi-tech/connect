@@ -109,12 +109,15 @@ function DayCell({
  * calendar where the first tap picks the start and the second the end. Days after today can't be
  * picked unless `allowFuture` (orders and pickups, which can be issued ahead, e.g. tomorrow's DRS).
  * Apply hands the range back; Cancel or closing keeps the previous one.
+ *
+ * `single` picks one day instead (a one-day range): each tap chooses the day, with no presets.
  */
 export function DateRangeSheet({
   allowFuture = false,
   onApply,
   onClose,
   range,
+  single = false,
   today,
   visible,
 }: {
@@ -123,6 +126,8 @@ export function DateRangeSheet({
   onApply: (range: DateRange) => void;
   onClose: () => void;
   range: DateRange | null;
+  /** One day, e.g. an order's date. */
+  single?: boolean;
   today: string;
   visible: boolean;
 }) {
@@ -140,6 +145,10 @@ export function DateRangeSheet({
 
   const pick = (date: string) => {
     haptic("selection");
+    if (single) {
+      setDraft({ from: date, to: date });
+      return;
+    }
     setDraft((current) => {
       // A new start after a complete range, or before the current start.
       if (!current.from || current.to || date < current.from) return { from: date, to: null };
@@ -158,43 +167,47 @@ export function DateRangeSheet({
   return (
     <BottomSheet onClose={onClose} visible={visible}>
       <Text className="mt-4 text-xl font-semibold leading-7 text-foreground">
-        Select Date Range
+        {single ? "Select Date" : "Select Date Range"}
       </Text>
       <Text className="mt-0.5 text-sm text-muted-foreground">
         {draft.from
           ? draft.to === draft.from
             ? formatDayLabel(draft.from)
             : `${formatDayLabel(draft.from)} - ${draft.to ? formatDayLabel(draft.to) : "pick an end date"}`
-          : "Pick a start date"}
+          : single
+            ? "Pick a date"
+            : "Pick a start date"}
       </Text>
 
-      <ScrollView
-        className="mt-4 -mx-5"
-        contentContainerClassName="gap-2 px-5"
-        horizontal
-        showsHorizontalScrollIndicator={false}
-      >
-        {presets.map((preset) => {
-          const active = complete?.from === preset.range.from && complete?.to === preset.range.to;
-          return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              className={`h-9 justify-center border px-3 ${active ? "border-primary bg-accent" : "border-border bg-card"}`}
-              key={preset.label}
-              onPress={() => {
-                haptic("selection");
-                setDraft(preset.range);
-                setMonth(startOfMonth(preset.range.to));
-              }}
-            >
-              <Text className={`text-sm ${active ? "text-primary" : "text-foreground"}`}>
-                {preset.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      {single ? null : (
+        <ScrollView
+          className="mt-4 -mx-5"
+          contentContainerClassName="gap-2 px-5"
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          {presets.map((preset) => {
+            const active = complete?.from === preset.range.from && complete?.to === preset.range.to;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                className={`h-9 justify-center border px-3 ${active ? "border-primary bg-accent" : "border-border bg-card"}`}
+                key={preset.label}
+                onPress={() => {
+                  haptic("selection");
+                  setDraft(preset.range);
+                  setMonth(startOfMonth(preset.range.to));
+                }}
+              >
+                <Text className={`text-sm ${active ? "text-primary" : "text-foreground"}`}>
+                  {preset.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
 
       <View className="mt-4 flex-row items-center justify-between">
         <Pressable

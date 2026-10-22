@@ -1,6 +1,6 @@
 import { Calendar03Icon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Pressable, TextInput, type TextInputProps, View } from "react-native";
 
 import { Text } from "@/components/modules/typography";
@@ -10,13 +10,53 @@ import { haptic } from "@/lib/haptics";
 import { DateRangeSheet } from "./date-range-sheet";
 import { type DateRange, rangeLabel } from "./range-label";
 
+/** An applied filter under the bar; tapping it or its cross clears it. */
+function Chip({
+  clearLabel,
+  label,
+  onClear,
+}: {
+  clearLabel: string;
+  label: string;
+  onClear: () => void;
+}) {
+  const clear = () => {
+    haptic("light");
+    onClear();
+  };
+  return (
+    <View className="h-9 max-w-full flex-row items-center border border-primary bg-accent">
+      <Pressable
+        accessibilityLabel={clearLabel}
+        accessibilityRole="button"
+        className="h-full shrink justify-center"
+        onPress={clear}
+      >
+        <Text className="px-3 text-sm text-primary" numberOfLines={1}>
+          {label}
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityLabel={clearLabel}
+        accessibilityRole="button"
+        className="h-full w-9 items-center justify-center border-primary border-l"
+        onPress={clear}
+      >
+        <HugeiconsIcon color={colors.primary} icon={Cancel01Icon} size={14} />
+      </Pressable>
+    </View>
+  );
+}
+
 /**
  * The list pages' search bar with the date range calendar at its end. An applied range shows as
  * a chip under the bar, with a cross that clears it. The range sheet is rendered here.
  */
 export function SearchRangeToolbar({
+  accessory,
   allowFuture = false,
   autoCapitalize = "words",
+  filterChip,
   onQueryChange,
   onSelectedDateClear,
   onRangeChange,
@@ -26,6 +66,10 @@ export function SearchRangeToolbar({
   selectedDate = null,
   today,
 }: {
+  /** Another filter button in the bar, before the calendar (e.g. an organization picker). */
+  accessory?: ReactNode;
+  /** That filter's applied value, as a chip with a cross beside the date chip. */
+  filterChip?: { label: string; onClear: () => void } | null;
   /** The calendar also offers upcoming days (and a Tomorrow preset). */
   allowFuture?: boolean;
   autoCapitalize?: TextInputProps["autoCapitalize"];
@@ -69,6 +113,7 @@ export function SearchRangeToolbar({
             <HugeiconsIcon color={colors.mutedForeground} icon={Cancel01Icon} size={16} />
           </Pressable>
         ) : null}
+        {accessory}
         <Pressable
           accessibilityLabel="Select date range"
           accessibilityRole="button"
@@ -84,34 +129,27 @@ export function SearchRangeToolbar({
           />
         </Pressable>
       </View>
-      {range || selectedDate ? (
-        <View className="mt-3 h-9 flex-row items-center self-start border border-primary bg-accent">
-          <Pressable
-            accessibilityLabel={range ? "Clear date range" : "Clear selected date"}
-            accessibilityRole="button"
-            className="h-full justify-center"
-            onPress={() => {
-              haptic("light");
-              if (range) onRangeChange(null);
-              else onSelectedDateClear?.();
-            }}
-          >
-            <Text className="px-3 text-sm text-primary">
-              {range ? rangeLabel(range) : rangeLabel({ from: selectedDate!, to: selectedDate! })}
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityLabel={range ? "Clear date range" : "Clear selected date"}
-            accessibilityRole="button"
-            className="h-full w-9 items-center justify-center border-primary border-l"
-            onPress={() => {
-              haptic("light");
-              if (range) onRangeChange(null);
-              else onSelectedDateClear?.();
-            }}
-          >
-            <HugeiconsIcon color={colors.primary} icon={Cancel01Icon} size={14} />
-          </Pressable>
+      {range || selectedDate || filterChip ? (
+        <View className="mt-3 flex-row flex-wrap gap-2">
+          {range || selectedDate ? (
+            <Chip
+              clearLabel={range ? "Clear date range" : "Clear selected date"}
+              label={
+                range ? rangeLabel(range) : rangeLabel({ from: selectedDate!, to: selectedDate! })
+              }
+              onClear={() => {
+                if (range) onRangeChange(null);
+                else onSelectedDateClear?.();
+              }}
+            />
+          ) : null}
+          {filterChip ? (
+            <Chip
+              clearLabel={`Clear ${filterChip.label}`}
+              label={filterChip.label}
+              onClear={filterChip.onClear}
+            />
+          ) : null}
         </View>
       ) : null}
       <DateRangeSheet

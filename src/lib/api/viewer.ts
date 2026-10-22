@@ -23,6 +23,11 @@ export type Viewer = {
   canViewPickups: boolean;
   /** The menu ids the member is granted in the active organisation (`orders.sheet`, …). */
   menus: string[];
+  /**
+   * True when any same-owner organization grants this member Smart Sheets; null when the server
+   * couldn't say (one without the check), and the active organisation's menus decide instead.
+   */
+  sheetsAvailable: boolean | null;
 };
 
 const VIEWER_QUERY = `
@@ -39,10 +44,31 @@ query ConnectorViewer {
   pickupAvailability { eligible }
 }`;
 
+const SHEET_AVAILABILITY_QUERY = `
+query ConnectorSheetAvailability {
+  smartSheetAvailability { eligible }
+}`;
+
+/**
+ * Asked on its own, so a server without the check only leaves it unanswered instead of failing
+ * the whole role.
+ */
+async function fetchSheetsAvailable(token: string): Promise<boolean | null> {
+  try {
+    const payload = await graphqlRequest<{
+      smartSheetAvailability?: { eligible?: boolean | null } | null;
+    }>({ query: SHEET_AVAILABILITY_QUERY, token });
+    return Boolean(payload.smartSheetAvailability?.eligible);
+  } catch {
+    return null;
+  }
+}
+
 const isUrl = (value: string | null | undefined) => /^(https?:|data:)/i.test(value?.trim() ?? "");
 
 /** Who is signed in to the active organisation: their name, role, access, menus, and the organisation. */
 export async function fetchViewer(token: string): Promise<Viewer> {
+  const sheetsAvailable = fetchSheetsAvailable(token);
   const payload = await graphqlRequest<{
     me: {
       menus?: string[] | null;
@@ -82,5 +108,6 @@ export async function fetchViewer(token: string): Promise<Viewer> {
       : null,
     orderActions: actionsOn("order"),
     roleSlug: payload.me.orgRole?.slug ?? null,
+    sheetsAvailable: await sheetsAvailable,
   };
 }

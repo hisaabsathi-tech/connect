@@ -35,9 +35,10 @@ type ViewerState = {
   /** An enabled same-owner organization grants this delivery boy Pickup access. */
   canViewPickups: boolean;
   /**
-   * The role grants the Smart Sheet menu (`orders.sheet`, present with either of its own / all
-   * views) and order GET_ALL, which the sheet list needs: the Sheet tab. Whether the list holds
-   * every sheet or only the member's own is decided by the server from the same menus.
+   * Any same-owner organization grants the member Smart Sheets (its menu, present with either of
+   * the own / all views, and order GET_ALL): the Sheet tab, listing every such organization's
+   * sheets without switching. Whether each lists all sheets or only the member's own is decided
+   * by the server from the same menus.
    */
   canViewSheets: boolean;
   /** The role grants attendance view: the Attendance tab and the day's record on Home. */
@@ -92,10 +93,12 @@ export function ViewerProvider({ children }: PropsWithChildren) {
       canViewOrders:
         viewer?.orderActions.some((action) => action === "GET" || action === "GET_ALL") ?? false,
       canViewPickups: viewer?.canViewPickups ?? false,
-      // `menus` is missing from a role saved by an older version until the next load.
+      // Without the server's answer (or from a role saved by an older version, which lacks both
+      // fields), the active organisation's menu and order access decide.
       canViewSheets:
-        (viewer?.menus?.includes(SHEET_MENU) ?? false) &&
-        (viewer?.orderActions.includes("GET_ALL") ?? false),
+        viewer?.sheetsAvailable ??
+        ((viewer?.menus?.includes(SHEET_MENU) ?? false) &&
+          (viewer?.orderActions.includes("GET_ALL") ?? false)),
       isLoaded,
       reload,
       viewer,

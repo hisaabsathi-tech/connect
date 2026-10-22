@@ -1,6 +1,6 @@
 /** biome-ignore-all lint/correctness/useExhaustiveDependencies: <forced> */
-import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 
 import { type DateRange, SearchRangeToolbar } from "@/components/modules/date-range";
@@ -21,17 +21,23 @@ import { saveToDevice, shareFile } from "@/lib/files/device-files";
 import { onReconnect } from "@/lib/network/connectivity";
 import { readCache, writeCache } from "@/lib/offline/cache";
 
+import { OrganizationPicker } from "./components/organization-picker";
 import { SheetCard } from "./components/sheet-card";
 import { SheetHero } from "./components/sheet-hero";
+import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
 import { sheetDay } from "./lib/format";
 import { manifestFile } from "./lib/manifest";
 
 const SHEETS_CACHE = "smart-sheets";
 
+// Sheets come from several organizations, so a sheet is told apart by both ids.
+const sheetKey = (sheet: SmartSheetSummary) => `${sheet.organizationId}-${sheet.id}`;
+
 /**
- * The Sheet tab: the banner to start a new Smart Sheet, then the sheets the member can see —
- * every one in the organisation, or only their own, as their role's menus allow — searchable by
- * name and narrowed to the days they were last saved. Each card downloads its Shipping Manifest.
+ * The Sheet tab: the banner to start a new Smart Sheet, then the sheets the member can see in
+ * every same-owner organization, without switching — in each, all of them or only their own, as
+ * their role there allows — searchable by name or organization and narrowed to the days they were
+ * last saved. Each card downloads its Shipping Manifest.
  */
 export function SheetsScreen() {
   const { token } = useAuthSession();
@@ -47,6 +53,10 @@ export function SheetsScreen() {
   const [staleSince, setStaleSince] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const { organizations } = useSheetOrganizations();
+  // One organization's sheets, or every organization's (null).
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const organization = organizations.find((item) => item.id === organizationId) ?? null;
 
   const load = async (quiet = false) => {
     if (!(token && viewer.canViewSheets)) return;
@@ -72,23 +82,38 @@ export function SheetsScreen() {
     void load();
   }, [token, viewer.canViewSheets]);
   useEffect(() => onReconnect(() => void load(true)), [token, viewer.canViewSheets]);
+  // Back from adding orders, the sheet they went into shows with its new count.
+  const focusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (focusedOnce.current) void load(true);
+      focusedOnce.current = true;
+    }, [token, viewer.canViewSheets]),
+  );
 
-  // Every sheet is loaded; the search and the date range filter it here, so they work offline.
+  // Every sheet is loaded; the filters narrow it here, so they work offline.
   const shown = useMemo(() => {
     const words = query.trim().toLowerCase();
     return sheets.filter((sheet) => {
-      if (words && !sheet.name.toLowerCase().includes(words)) return false;
+      if (organization && sheet.organizationId !== organization.id) return false;
+      if (words && !`${sheet.name} ${sheet.organizationName}`.toLowerCase().includes(words))
+        return false;
       if (!range) return true;
       const day = sheetDay(sheet);
       return day >= range.from && day <= range.to;
     });
-  }, [query, range, sheets]);
+  }, [organization, query, range, sheets]);
+  // Each card names its organization only when the sheets come from more than one.
+  const manyOrganizations = useMemo(
+    () => new Set(sheets.map((sheet) => sheet.organizationId)).size > 1,
+    [sheets],
+  );
 
   const download = async (sheet: SmartSheetSummary) => {
     if (!token || downloading) return;
-    setDownloading(sheet.id);
+    setDownloading(sheetKey(sheet));
     try {
-      const file = manifestFile(await fetchSmartSheet(token, sheet.id));
+      const file = manifestFile(await fetchSmartSheet(token, sheet));
       const folder = await saveToDevice([file]);
       if (folder) toast.success("Manifest downloaded", `Saved to ${folder} on your device.`);
       // Backed out of choosing a folder: it can still be sent on from the share sheet.
@@ -107,15 +132,27 @@ export function SheetsScreen() {
         <OfflineChip />
       </View>
       <Text className="mt-0.5 text-sm text-muted-foreground">
-        Create and manage your bulk orders
+        Shipping manifest for your orders
       </Text>
       <View className="mt-5">
         <SheetHero onCreate={() => router.push("/sheet/client")} />
       </View>
-      <Text className="mt-7 text-xl font-semibold text-foreground">Recent Sheet</Text>
       <View className="mt-4">
         <SearchRangeToolbar
+          accessory={
+            <OrganizationPicker
+              allowAll
+              onChange={setOrganizationId}
+              organizations={organizations}
+              value={organization?.id ?? null}
+            />
+          }
           autoCapitalize="none"
+          filterChip={
+            organization
+              ? { label: organization.name, onClear: () => setOrganizationId(null) }
+              : null
+          }
           onQueryChange={setQuery}
           onRangeChange={setRange}
           query={query}
@@ -136,7 +173,7 @@ export function SheetsScreen() {
         data={loading || !viewer.isLoaded ? [] : shown}
         ItemSeparatorComponent={() => <View className="h-3" />}
         keyboardShouldPersistTaps="handled"
-        keyExtractor={(item) => item.id}
+        keyExtractor={sheetKey}
         ListEmptyComponent={
           loading || !viewer.isLoaded ? (
             <CardListSkeleton count={2} />
@@ -150,7 +187,9 @@ export function SheetsScreen() {
                     ? `No sheet matches "${query}".`
                     : range
                       ? "No sheet was saved in these dates."
-                      : "Sheets you create will show up here."
+                      : organization
+                        ? `${organization.name} has no sheets yet.`
+                        : "Sheets you create will show up here."
               }
               title={failed ? "Couldn't load sheets" : "No sheets yet"}
             />
@@ -170,9 +209,10 @@ export function SheetsScreen() {
         }
         renderItem={({ item }) => (
           <SheetCard
-            downloading={downloading === item.id}
+            downloading={downloading === sheetKey(item)}
             onDownload={() => void download(item)}
             sheet={item}
+            showOrganization={manyOrganizations}
           />
         )}
       />

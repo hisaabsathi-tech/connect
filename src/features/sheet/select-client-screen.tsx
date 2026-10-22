@@ -1,6 +1,12 @@
 /** biome-ignore-all lint/correctness/useExhaustiveDependencies: <forced> */
-import { ArrowRight01Icon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import {
+  ArrowRight01Icon,
+  Building03Icon,
+  Cancel01Icon,
+  Search01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, TextInput, View } from "react-native";
 
@@ -10,13 +16,16 @@ import { LastUpdated } from "@/components/modules/network";
 import { Skeleton } from "@/components/modules/skeleton";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
-import { type Client, fetchClients } from "@/lib/api/clients";
 import { isNetworkError } from "@/lib/api/network";
+import { type Client, fetchOrganizationClients } from "@/lib/api/smart-sheets";
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { onReconnect } from "@/lib/network/connectivity";
 import { readCache, writeCache } from "@/lib/offline/cache";
+
+import { OrganizationPicker } from "./components/organization-picker";
+import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
 
 const CLIENTS_CACHE = "sheet-clients";
 
@@ -69,11 +78,26 @@ function ClientListSkeleton() {
 }
 
 /**
- * The first step of a new Smart Sheet: choosing the client its orders are for, from the
- * organisation's credit customers, searchable by name or client ID.
+ * The first step of a new Smart Sheet: choosing the organization (when the member has more than
+ * one where they may add orders) and the client the orders are for, from that organization's
+ * credit customers, searchable by name or client ID.
  */
 export function SelectClientScreen() {
   const { token } = useAuthSession();
+  const { loaded: organizationsLoaded, organizations } = useSheetOrganizations();
+  // Where the member may both see the clients and add orders.
+  const usable = useMemo(
+    () => organizations.filter((item) => item.canCreate && item.canListClients),
+    [organizations],
+  );
+  const [pickedOrganizationId, setPickedOrganizationId] = useState<string | null>(null);
+  // The one picked, else the signed-in one, else the first.
+  const organization =
+    usable.find((item) => item.id === pickedOrganizationId) ??
+    usable.find((item) => item.active) ??
+    usable[0] ??
+    null;
+  const organizationId = organization?.id ?? null;
   const [clients, setClients] = useState<Client[]>([]);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -84,16 +108,16 @@ export function SelectClientScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async (quiet = false) => {
-    if (!token) return;
-    const saved = readCache<Client[]>(CLIENTS_CACHE, "list");
+    if (!(token && organizationId)) return;
+    const saved = readCache<Client[]>(CLIENTS_CACHE, organizationId);
     if (saved) {
       setClients(saved.data);
       setLoading(false);
     } else if (!quiet) setLoading(true);
     setFailure(null);
     try {
-      const fresh = await fetchClients(token);
-      writeCache(CLIENTS_CACHE, "list", fresh, 1);
+      const fresh = await fetchOrganizationClients(token, organizationId);
+      writeCache(CLIENTS_CACHE, organizationId, fresh, 10);
       setClients(fresh);
       setStaleSince(null);
     } catch (error) {
@@ -109,9 +133,12 @@ export function SelectClientScreen() {
     }
   };
   useEffect(() => {
+    // Another organization's clients: start over with nothing chosen.
+    setClients([]);
+    setSelectedId(null);
     void load();
-  }, [token]);
-  useEffect(() => onReconnect(() => void load(true)), [token]);
+  }, [token, organizationId]);
+  useEffect(() => onReconnect(() => void load(true)), [token, organizationId]);
 
   // Every client is loaded; the search filters them here, so typing needs no request.
   const shown = useMemo(() => {
@@ -122,6 +149,23 @@ export function SelectClientScreen() {
     );
   }, [clients, query]);
   const selected = clients.find((client) => client.id === selectedId) ?? null;
+  const noAccess = organizationsLoaded && usable.length === 0;
+  const waiting = !noAccess && (loading || !organization);
+
+  const proceed = () => {
+    if (!(selected && organization)) return;
+    haptic("medium");
+    router.push({
+      params: {
+        clientCode: selected.orgGivenId,
+        clientId: selected.id,
+        clientName: selected.name,
+        organizationId: organization.id,
+        organizationName: organization.name,
+      },
+      pathname: "/sheet/add-order",
+    });
+  };
 
   const header = (
     <View className="pb-4">
@@ -154,7 +198,22 @@ export function SelectClientScreen() {
             <HugeiconsIcon color={colors.mutedForeground} icon={Cancel01Icon} size={16} />
           </Pressable>
         ) : null}
+        <OrganizationPicker
+          onChange={(next) => {
+            if (next) setPickedOrganizationId(next);
+          }}
+          organizations={usable}
+          value={organizationId}
+        />
       </View>
+      {organization && usable.length > 1 ? (
+        <View className="mt-3 flex-row items-center gap-1.5">
+          <HugeiconsIcon color={colors.primary} icon={Building03Icon} size={14} />
+          <Text className="shrink text-sm text-muted-foreground" numberOfLines={1}>
+            Clients of <Text className="font-medium text-foreground">{organization.name}</Text>
+          </Text>
+        </View>
+      ) : null}
       <LastUpdated at={staleSince} />
     </View>
   );
@@ -165,12 +224,17 @@ export function SelectClientScreen() {
         accessibilityRole="radiogroup"
         contentContainerClassName="px-5 pb-6 pt-2"
         contentContainerStyle={{ flexGrow: 1 }}
-        data={loading ? [] : shown}
+        data={waiting || noAccess ? [] : shown}
         ItemSeparatorComponent={() => <View className="h-3" />}
         keyboardShouldPersistTaps="handled"
         keyExtractor={(item) => item.id}
         ListEmptyComponent={
-          loading ? (
+          noAccess ? (
+            <EmptyBlock
+              description="Your role can't add orders or see clients in any organization."
+              title="No access to create sheets"
+            />
+          ) : waiting ? (
             <ClientListSkeleton />
           ) : (
             <EmptyBlock
@@ -211,8 +275,7 @@ export function SelectClientScreen() {
           accessibilityState={{ disabled: !selected }}
           className={`h-12 flex-row items-center justify-center gap-2 bg-primary ${selected ? "active:bg-primary-hover" : "opacity-40"}`}
           disabled={!selected}
-          // The next step, adding the orders for `selected`, is still to be built.
-          onPress={() => haptic("medium")}
+          onPress={proceed}
         >
           <Text className="text-base font-medium text-primary-foreground">Continue</Text>
           <HugeiconsIcon color={colors.primaryForeground} icon={ArrowRight01Icon} size={18} />

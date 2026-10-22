@@ -9,6 +9,8 @@ const MANIFEST_NAME = "Shipping Manifest";
  * the web editor writes them, without the leading `*` it puts on required ones.
  */
 const COLUMNS = [
+  // Always there, blank until the web fills a row's AWB number in.
+  { from: ["AWB NO", "AWB NUMBER", "AWB"], label: "AWB No" },
   { from: ["CLIENT NAME"], label: "Client Name" },
   { from: ["DESTINATION PINCODE", "DEST PINCODE"], label: "Dest Pincode*" },
   { from: ["RECEIVER NAME"], label: "Receiver Name" },
@@ -37,8 +39,9 @@ function firstSheetCells(workbook: Record<string, unknown>): CellData {
 }
 
 /**
- * The sheet's rows under the manifest's four columns, header first. Rows with none of the four
- * filled in are left out; a sheet without one of the columns leaves that column blank.
+ * The sheet's rows under the manifest's five columns, header first. Rows with none of them filled
+ * in are left out; a row without an AWB number yet, or a sheet without one of the columns, leaves
+ * that cell blank.
  */
 export function manifestRows(workbook: Record<string, unknown>): string[][] {
   const cells = firstSheetCells(workbook);
@@ -66,12 +69,24 @@ export function manifestRows(workbook: Record<string, unknown>): string[][] {
   return [COLUMNS.map((column) => column.label), ...rows];
 }
 
+/**
+ * "Sarkiar Prakritik-14-10-2026 Shipping Manifest.xlsx": the sheet's name (the client and day for
+ * a sheet started on the app) before the manifest's, without characters a file name can't hold.
+ */
+export function manifestFileName(sheetName: string) {
+  const base = sheetName
+    .replace(/[\\/:*?"<>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return base ? `${base} ${MANIFEST_NAME}.xlsx` : `${MANIFEST_NAME}.xlsx`;
+}
+
 /** The sheet's Shipping Manifest as an Excel file, ready to save or share. */
-export function manifestFile(sheet: Pick<SmartSheetRecord, "workbook">): ExportFile {
+export function manifestFile(sheet: Pick<SmartSheetRecord, "name" | "workbook">): ExportFile {
   return {
     contents: toBase64(buildTableWorkbook(MANIFEST_NAME, manifestRows(sheet.workbook))),
     encoding: "base64",
     mimeType: XLSX_MIME_TYPE,
-    name: `${MANIFEST_NAME}.xlsx`,
+    name: manifestFileName(sheet.name),
   };
 }
