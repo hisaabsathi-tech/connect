@@ -48,6 +48,7 @@ query ConnectOrderParties($orderId: String!) {
       delivery { ${PARTY_FIELDS} }
     }
     logs { shipmentStatus latitude longitude address recordedAt }
+    order { podStorageKey }
   }
 }`;
 
@@ -87,6 +88,8 @@ export type OrderDetails = {
   receiver: OrderParty | null;
   /** Null until delivered, or when the delivery was confirmed without a location. */
   deliveredAt: DeliveredAt | null;
+  /** Storage key of the photo sent with Confirm Delivery; `fetchViewUrl` signs it. */
+  podStorageKey: string | null;
 };
 
 /**
@@ -105,6 +108,7 @@ export async function fetchOrderDetails(token: string, orderId: string): Promise
       orderTracking: {
         addresses: { pickup: OrderParty | null; delivery: OrderParty | null } | null;
         logs: TrackingLog[] | null;
+        order: { podStorageKey: string | null } | null;
       } | null;
     }>({ query: PARTIES_QUERY, token, variables: { orderId } }).catch(() => null),
   ]);
@@ -112,6 +116,8 @@ export async function fetchOrderDetails(token: string, orderId: string): Promise
   return {
     deliveredAt: deliveredAt(tracking?.orderTracking?.logs),
     detail: order?.order ?? null,
+    // From the tracking, which the delivery boy can read without order:GET.
+    podStorageKey: tracking?.orderTracking?.order?.podStorageKey ?? null,
     receiver: addresses?.delivery ?? null,
     sender: addresses?.pickup ?? null,
   };

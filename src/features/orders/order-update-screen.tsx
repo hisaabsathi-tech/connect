@@ -1,4 +1,9 @@
-import { CancelCircleIcon, CheckmarkCircle02Icon, Undo02Icon } from "@hugeicons/core-free-icons";
+import {
+  CancelCircleIcon,
+  CheckmarkCircle02Icon,
+  Image01Icon,
+  Undo02Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useState } from "react";
@@ -20,6 +25,7 @@ import { OrderReasonSheet, type ReasonKind } from "./components/order-reason-she
 import { useOrderDetails } from "./hooks/use-order-details";
 import { useOrderMap } from "./hooks/use-order-map";
 import { useOrderPin } from "./hooks/use-order-pin";
+import { usePodPhoto } from "./hooks/use-pod-photo";
 import { openedOrder } from "./lib/active-order";
 import { joinAddress } from "./lib/order-place";
 import { type DrsOrder, isDelivered, isPending, isReturned } from "./lib/orders";
@@ -118,6 +124,9 @@ export function OrderUpdateScreen() {
   const live = useLiveLocation(Boolean(order) && !finished);
   const receiverAddress = fullReceiverAddress(details);
   const deliveredAt = order && isDelivered(order) ? (details?.deliveredAt ?? null) : null;
+  // The photo sent with Confirm Delivery, when one was.
+  const podStorageKey = details?.podStorageKey ?? null;
+  const podPhoto = usePodPhoto();
   const { height: screenHeight } = useWindowDimensions();
   const mapHeight = Math.min(
     MAP_MAX_HEIGHT,
@@ -182,13 +191,33 @@ export function OrderUpdateScreen() {
             </OrderCard>
             {finished ? (
               isDelivered(order) ? (
-                <OutcomeButton
-                  fullWidth
-                  icon={Undo02Icon}
-                  label="Order RTO"
-                  onPress={() => setReason("rto")}
-                  tone="rto"
-                />
+                <View className="gap-3">
+                  <OutcomeButton
+                    fullWidth
+                    icon={Undo02Icon}
+                    label="Order RTO"
+                    onPress={() => setReason("rto")}
+                    tone="rto"
+                  />
+                  {podStorageKey ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      className="min-h-12 w-full flex-row items-center justify-center gap-2 border border-primary bg-card px-3 py-2 active:opacity-80"
+                      onPress={() => void podPhoto.open(podStorageKey, order.awbNo)}
+                      onPressIn={() => haptic("light")}
+                    >
+                      <Text className="text-center text-sm font-medium text-primary">
+                        Proof Of Delivery
+                      </Text>
+                      <HugeiconsIcon
+                        color={colors.primary}
+                        icon={Image01Icon}
+                        size={18}
+                        strokeWidth={1.8}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
               ) : null
             ) : (
               <>
@@ -272,6 +301,7 @@ export function OrderUpdateScreen() {
         </>
       ) : null}
       {orderMap.element}
+      {podPhoto.element}
     </TabScreen>
   );
 }
