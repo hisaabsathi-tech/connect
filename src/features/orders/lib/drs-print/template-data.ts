@@ -83,7 +83,9 @@ export function drsPrintData(
       id: order.orderId,
       remarks: order.remarks?.trim() || null,
       serviceType:
-        [formatText(order.serviceType), formatText(order.packageType)].filter(Boolean).join(" - ") || "—",
+        [formatText(order.serviceType), formatText(order.packageType)]
+          .filter(Boolean)
+          .join(" - ") || "—",
     })),
     ...issuedLabels(sheet.issuedAt),
   };

@@ -997,8 +997,7 @@ export function HomeMap({
   const selfPin = useSelfPin(live, heading);
   const points = useMemo(() => {
     const self = live ? selfPin(live, "here") : null;
-    const here =
-      self && (orders || (self.kind === "start" ? !checkIn : !checkOut)) ? self : null;
+    const here = self && (orders || (self.kind === "start" ? !checkIn : !checkOut)) ? self : null;
     return [
       organization ? at(organization, "office", "organization") : null,
       checkIn ? at(checkIn, "check-in", "transit") : null,

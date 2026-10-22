@@ -106,7 +106,7 @@ export function OrderScanScreen() {
   const toast = useToast();
   const matched = useRef(false);
   const lastCode = useRef({ at: 0, value: "" });
-  const devTaps = useRef({ at: 0, count: 0 });
+  const bypassTaps = useRef({ at: 0, count: 0 });
 
   // Normally this returns to the trip map or Orders list that opened the scanner. A direct link
   // has no history entry, so keep Close inside the Orders tab instead of exiting the app.
@@ -151,15 +151,15 @@ export function OrderScanScreen() {
     [order, toast],
   );
 
-  // Dev-only bypass: tapping the label area 5 times in under 2s simulates a
-  // successful scan, for testing on a device with no barcode to point at.
-  const onDevBypassTap = useCallback(() => {
-    if (!__DEV__ || !order || matched.current) return;
+  // Bypass: tapping the label area 5 times in under 2s counts as a
+  // successful scan, for a label whose barcode is damaged or won't read (all builds).
+  const onBypassTap = useCallback(() => {
+    if (!order || matched.current) return;
     const now = Date.now();
-    const taps = now - devTaps.current.at < 2000 ? devTaps.current.count + 1 : 1;
-    devTaps.current = { at: now, count: taps };
+    const taps = now - bypassTaps.current.at < 2000 ? bypassTaps.current.count + 1 : 1;
+    bypassTaps.current = { at: now, count: taps };
     if (taps < 5) return;
-    devTaps.current = { at: 0, count: 0 };
+    bypassTaps.current = { at: 0, count: 0 };
     matched.current = true;
     haptic("success");
     setTorch(false);
@@ -169,7 +169,7 @@ export function OrderScanScreen() {
   const granted = Boolean(permission?.granted);
   return (
     <TabScreen>
-      <Pressable className="flex-1 bg-card px-5 pt-4" onPress={onDevBypassTap}>
+      <Pressable className="flex-1 bg-card px-5 pt-4" onPress={onBypassTap}>
         <View className="flex-row items-center justify-between">
           <RoundButton icon={Cancel01Icon} label="Close scanner" onPress={close} />
           {granted && order ? (
