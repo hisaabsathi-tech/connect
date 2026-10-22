@@ -1,13 +1,17 @@
 import {
   ArrowDown01Icon,
   ArrowUp01Icon,
+  Building03Icon,
   Calendar03Icon,
   CheckmarkCircle02Icon,
   CirclePlusIcon,
+  File02Icon,
+  Image01Icon,
   Location01Icon,
   Package04Icon,
   PlusSignIcon,
   RefreshIcon,
+  ScanImageIcon,
   ShuffleIcon,
   User03Icon,
   UserIcon,
@@ -15,18 +19,28 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { type PropsWithChildren, useRef, useState } from "react";
+import { type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
 
 import { DateRangeSheet } from "@/components/modules/date-range";
 import { FormField, SelectField } from "@/components/modules/form";
 import { TabScreen } from "@/components/modules/layout";
 import { useNetwork } from "@/components/modules/network";
+import { photoPickError, pickPhoto } from "@/components/modules/photo";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { KEYBOARD_GAP, useKeyboardReveal } from "@/hooks/use-keyboard-reveal";
 import { ApiError } from "@/lib/api/client";
+import {
+  attachLabelScan,
+  deleteSheetLabelScan,
+  type LabelScanField,
+  linkLabelScans,
+  listSheetLabelScans,
+  type SheetLabelScan,
+  scanShippingLabel,
+} from "@/lib/api/label-scan";
 import type { AddressSuggestion } from "@/lib/api/maps";
 import {
   appendSheetRow,
@@ -40,6 +54,7 @@ import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { newActionId } from "@/lib/offline/outbox";
 
+import { SheetImages } from "./components/sheet-images";
 import { useAddressSuggestions } from "./hooks/use-address-suggestions";
 import { useBookingOptions } from "./hooks/use-booking-options";
 import {
@@ -110,6 +125,15 @@ const VOLUMETRIC_DIVISOR = 5000;
 // The most the server takes for either weight, in kg.
 const WEIGHT_MAX = 100_000;
 const AWB_MAX_LENGTH = 64;
+
+// How a scan names the fields it couldn't read, or read uncertainly.
+const SCAN_FIELD_NAMES: Record<LabelScanField, string> = {
+  awbNo: "AWB number",
+  pincode: "pincode",
+  receiverAddress: "address",
+  receiverName: "name",
+  receiverPhone: "phone",
+};
 // What the server and the web's duplicate check accept for a reference number.
 const REF_MAX_LENGTH = 120;
 
@@ -344,6 +368,13 @@ export function AddOrderScreen() {
   const [version, setVersion] = useState(() => Number(params.version ?? 0));
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [saving, setSaving] = useState(false);
+  // A label photo being read: the fields it fills wait, greyed out.
+  const [scanning, setScanning] = useState(false);
+  // The scanned label behind the details in the form, filed in the sheet when they're saved.
+  const scanId = useRef<string | null>(null);
+  // Every photo is kept on the server. Those taken before this visit's sheet exists are filed
+  // under it once the first order starts it.
+  const unfiledScans = useRef<string[]>([]);
   // The AWB and reference numbers, and the booking, stay folded away under their sections'
   // Advanced Option, unless an edited order has some.
   const [numbersOpen, setNumbersOpen] = useState(() =>
@@ -366,6 +397,26 @@ export function AddOrderScreen() {
   const [shipments, setShipments] = useState(() =>
     appending ? Number(params.dataRows ?? 0) || 0 : 0,
   );
+  // The sheet this order goes into (opened, edited, or started by the first save), and the label
+  // photos scanned for it, shown under Images. Each scan or save reloads them.
+  const sheetId = sheet?.id ?? params.sheetId ?? "";
+  const sheetName = sheet?.name || params.sheetName || "";
+  const [sheetScans, setSheetScans] = useState<SheetLabelScan[]>([]);
+  const [scansVersion, setScansVersion] = useState(0);
+  const [imagesOpen, setImagesOpen] = useState(false);
+  const reloadSheetScans = () => setScansVersion((version) => version + 1);
+  useEffect(() => {
+    if (!(token && sheetId)) return;
+    let live = true;
+    listSheetLabelScans(token, params.organizationId, sheetId)
+      .then((scans) => {
+        if (live) setSheetScans(scans);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [params.organizationId, scansVersion, sheetId, token]);
 
   // Another client: for a sheet opened from its table, picked for that same sheet; else back to
   // the client list, which starts a new sheet.
@@ -456,6 +507,8 @@ export function AddOrderScreen() {
 
   const reset = () => {
     pendingActionId.current = null;
+    // The photo stays on the server, just no longer behind these details.
+    scanId.current = null;
     setForm(resetTo.current.form);
     if (editing) setOrderDate(resetTo.current.orderDate);
     setErrors({});
@@ -471,8 +524,98 @@ export function AddOrderScreen() {
     if (placePincode && !form.pincode.trim()) update("pincode")(placePincode);
   };
 
+  // Scan & Auto-fill: a photo of the parcel's label, cropped to it, fills the receiver and the
+  // pincode. The person checks what was read before saving.
+  const scanLabel = async () => {
+    if (scanning || saving || !token) return;
+    if (!requireOnline("Scanning a label")) return;
+    let uri: string | null;
+    try {
+      uri = await pickPhoto("camera", { crop: "free", frontCamera: false });
+    } catch (error) {
+      haptic("error");
+      toast.error("Couldn't open the camera", photoPickError(error));
+      return;
+    }
+    if (!uri) return;
+    setScanning(true);
+    // The spinner toast stays while the label is read; the result's toast takes its place.
+    toast.loading("Scanning the label");
+    try {
+      const scan = await scanShippingLabel(token, {
+        clientId: params.clientId,
+        organizationId: params.organizationId,
+        smartSheetId: sheet?.id ?? params.sheetId,
+        uri,
+      });
+      // The latest photo is the one behind the details; any earlier one stays on the server.
+      scanId.current = scan.scanId;
+      reloadSheetScans();
+      if (!(sheet?.id ?? params.sheetId)) unfiledScans.current.push(scan.scanId);
+      const read: [Field, string | null][] = [
+        ["receiverName", scan.receiverName],
+        ["receiverPhone", scan.receiverPhone && mobileDigits(scan.receiverPhone).slice(0, 10)],
+        ["receiverAddress", scan.receiverAddress],
+        ["pincode", scan.pincode],
+      ];
+      // The AWB on the courier's sticker fills an empty AWB No, shown by opening its Advanced
+      // Option; one already entered (or scanned from the barcode) is kept.
+      const awbNo = scan.awbNo?.replace(/\s+/g, "").toUpperCase().slice(0, AWB_MAX_LENGTH);
+      if (awbNo && !form.awbNo.trim()) read.push(["awbNo", awbNo]);
+      const filled = read.filter(([, value]) => value);
+      for (const [name, value] of filled) update(name)(value ?? "");
+      if (filled.some(([name]) => name === "awbNo")) setNumbersOpen(true);
+      setAddressTyped(false);
+      const missing = read
+        .filter(([name, value]) => !value && name !== "awbNo")
+        .map(([name]) => name as LabelScanField);
+      const check = [...new Set([...missing, ...scan.unsure])].map(
+        (name) => SCAN_FIELD_NAMES[name],
+      );
+      if (!filled.length) {
+        haptic("error");
+        toast.error(
+          "Couldn't read the label",
+          "Try again closer, in good light, with only the address in the crop.",
+        );
+      } else if (check.length) {
+        haptic("warning");
+        toast.success("Filled from the label", `Check the ${check.join(", ")} before saving.`);
+      } else {
+        haptic("success");
+        toast.success("Filled from the label", "Check the details before saving.");
+      }
+    } catch (error) {
+      if (__DEV__) console.warn("Label scan failed", error);
+      haptic("error");
+      toast.error(
+        "Couldn't scan the label",
+        errorMessage(error, "Please try again, or fill the details by hand."),
+      );
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // The saved order's scan goes in its sheet's Scanned Images, labelled with what was saved.
+  // Best effort: the order is saved either way.
+  const fileScan = (smartSheetId: string, order: SheetOrderInput) => {
+    const scanned = scanId.current;
+    scanId.current = null;
+    if (!(scanned && token && smartSheetId)) return;
+    attachLabelScan(token, scanned, {
+      awbNo: order.awbNo ?? (form.awbNo.trim().toUpperCase() || null),
+      pincode: order.pincode,
+      receiverName: order.receiverName,
+      receiverPhone: order.receiverPhone,
+      smartSheetId,
+    })
+      .then(reloadSheetScans)
+      .catch(() => undefined);
+  };
+
   const save = async () => {
-    if (saving || !token) return;
+    if (saving || scanning || !token) return;
     const found = validate(form, pincode, kept, checks);
     setErrors(found);
     if (Object.values(found).some(Boolean)) {
@@ -522,6 +665,7 @@ export function AddOrderScreen() {
         );
         // Further edits here are made on the version this one saved, and Reset comes back to it.
         setVersion(saved.version);
+        fileScan(params.sheetId ?? "", order);
         resetTo.current = { form, orderDate };
         setAddressTyped(false);
         haptic("success");
@@ -545,6 +689,11 @@ export function AddOrderScreen() {
         const created = await createClientSheet(token, params.organizationId, params.clientId);
         target = { id: created.id, name: created.name };
         setSheet(target);
+        const unfiled = unfiledScans.current.splice(0);
+        if (unfiled.length)
+          linkLabelScans(token, target.id, unfiled)
+            .then(reloadSheetScans)
+            .catch(() => undefined);
       }
       const actionId = pendingActionId.current ?? newActionId();
       pendingActionId.current = actionId;
@@ -555,6 +704,7 @@ export function AddOrderScreen() {
         order,
       );
       pendingActionId.current = null;
+      fileScan(target.id, order);
       setShipments(saved.dataRows);
       setForm(EMPTY_FORM);
       setAddressTyped(false);
@@ -625,34 +775,53 @@ export function AddOrderScreen() {
             )}
           </View>
 
-          <View className="mt-5 flex-row items-center gap-3 border border-[#EEF0F6] bg-white p-4">
-            <View className="flex-1">
-              <Text className="text-lg text-foreground" numberOfLines={2}>
-                {params.clientName}
-              </Text>
-              <Text className="mt-1 text-sm text-muted-foreground" numberOfLines={1}>
-                Client ID: {params.clientCode}
-              </Text>
-              {organizations.length > 1 ? (
-                <Text className="mt-0.5 text-xs text-muted-foreground" numberOfLines={1}>
-                  {params.organizationName}
+          <View className="mt-5 border border-[#EEF0F6] bg-white p-4">
+            {/* The company (when the member has several) and the sheet, full-width badges at the top. */}
+            {organizations.length > 1 || sheetName ? (
+              <View className="mb-3 gap-2">
+                {organizations.length > 1 ? (
+                  <View className="flex-row items-center gap-2 bg-accent px-3 py-2">
+                    <HugeiconsIcon color={colors.primary} icon={Building03Icon} size={16} />
+                    <Text className="flex-1 text-sm font-medium text-primary" numberOfLines={1}>
+                      {params.organizationName}
+                    </Text>
+                  </View>
+                ) : null}
+                {sheetName ? (
+                  <View className="flex-row items-center gap-2 border border-primary/30 bg-card px-3 py-2">
+                    <HugeiconsIcon color={colors.primary} icon={File02Icon} size={16} />
+                    <Text className="text-sm text-muted-foreground">Sheet</Text>
+                    <Text className="flex-1 text-sm font-medium text-foreground" numberOfLines={1}>
+                      {sheetName}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            <View className="flex-row items-center gap-3">
+              <View className="flex-1">
+                <Text className="text-lg text-foreground" numberOfLines={2}>
+                  {params.clientName}
                 </Text>
-              ) : null}
+                <Text className="mt-1 text-sm text-muted-foreground" numberOfLines={1}>
+                  Client ID: {params.clientCode}
+                </Text>
+              </View>
+              {/* An edited order keeps its client. */}
+              {editing ? null : (
+                <Pressable
+                  accessibilityLabel="Change client"
+                  accessibilityRole="button"
+                  className="h-10 flex-row items-center gap-2 bg-primary px-4 active:bg-primary-hover"
+                  disabled={saving}
+                  onPress={changeClient}
+                  onPressIn={() => haptic("light")}
+                >
+                  <Text className="text-sm font-medium text-primary-foreground">Change</Text>
+                  <HugeiconsIcon color={colors.primaryForeground} icon={ShuffleIcon} size={16} />
+                </Pressable>
+              )}
             </View>
-            {/* An edited order keeps its client. */}
-            {editing ? null : (
-              <Pressable
-                accessibilityLabel="Change client"
-                accessibilityRole="button"
-                className="h-10 flex-row items-center gap-2 bg-primary px-4 active:bg-primary-hover"
-                disabled={saving}
-                onPress={changeClient}
-                onPressIn={() => haptic("light")}
-              >
-                <Text className="text-sm font-medium text-primary-foreground">Change</Text>
-                <HugeiconsIcon color={colors.primaryForeground} icon={ShuffleIcon} size={16} />
-              </Pressable>
-            )}
           </View>
 
           <Section icon={Package04Icon} title="Shipment Details">
@@ -680,6 +849,7 @@ export function AddOrderScreen() {
             </View>
             <FormField
               {...field("pincode")}
+              editable={!scanning}
               hint={
                 pincode.place
                   ? [pincode.place.city, pincode.place.state].filter(Boolean).join(", ")
@@ -723,10 +893,47 @@ export function AddOrderScreen() {
             </AdvancedOption>
           </Section>
 
+          <View className="mt-5 flex-row gap-3">
+            <Pressable
+              accessibilityHint="Opens the camera to photograph the parcel's label"
+              accessibilityRole="button"
+              accessibilityState={{ busy: scanning, disabled: scanning || saving }}
+              className="h-12 flex-1 flex-row items-center justify-center gap-2 border border-primary border-dashed bg-accent active:bg-card"
+              disabled={scanning || saving}
+              onPress={() => void scanLabel()}
+              onPressIn={() => haptic("light")}
+            >
+              <Text className="text-base font-medium text-primary">
+                {scanning ? "Scanning In Progress" : "Scan & Auto-fill"}
+              </Text>
+              {scanning ? (
+                <ActivityIndicator color={colors.primary} size="small" />
+              ) : (
+                <HugeiconsIcon color={colors.primary} icon={ScanImageIcon} size={20} />
+              )}
+            </Pressable>
+            {/* The sheet's label photos, once it has any; not while editing one order. */}
+            {sheetScans.length && !editing ? (
+              <Pressable
+                accessibilityLabel={`Images, ${sheetScans.length} label photos in this sheet`}
+                accessibilityRole="button"
+                className="h-12 flex-row items-center justify-center gap-2 border border-primary bg-card px-4 active:bg-accent"
+                onPress={() => setImagesOpen(true)}
+                onPressIn={() => haptic("light")}
+              >
+                <Text className="text-base font-medium text-primary">
+                  Images ({sheetScans.length})
+                </Text>
+                <HugeiconsIcon color={colors.primary} icon={Image01Icon} size={20} />
+              </Pressable>
+            ) : null}
+          </View>
+
           <Section icon={UserIcon} title="Receiver Details">
             <FormField
               {...field("receiverName")}
               autoCapitalize="words"
+              editable={!scanning}
               label="Receiver Name"
               maxLength={120}
               placeholder="Enter receiver's name"
@@ -734,6 +941,7 @@ export function AddOrderScreen() {
             />
             <FormField
               {...field("receiverPhone")}
+              editable={!scanning}
               keyboardType="number-pad"
               label="Phone Number"
               // Only the 10 digits after +91: a pasted "+91 98765 43210" or "098765…" is trimmed.
@@ -744,6 +952,7 @@ export function AddOrderScreen() {
             />
             <FormField
               {...field("receiverAddress")}
+              editable={!scanning}
               label="Delivery Address"
               maxLength={500}
               multiline
@@ -878,9 +1087,9 @@ export function AddOrderScreen() {
             <Pressable
               accessibilityLabel="Reset the form"
               accessibilityRole="button"
-              accessibilityState={{ disabled: saving }}
+              accessibilityState={{ disabled: saving || scanning }}
               className="h-12 flex-row items-center justify-center gap-1.5 border border-primary bg-card px-4 active:bg-accent"
-              disabled={saving}
+              disabled={saving || scanning}
               onPress={reset}
               onPressIn={() => haptic("light")}
             >
@@ -889,9 +1098,9 @@ export function AddOrderScreen() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ busy: saving, disabled: saving }}
+              accessibilityState={{ busy: saving, disabled: saving || scanning }}
               className="h-12 flex-1 flex-row items-center justify-center gap-2 bg-primary active:bg-primary-hover"
-              disabled={saving}
+              disabled={saving || scanning}
               onPress={() => void save()}
             >
               {saving ? (
@@ -912,6 +1121,21 @@ export function AddOrderScreen() {
           </View>
         </ScrollView>
       </View>
+      <SheetImages
+        onClose={() => setImagesOpen(false)}
+        onDelete={async (scan) => {
+          if (!token) return;
+          await deleteSheetLabelScan(token, params.organizationId, scan.id);
+          const left = sheetScans.filter((item) => item.id !== scan.id);
+          setSheetScans(left);
+          // The last photo gone, the empty Images screen closes too.
+          if (!left.length) setImagesOpen(false);
+          reloadSheetScans();
+        }}
+        scans={sheetScans}
+        sheetName={sheetName}
+        visible={imagesOpen}
+      />
       <DateRangeSheet
         allowFuture
         onApply={(range) => {

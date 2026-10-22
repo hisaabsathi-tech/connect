@@ -5,7 +5,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { type PropsWithChildren, useEffect } from "react";
-import { Pressable, Text, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
@@ -21,8 +21,11 @@ import { scheduleOnRN } from "react-native-worklets";
 import { colors } from "@/config/colors";
 
 type ToastKind = "error" | "info" | "success";
+/** A spinner while something runs; it stays until the result's toast replaces it. */
+type AppToastKind = ToastKind | "loading";
 
-function ToastIcon({ type }: { type: ToastKind }) {
+function ToastIcon({ type }: { type: AppToastKind }) {
+  if (type === "loading") return <ActivityIndicator color={colors.primary} size="small" />;
   const icon =
     type === "error"
       ? AlertCircleIcon
@@ -41,7 +44,7 @@ function AppToast({
   isVisible,
   onPress,
 }: {
-  type: ToastKind;
+  type: AppToastKind;
   text1?: string;
   text2?: string;
   isVisible: boolean;
@@ -86,6 +89,7 @@ function AppToast({
         <View className="w-full items-center px-6">
           <Pressable
             accessibilityRole="alert"
+            accessibilityState={{ busy: type === "loading" }}
             className="w-full max-w-sm flex-row items-start gap-3 border border-border bg-card px-4 py-3"
             onPress={onPress}
             style={{
@@ -129,6 +133,9 @@ const toastConfig: ToastConfig = {
   appError: ({ isVisible, onPress, text1, text2 }) => (
     <AppToast isVisible={isVisible} onPress={onPress} text1={text1} text2={text2} type="error" />
   ),
+  appLoading: ({ isVisible, onPress, text1, text2 }) => (
+    <AppToast isVisible={isVisible} onPress={onPress} text1={text1} text2={text2} type="loading" />
+  ),
   appInfo: ({ isVisible, onPress, text1, text2 }) => (
     <AppToast isVisible={isVisible} onPress={onPress} text1={text1} text2={text2} type="info" />
   ),
@@ -150,6 +157,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
 // One object for the whole app. Callers list `toast` in effect and callback dependencies, so a
 // new object per render would re-run them on every render (the profile refetched in a loop).
 const toastApi = {
+  /** Takes the place of any toast showing, a loading one included. */
   error: (title: string, description?: string) =>
     Toast.show({ text1: title, text2: description, type: "appError" }),
   show: ({
@@ -168,6 +176,13 @@ const toastApi = {
     }),
   success: (title: string, description?: string) =>
     Toast.show({ text1: title, text2: description, type: "appSuccess" }),
+  /**
+   * A spinner toast for work under way (a label being read). It stays up until `success`,
+   * `error` or `show` replaces it in place, or `hide` takes it away.
+   */
+  loading: (title: string, description?: string) =>
+    Toast.show({ autoHide: false, text1: title, text2: description, type: "appLoading" }),
+  hide: () => Toast.hide(),
 };
 
 export function useToast() {

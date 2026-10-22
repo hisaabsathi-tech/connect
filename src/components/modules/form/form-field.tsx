@@ -36,6 +36,8 @@ export type FormFieldProps = {
   hint?: string | null;
   /** Shown right under the input, e.g. address suggestions. */
   children?: ReactNode;
+  /** False greys the field out and stops typing, e.g. while a scan fills it. */
+  editable?: boolean;
 };
 
 function StatusIcon({ status }: { status: NonNullable<FormFieldProps["status"]> }) {
@@ -68,6 +70,7 @@ function StatusIcon({ status }: { status: NonNullable<FormFieldProps["status"]> 
 export function FormField({
   autoCapitalize = "sentences",
   children,
+  editable = true,
   error,
   hint,
   keyboardType = "default",
@@ -94,7 +97,7 @@ export function FormField({
         {required ? <Text className="text-destructive">*</Text> : null}
       </Text>
       <View
-        className={`flex-row overflow-hidden border bg-card ${multiline ? "min-h-24" : "h-12"} ${border}`}
+        className={`flex-row overflow-hidden border ${editable ? "bg-card" : "bg-muted"} ${multiline ? "min-h-24" : "h-12"} ${border}`}
       >
         {prefix ? (
           <View className="min-w-[60px] items-center justify-center border-border border-r bg-muted px-3">
@@ -105,8 +108,9 @@ export function FormField({
           accessibilityLabel={label}
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
-          className="flex-1 text-base text-foreground"
+          className={`flex-1 text-base ${editable ? "text-foreground" : "text-muted-foreground"}`}
           cursorColor={colors.primary}
+          editable={editable}
           importantForAutofill="no"
           keyboardType={keyboardType}
           maxLength={maxLength}

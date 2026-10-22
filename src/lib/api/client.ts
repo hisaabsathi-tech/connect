@@ -28,16 +28,19 @@ export async function apiRequest<T>(
   path: string,
   token: string,
   init: RequestInit = {},
+  { timeoutMs }: { timeoutMs?: number } = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
-  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  // A FormData body sets its own multipart Content-Type, with the boundary.
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type"))
+    headers.set("Content-Type", "application/json");
   const reading = !init.method || init.method === "GET";
   // Throws NetworkError when the server can't be reached (offline, timeout, captive portal).
   const response = await timedFetch(
     `${baseUrl}${path}`,
     { ...init, headers },
-    reading ? undefined : WRITE_TIMEOUT_MS,
+    timeoutMs ?? (reading ? undefined : WRITE_TIMEOUT_MS),
   );
   const payload = await readJson(response);
   if (!response.ok) {

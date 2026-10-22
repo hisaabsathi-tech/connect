@@ -127,6 +127,16 @@ describe("requests", () => {
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
+  it("doesn't call the app offline when a slow request times out but the server answers", async () => {
+    fake.server.routes.set("GET /slow", () => "hang");
+    for (let tries = 0; tries < 4; tries += 1) {
+      const error = await timedFetch("http://api.test/slow", {}, 30).catch((caught) => caught);
+      expect(error.message).toBe("The server took too long to answer. Please try again.");
+    }
+    await settle(5);
+    expect(isOnline()).toBe(true);
+  });
+
   it("treats a Wi-Fi sign-in page as offline, not as the API's answer", async () => {
     fake.server.portal = true;
     const rest = await apiRequest("/anything", TOKEN).catch((caught) => caught);

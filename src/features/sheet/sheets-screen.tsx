@@ -22,6 +22,7 @@ import { saveToDevice, shareFile } from "@/lib/files/device-files";
 import { onReconnect } from "@/lib/network/connectivity";
 import { readCache, writeCache } from "@/lib/offline/cache";
 
+import { DownloadManifestSheet } from "./components/download-manifest-sheet";
 import { SheetCard } from "./components/sheet-card";
 import { SheetHero } from "./components/sheet-hero";
 import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
@@ -37,7 +38,7 @@ const sheetKey = (sheet: SmartSheetSummary) => `${sheet.organizationId}-${sheet.
  * The Sheet tab: the banner to start a new Smart Sheet, then the sheets the member can see in
  * every same-owner organization, without switching — in each, all of them or only their own, as
  * their role there allows — searchable by name or organization and narrowed to the days they were
- * last saved. Each card downloads its Shipping Manifest.
+ * last saved. Each card downloads its Shipping Manifest, once confirmed in a bottom sheet.
  */
 export function SheetsScreen() {
   const { token } = useAuthSession();
@@ -53,6 +54,10 @@ export function SheetsScreen() {
   const [staleSince, setStaleSince] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  // The sheet whose manifest download is being confirmed, and the one confirmed, which downloads
+  // once the confirmation has slid away.
+  const [confirming, setConfirming] = useState<SmartSheetSummary | null>(null);
+  const confirmed = useRef<SmartSheetSummary | null>(null);
   const { organizations } = useSheetOrganizations();
   // One organization's sheets, or every organization's (null).
   const [organizationId, setOrganizationId] = useState<string | null>(null);
@@ -123,6 +128,11 @@ export function SheetsScreen() {
     } finally {
       setDownloading(null);
     }
+  };
+  const startConfirmed = () => {
+    const sheet = confirmed.current;
+    confirmed.current = null;
+    if (sheet) void download(sheet);
   };
 
   const header = (
@@ -211,7 +221,9 @@ export function SheetsScreen() {
         renderItem={({ item }) => (
           <SheetCard
             downloading={downloading === sheetKey(item)}
-            onDownload={() => void download(item)}
+            onDownload={() => {
+              if (!downloading) setConfirming(item);
+            }}
             onOpen={() =>
               router.push({
                 params: {
@@ -226,6 +238,15 @@ export function SheetsScreen() {
             showOrganization={manyOrganizations}
           />
         )}
+      />
+      <DownloadManifestSheet
+        onClose={() => setConfirming(null)}
+        onClosed={startConfirmed}
+        onConfirm={() => {
+          confirmed.current = confirming;
+          setConfirming(null);
+        }}
+        sheet={confirming}
       />
     </TabScreen>
   );

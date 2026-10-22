@@ -4,6 +4,7 @@ import {
   Cancel01Icon,
   CancelCircleIcon,
   CirclePlusIcon,
+  Image01Icon,
   Location01Icon,
   PencilEdit02Icon,
   Search01Icon,
@@ -29,6 +30,11 @@ import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { ApiError } from "@/lib/api/client";
+import {
+  deleteSheetLabelScan,
+  listSheetLabelScans,
+  type SheetLabelScan,
+} from "@/lib/api/label-scan";
 import { isNetworkError } from "@/lib/api/network";
 import {
   type Client,
@@ -43,6 +49,7 @@ import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { readCache, writeCache } from "@/lib/offline/cache";
 
+import { SheetImages } from "./components/sheet-images";
 import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
 
 // The same saved lists as the client picker's, per organization.
@@ -254,9 +261,22 @@ export function SheetRowsScreen() {
   const [removing, setRemoving] = useState<number | null>(null);
   const [findingClient, setFindingClient] = useState(false);
   const { organizations } = useSheetOrganizations();
+  // The label photos scanned for this sheet's orders, under the table as Images.
+  const [scans, setScans] = useState<SheetLabelScan[]>([]);
+  const [imagesOpen, setImagesOpen] = useState(false);
+
+  const loadScans = async () => {
+    if (!token) return;
+    try {
+      setScans(await listSheetLabelScans(token, sheet.organizationId, sheet.id));
+    } catch {
+      // The orders still show; Images comes back with the next load.
+    }
+  };
 
   const load = async () => {
     if (!token) return;
+    void loadScans();
     setFailure(null);
     try {
       setData(await fetchSheetRows(token, sheet));
@@ -309,6 +329,7 @@ export function SheetRowsScreen() {
         receiverPhone: order.receiverPhone,
         row: String(order.row),
         sheetId: data.id,
+        sheetName: data.name,
         version: String(data.version),
         volumetricWeight: order.volumetricWeight === null ? "" : String(order.volumetricWeight),
         weight: order.weight === null ? "" : String(order.weight),
@@ -488,27 +509,56 @@ export function SheetRowsScreen() {
           />
         )}
       />
-      {canAdd ? (
-        <View className="px-5 pb-4 pt-2">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ busy: findingClient, disabled: findingClient }}
-            className="h-12 flex-row items-center justify-center gap-2 bg-primary active:bg-primary-hover"
-            disabled={findingClient}
-            onPress={() => void addNew()}
-            onPressIn={() => haptic("light")}
-          >
-            {findingClient ? (
-              <ActivityIndicator color={colors.primaryForeground} size="small" />
-            ) : (
-              <>
-                <Text className="text-base font-medium text-primary-foreground">Add New</Text>
-                <HugeiconsIcon color={colors.primaryForeground} icon={CirclePlusIcon} size={20} />
-              </>
-            )}
-          </Pressable>
+      {canAdd || scans.length ? (
+        <View className="gap-3 px-5 pb-4 pt-2">
+          {/* The sheet's label photos, just above Add New. */}
+          {scans.length ? (
+            <Pressable
+              accessibilityLabel={`Images, ${scans.length} label photos in this sheet`}
+              accessibilityRole="button"
+              className="h-12 flex-row items-center justify-center gap-2 border border-primary bg-card active:bg-accent"
+              onPress={() => setImagesOpen(true)}
+              onPressIn={() => haptic("light")}
+            >
+              <Text className="text-base font-medium text-primary">Images ({scans.length})</Text>
+              <HugeiconsIcon color={colors.primary} icon={Image01Icon} size={20} />
+            </Pressable>
+          ) : null}
+          {canAdd ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ busy: findingClient, disabled: findingClient }}
+              className="h-12 flex-row items-center justify-center gap-2 bg-primary active:bg-primary-hover"
+              disabled={findingClient}
+              onPress={() => void addNew()}
+              onPressIn={() => haptic("light")}
+            >
+              {findingClient ? (
+                <ActivityIndicator color={colors.primaryForeground} size="small" />
+              ) : (
+                <>
+                  <Text className="text-base font-medium text-primary-foreground">Add New</Text>
+                  <HugeiconsIcon color={colors.primaryForeground} icon={CirclePlusIcon} size={20} />
+                </>
+              )}
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
+      <SheetImages
+        onClose={() => setImagesOpen(false)}
+        onDelete={async (scan) => {
+          if (!token) return;
+          await deleteSheetLabelScan(token, sheet.organizationId, scan.id);
+          const left = scans.filter((item) => item.id !== scan.id);
+          setScans(left);
+          // The last photo gone, the empty Images screen closes too.
+          if (!left.length) setImagesOpen(false);
+        }}
+        scans={scans}
+        sheetName={data?.name ?? params.name ?? ""}
+        visible={imagesOpen}
+      />
     </TabScreen>
   );
 }

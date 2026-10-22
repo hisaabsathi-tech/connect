@@ -79,7 +79,8 @@ export function NetworkProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (status === "online") {
       onlineSince.current = since;
-      setSheet((open) => (open?.action === null ? null : open));
+      // Back online: no "needs internet" sheet stays up, whatever opened it.
+      setSheet(null);
       return;
     }
     if (status !== "offline") return;
