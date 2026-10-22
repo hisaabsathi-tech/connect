@@ -108,7 +108,7 @@ function DayCell({
  * The app's own date range picker in a bottom sheet: quick presets, then a Monday-first month
  * calendar where the first tap picks the start and the second the end. Days after today can't be
  * picked unless `allowFuture` (orders and pickups, which can be issued ahead, e.g. tomorrow's DRS).
- * Apply hands the range back; Cancel or closing keeps the previous one.
+ * Apply (Confirm for one day) hands the range back; Cancel or closing keeps the previous one.
  *
  * `single` picks one day instead (a one-day range): each tap chooses the day, with no presets.
  */
@@ -260,7 +260,7 @@ export function DateRangeSheet({
         <HapticButton
           disabled={!complete}
           kind="medium"
-          label="Apply"
+          label={single ? "Confirm" : "Apply"}
           onPress={() => {
             if (complete) onApply(complete);
           }}
