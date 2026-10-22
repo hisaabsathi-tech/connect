@@ -3,6 +3,7 @@ import {
   Call02Icon,
   Cancel01Icon,
   CancelCircleIcon,
+  CirclePlusIcon,
   Location01Icon,
   PencilEdit02Icon,
   Search01Icon,
@@ -30,6 +31,8 @@ import { colors } from "@/config/colors";
 import { ApiError } from "@/lib/api/client";
 import { isNetworkError } from "@/lib/api/network";
 import {
+  type Client,
+  fetchOrganizationClients,
   fetchSheetRows,
   removeSheetRow,
   type SheetOrderRow,
@@ -38,6 +41,36 @@ import {
 import { useAuthSession } from "@/lib/auth/session";
 import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
+import { readCache, writeCache } from "@/lib/offline/cache";
+
+import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
+
+// The same saved lists as the client picker's, per organization.
+const CLIENTS_CACHE = "sheet-clients";
+
+/**
+ * The organization's client with this client ID: from the list saved by the client picker, else
+ * (or when it isn't there, a client added since) from a fresh one, saved for next time.
+ */
+async function findClient(token: string, organizationId: string, code: string) {
+  const wanted = code.trim().toUpperCase();
+  const match = (clients: Client[] | undefined) =>
+    clients?.find((client) => client.orgGivenId.trim().toUpperCase() === wanted);
+  const saved = match(readCache<Client[]>(CLIENTS_CACHE, organizationId)?.data);
+  if (saved) return saved;
+  const fresh = await fetchOrganizationClients(token, organizationId);
+  writeCache(CLIENTS_CACHE, organizationId, fresh, 10);
+  return match(fresh);
+}
+
+/** The client ID of the sheet's latest order that names one. */
+function latestClientCode(rows: SheetOrderRow[]) {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const code = rows[index]?.clientCode;
+    if (code) return code;
+  }
+  return null;
+}
 
 // The table's narrow columns; the AWB column fits its numbers and the receiver takes the rest.
 const SERIAL_WIDTH = 40;
@@ -219,6 +252,8 @@ export function SheetRowsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState("");
   const [removing, setRemoving] = useState<number | null>(null);
+  const [findingClient, setFindingClient] = useState(false);
+  const { organizations } = useSheetOrganizations();
 
   const load = async () => {
     if (!token) return;
@@ -310,6 +345,50 @@ export function SheetRowsScreen() {
   };
 
   const canUpdate = data?.canUpdate ?? false;
+  // Adding needs order create and the clients of the sheet's organization, as a new sheet does.
+  const organization = organizations.find((item) => item.id === data?.organizationId);
+  const canAdd = Boolean(data && organization?.canCreate && organization.canListClients);
+
+  /**
+   * More orders for this sheet: straight to the Add Order form for the sheet's client (the latest
+   * row's), else to choosing one. Either way the orders go into this sheet.
+   */
+  const addNew = async () => {
+    if (!(token && data) || findingClient) return;
+    const sheetParams = {
+      dataRows: String(data.rows.length),
+      organizationId: data.organizationId,
+      organizationName: data.organizationName,
+      sheetId: data.id,
+      sheetName: data.name,
+    };
+    const code = latestClientCode(data.rows);
+    let client: Client | undefined;
+    if (code) {
+      setFindingClient(true);
+      try {
+        client = await findClient(token, data.organizationId, code);
+      } catch {
+        // Unknown here: the client list lets them pick.
+      } finally {
+        setFindingClient(false);
+      }
+    }
+    if (!client) {
+      router.push({ params: sheetParams, pathname: "/sheet/client" });
+      return;
+    }
+    router.push({
+      params: {
+        ...sheetParams,
+        clientCode: client.orgGivenId,
+        clientId: client.id,
+        clientName: client.name,
+        mode: "append",
+      },
+      pathname: "/sheet/add-order",
+    });
+  };
   const awbWidth = useMemo(() => awbColumnWidth(data?.rows ?? []), [data]);
   const header = (
     <View>
@@ -403,6 +482,27 @@ export function SheetRowsScreen() {
           />
         )}
       />
+      {canAdd ? (
+        <View className="px-5 pb-4 pt-2">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ busy: findingClient, disabled: findingClient }}
+            className="h-12 flex-row items-center justify-center gap-2 bg-primary active:bg-primary-hover"
+            disabled={findingClient}
+            onPress={() => void addNew()}
+            onPressIn={() => haptic("light")}
+          >
+            {findingClient ? (
+              <ActivityIndicator color={colors.primaryForeground} size="small" />
+            ) : (
+              <>
+                <Text className="text-base font-medium text-primary-foreground">Add New</Text>
+                <HugeiconsIcon color={colors.primaryForeground} icon={CirclePlusIcon} size={20} />
+              </>
+            )}
+          </Pressable>
+        </View>
+      ) : null}
     </TabScreen>
   );
 }

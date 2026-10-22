@@ -115,9 +115,15 @@ type Params = {
   clientName: string;
   organizationId: string;
   organizationName: string;
-  /** "edit": change one order of a sheet (`sheetId`, `row`, `version`) instead of adding. */
+  /**
+   * "edit": change one order of a sheet (`sheetId`, `row`, `version`) instead of adding.
+   * "append": add orders to an existing sheet (`sheetId`, `sheetName`, its `dataRows`) instead of
+   * starting one.
+   */
   mode?: string;
   sheetId?: string;
+  sheetName?: string;
+  dataRows?: string;
   row?: string;
   version?: string;
   // The order being edited, as its table read it.
@@ -150,11 +156,14 @@ function formFrom(params: Params): Form {
  * client, which starts another sheet.
  *
  * Opened from a sheet's table to edit one order, the form comes filled in and Update & Save
- * changes that row; the page stays on the saved details, and back returns to the table.
+ * changes that row; the page stays on the saved details, and back returns to the table. Opened
+ * from its Add New, the orders go into that sheet instead of a new one, and Change picks another
+ * client for the same sheet.
  */
 export function AddOrderScreen() {
   const params = useLocalSearchParams<Params>();
   const editing = params.mode === "edit" && Boolean(params.sheetId && params.row);
+  const appending = params.mode === "append" && Boolean(params.sheetId);
   const { token } = useAuthSession();
   const { requireOnline } = useNetwork();
   const toast = useToast();
@@ -168,9 +177,32 @@ export function AddOrderScreen() {
   const [version, setVersion] = useState(() => Number(params.version ?? 0));
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [saving, setSaving] = useState(false);
-  // The sheet this visit fills, once the first order started it.
-  const [sheet, setSheet] = useState<{ id: string; name: string } | null>(null);
-  const [shipments, setShipments] = useState(0);
+  // The sheet this visit fills: the one opened from its table, else the one the first order
+  // starts.
+  const [sheet, setSheet] = useState<{ id: string; name: string } | null>(() =>
+    appending ? { id: params.sheetId ?? "", name: params.sheetName ?? "" } : null,
+  );
+  const [shipments, setShipments] = useState(() =>
+    appending ? Number(params.dataRows ?? 0) || 0 : 0,
+  );
+
+  // Another client: for a sheet opened from its table, picked for that same sheet; else back to
+  // the client list, which starts a new sheet.
+  const changeClient = () => {
+    if (!(appending && sheet)) {
+      router.back();
+      return;
+    }
+    router.replace({
+      params: {
+        dataRows: String(shipments),
+        organizationId: params.organizationId,
+        sheetId: sheet.id,
+        sheetName: sheet.name,
+      },
+      pathname: "/sheet/client",
+    });
+  };
   // The id of an order whose save didn't come back: resending it can't add it twice.
   const pendingActionId = useRef<string | null>(null);
   const pincode = usePincodeCheck(token, form.pincode);
@@ -336,7 +368,7 @@ export function AddOrderScreen() {
                 accessibilityRole="button"
                 className="h-10 flex-row items-center gap-2 bg-primary px-4 active:bg-primary-hover"
                 disabled={saving}
-                onPress={() => router.back()}
+                onPress={changeClient}
                 onPressIn={() => haptic("light")}
               >
                 <Text className="text-sm font-medium text-primary-foreground">Change</Text>

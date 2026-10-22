@@ -6,7 +6,7 @@ import {
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, TextInput, View } from "react-native";
 
@@ -81,14 +81,29 @@ function ClientListSkeleton() {
  * The first step of a new Smart Sheet: choosing the organization (when the member has more than
  * one where they may add orders) and the client the orders are for, from that organization's
  * credit customers, searchable by name or client ID.
+ *
+ * Opened for an existing sheet (`sheetId`, from its table's Add New), the organization is the
+ * sheet's and the orders go into that sheet.
  */
 export function SelectClientScreen() {
+  const target = useLocalSearchParams<{
+    dataRows?: string;
+    organizationId?: string;
+    sheetId?: string;
+    sheetName?: string;
+  }>();
   const { token } = useAuthSession();
   const { loaded: organizationsLoaded, organizations } = useSheetOrganizations();
-  // Where the member may both see the clients and add orders.
+  // Where the member may both see the clients and add orders; for an existing sheet, its own.
   const usable = useMemo(
-    () => organizations.filter((item) => item.canCreate && item.canListClients),
-    [organizations],
+    () =>
+      organizations.filter(
+        (item) =>
+          item.canCreate &&
+          item.canListClients &&
+          (!target.sheetId || item.id === target.organizationId),
+      ),
+    [organizations, target.organizationId, target.sheetId],
   );
   const [pickedOrganizationId, setPickedOrganizationId] = useState<string | null>(null);
   // The one picked, else the signed-in one, else the first.
@@ -162,6 +177,15 @@ export function SelectClientScreen() {
         clientName: selected.name,
         organizationId: organization.id,
         organizationName: organization.name,
+        // For an existing sheet, its orders go into it.
+        ...(target.sheetId
+          ? {
+              dataRows: target.dataRows ?? "0",
+              mode: "append",
+              sheetId: target.sheetId,
+              sheetName: target.sheetName ?? "",
+            }
+          : {}),
       },
       pathname: "/sheet/add-order",
     });
