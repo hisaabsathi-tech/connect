@@ -59,6 +59,25 @@ export type SheetOrderInput = {
   awbNo?: string;
   /** Optional, likewise. */
   refNo?: string;
+  /**
+   * The booking, each by name as `fetchBookingOptions` lists it; optional, and on an edit empty
+   * clears the sheet's cell.
+   */
+  courierPartner?: string;
+  serviceType?: string;
+  packageType?: string;
+  travelMode?: string;
+};
+
+/**
+ * What an order can be booked with in an organization, as the web's order form offers it: its
+ * courier partners, each with the service types it offers, and its package types and travel
+ * modes.
+ */
+export type BookingOptions = {
+  couriers: { id: string; name: string; serviceTypes: string[] }[];
+  packageTypes: string[];
+  travelModes: string[];
 };
 
 const LINKED = "/orders/smart-sheets/linked";
@@ -109,6 +128,11 @@ export function fetchSheetOrganizations(token: string) {
   return apiRequest<SheetOrganization[]>(`${LINKED}/organizations`, token);
 }
 
+/** What an order of a sheet in an organization can be booked with. */
+export function fetchBookingOptions(token: string, organizationId: string) {
+  return apiRequest<BookingOptions>(`${LINKED}/${part(organizationId)}/booking-options`, token);
+}
+
 /** An organization's credit clients, by name. */
 export function fetchOrganizationClients(token: string, organizationId: string) {
   return apiRequest<Client[]>(`${LINKED}/${part(organizationId)}/clients`, token);
@@ -156,6 +180,10 @@ export type SheetOrderRow = {
   receiverAddress: string;
   weight: number | null;
   volumetricWeight: number | null;
+  courierPartner: string;
+  serviceType: string;
+  packageType: string;
+  travelMode: string;
 };
 
 export type SheetOrderRows = {

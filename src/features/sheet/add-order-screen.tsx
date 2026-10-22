@@ -19,7 +19,7 @@ import { type PropsWithChildren, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
 
 import { DateRangeSheet } from "@/components/modules/date-range";
-import { FormField } from "@/components/modules/form";
+import { FormField, SelectField } from "@/components/modules/form";
 import { TabScreen } from "@/components/modules/layout";
 import { useNetwork } from "@/components/modules/network";
 import { Text } from "@/components/modules/typography";
@@ -41,6 +41,7 @@ import { haptic } from "@/lib/haptics";
 import { newActionId } from "@/lib/offline/outbox";
 
 import { useAddressSuggestions } from "./hooks/use-address-suggestions";
+import { useBookingOptions } from "./hooks/use-booking-options";
 import {
   clashMessage,
   type IdentifierCheck,
@@ -66,24 +67,34 @@ type Form = {
   length: string;
   height: string;
   width: string;
+  // The booking, optional: each by name as the organization lists it.
+  courierPartner: string;
+  serviceType: string;
+  packageType: string;
+  travelMode: string;
 };
 
 type Field = keyof Form;
 
 const EMPTY_FORM: Form = {
   awbNo: "",
+  courierPartner: "",
   height: "",
   length: "",
+  packageType: "",
   pincode: "",
   refNo: "",
   receiverAddress: "",
   receiverName: "",
   receiverPhone: "",
+  serviceType: "",
+  travelMode: "",
   volumetricWeight: "",
   weight: "",
   width: "",
 };
 
+const BOOKING = ["courierPartner", "serviceType", "packageType", "travelMode"] as const;
 const DIMENSIONS = ["length", "height", "width"] as const;
 // Rows of equal columns, split by percentage so a column's label or value can't widen it; each
 // column pads half the gap and the row pulls out by as much.
@@ -215,6 +226,38 @@ function Section({
   );
 }
 
+/**
+ * The underlined Advanced Option link at the end of a section, which shows or hides the section's
+ * optional fields under it.
+ */
+function AdvancedOption({
+  children,
+  onToggle,
+  open,
+}: PropsWithChildren<{ onToggle: () => void; open: boolean }>) {
+  return (
+    // Kept close under the field above, and the fields close under it.
+    <View className="-mt-2">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        className="flex-row items-center gap-1 self-end py-1 active:opacity-60"
+        hitSlop={8}
+        onPress={onToggle}
+        onPressIn={() => haptic("light")}
+      >
+        <Text className="text-sm font-medium text-primary underline">Advanced Option</Text>
+        <HugeiconsIcon
+          color={colors.primary}
+          icon={open ? ArrowUp01Icon : ArrowDown01Icon}
+          size={18}
+        />
+      </Pressable>
+      {open ? <View className="mt-2 gap-5">{children}</View> : null}
+    </View>
+  );
+}
+
 type Params = {
   clientCode: string;
   clientId: string;
@@ -242,19 +285,27 @@ type Params = {
   receiverAddress?: string;
   weight?: string;
   volumetricWeight?: string;
+  courierPartner?: string;
+  serviceType?: string;
+  packageType?: string;
+  travelMode?: string;
 };
 
 /** The order being edited, from the table's params. */
 function formFrom(params: Params): Form {
   return {
     awbNo: params.awbNo ?? "",
+    courierPartner: params.courierPartner ?? "",
     height: "",
     length: "",
+    packageType: params.packageType ?? "",
     pincode: params.pincode ?? "",
     refNo: params.refNo ?? "",
     receiverAddress: params.receiverAddress ?? "",
     receiverName: params.receiverName ?? "",
     receiverPhone: mobileDigits(params.receiverPhone ?? "").slice(0, 10),
+    serviceType: params.serviceType ?? "",
+    travelMode: params.travelMode ?? "",
     volumetricWeight: params.volumetricWeight ?? "",
     weight: params.weight ?? "",
     width: "",
@@ -293,11 +344,20 @@ export function AddOrderScreen() {
   const [version, setVersion] = useState(() => Number(params.version ?? 0));
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [saving, setSaving] = useState(false);
-  // The AWB and reference numbers stay folded away under Advanced Option, unless an edited order
-  // has either.
-  const [advanced, setAdvanced] = useState(() =>
+  // The AWB and reference numbers, and the booking, stay folded away under their sections'
+  // Advanced Option, unless an edited order has some.
+  const [numbersOpen, setNumbersOpen] = useState(() =>
     Boolean(editing && (params.awbNo?.trim() || params.refNo?.trim())),
   );
+  const [bookingOpen, setBookingOpen] = useState(() =>
+    Boolean(editing && BOOKING.some((name) => params[name]?.trim())),
+  );
+  const booking = useBookingOptions(params.organizationId);
+  // The chosen courier as the organization lists it, whatever case the sheet wrote it in.
+  const courier =
+    booking.options.couriers.find(
+      (item) => item.name.toUpperCase() === form.courierPartner.trim().toUpperCase(),
+    ) ?? null;
   // The sheet this visit fills: the one opened from its table, else the one the first order
   // starts.
   const [sheet, setSheet] = useState<{ id: string; name: string } | null>(() =>
@@ -378,6 +438,22 @@ export function AddOrderScreen() {
       }));
   };
 
+  // As on the web: a new courier keeps the service type only if it offers it too, and no courier
+  // clears the rest of the booking.
+  const pickCourier = (name: string) => {
+    pendingActionId.current = null;
+    const offered = booking.options.couriers.find((item) => item.name === name)?.serviceTypes;
+    setForm((current) => ({
+      ...current,
+      courierPartner: name,
+      ...(name
+        ? offered?.includes(current.serviceType)
+          ? {}
+          : { serviceType: "" }
+        : { packageType: "", serviceType: "", travelMode: "" }),
+    }));
+  };
+
   const reset = () => {
     pendingActionId.current = null;
     setForm(resetTo.current.form);
@@ -401,7 +477,7 @@ export function AddOrderScreen() {
     setErrors(found);
     if (Object.values(found).some(Boolean)) {
       // A folded-away number that's wrong is shown, so its error can be seen.
-      if (found.awbNo || found.refNo) setAdvanced(true);
+      if (found.awbNo || found.refNo) setNumbersOpen(true);
       haptic("error");
       return;
     }
@@ -413,9 +489,18 @@ export function AddOrderScreen() {
     // it.
     const send = (value: string, keptValue: string | null) =>
       editing ? value !== keptValue : Boolean(value);
+    // The booking likewise, but an edit sends all of it once any part changes, as the server
+    // checks the service type against the courier.
+    const bookingChanged = BOOKING.some(
+      (name) => form[name].trim() !== (params[name] ?? "").trim(),
+    );
+    const bookingSent = BOOKING.filter((name) =>
+      editing ? bookingChanged : Boolean(form[name].trim()),
+    ).map((name) => [name, form[name].trim()]);
     const order: SheetOrderInput = {
       ...(send(form.awbNo.trim(), kept.awbNo) ? { awbNo } : {}),
       ...(send(refNo, kept.refNo) ? { refNo } : {}),
+      ...Object.fromEntries(bookingSent),
       clientId: params.clientId,
       orderDate,
       pincode: form.pincode.trim(),
@@ -609,55 +694,33 @@ export function AddOrderScreen() {
               required
               status={pincode.status}
             />
-            {/* Kept close under the pincode, and the numbers close under it. */}
-            <View className="-mt-2">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ expanded: advanced }}
-                className="flex-row items-center gap-1 self-end py-1 active:opacity-60"
-                hitSlop={8}
-                onPress={() => setAdvanced((open) => !open)}
-                onPressIn={() => haptic("light")}
-              >
-                <Text className="text-sm font-medium text-primary underline">Advanced Option</Text>
-                <HugeiconsIcon
-                  color={colors.primary}
-                  icon={advanced ? ArrowUp01Icon : ArrowDown01Icon}
-                  size={18}
-                />
-              </Pressable>
-              {advanced ? (
-                <View className="mt-2 gap-5">
-                  <FormField
-                    {...field("awbNo")}
-                    autoCapitalize="characters"
-                    // Wrong as typed, or already taken: said at once, as the pincode is.
-                    error={
-                      errors.awbNo ??
-                      awbFormatError(form.awbNo, kept.awbNo) ??
-                      clashMessage("awbNo", checks.awbNo.clash)
-                    }
-                    label="AWB No"
-                    maxLength={AWB_MAX_LENGTH}
-                    // Upper case and no spaces, as AWB numbers are written; the scanner's paste too.
-                    onChangeText={(value) =>
-                      update("awbNo")(value.replace(/\s+/g, "").toUpperCase())
-                    }
-                    placeholder="Enter AWB number"
-                    status={checks.awbNo.status}
-                  />
-                  <FormField
-                    {...field("refNo")}
-                    autoCapitalize="none"
-                    error={errors.refNo ?? clashMessage("refNo", checks.refNo.clash)}
-                    label="Reference No"
-                    maxLength={REF_MAX_LENGTH}
-                    placeholder="Enter reference number"
-                    status={checks.refNo.status}
-                  />
-                </View>
-              ) : null}
-            </View>
+            <AdvancedOption onToggle={() => setNumbersOpen((open) => !open)} open={numbersOpen}>
+              <FormField
+                {...field("awbNo")}
+                autoCapitalize="characters"
+                // Wrong as typed, or already taken: said at once, as the pincode is.
+                error={
+                  errors.awbNo ??
+                  awbFormatError(form.awbNo, kept.awbNo) ??
+                  clashMessage("awbNo", checks.awbNo.clash)
+                }
+                label="AWB No"
+                maxLength={AWB_MAX_LENGTH}
+                // Upper case and no spaces, as AWB numbers are written; the scanner's paste too.
+                onChangeText={(value) => update("awbNo")(value.replace(/\s+/g, "").toUpperCase())}
+                placeholder="Enter AWB number"
+                status={checks.awbNo.status}
+              />
+              <FormField
+                {...field("refNo")}
+                autoCapitalize="none"
+                error={errors.refNo ?? clashMessage("refNo", checks.refNo.clash)}
+                label="Reference No"
+                maxLength={REF_MAX_LENGTH}
+                placeholder="Enter reference number"
+                status={checks.refNo.status}
+              />
+            </AdvancedOption>
           </Section>
 
           <Section icon={UserIcon} title="Receiver Details">
@@ -759,6 +822,56 @@ export function AddOrderScreen() {
                 />
               </View>
             </View>
+            <AdvancedOption onToggle={() => setBookingOpen((open) => !open)} open={bookingOpen}>
+              <View style={COLUMNS_ROW}>
+                <View style={HALF}>
+                  <SelectField
+                    emptyText={booking.loaded ? "No courier partners" : "Loading courier partners…"}
+                    label="Courier Partner"
+                    onChange={pickCourier}
+                    options={booking.options.couriers.map((item) => item.name)}
+                    placeholder="Select"
+                    value={courier?.name ?? form.courierPartner}
+                  />
+                </View>
+                <View style={HALF}>
+                  {/* This one and the two below wait for a courier partner, as on the web. */}
+                  <SelectField
+                    disabled={!form.courierPartner}
+                    emptyText="This courier offers no service types"
+                    label="Service Type"
+                    onChange={update("serviceType")}
+                    options={courier?.serviceTypes ?? []}
+                    placeholder="Select"
+                    value={form.serviceType}
+                  />
+                </View>
+              </View>
+              <View style={COLUMNS_ROW}>
+                <View style={HALF}>
+                  <SelectField
+                    disabled={!form.courierPartner}
+                    emptyText="No package types"
+                    label="Package Type"
+                    onChange={update("packageType")}
+                    options={booking.options.packageTypes}
+                    placeholder="Select"
+                    value={form.packageType}
+                  />
+                </View>
+                <View style={HALF}>
+                  <SelectField
+                    disabled={!form.courierPartner}
+                    emptyText="No travel modes"
+                    label="Travel Mode"
+                    onChange={update("travelMode")}
+                    options={booking.options.travelModes}
+                    placeholder="Select"
+                    value={form.travelMode}
+                  />
+                </View>
+              </View>
+            </AdvancedOption>
           </Section>
 
           <View className="mt-6 flex-row gap-3">
