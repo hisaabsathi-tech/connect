@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { androidEnv } from "./android-env";
+import { androidEnv, gradlew } from "./android-env";
 import { acquireBuildLock } from "./build-lock";
 import { assertApiReachable, productionEnv, signingEnv } from "./release-env";
 
@@ -81,8 +81,9 @@ try {
   run(expo, ["prebuild", "--platform", "android", "--no-install", "--clean"], buildEnv);
   run("bun", ["scripts/configure-android-signing.ts"], buildEnv);
   run(
-    "./gradlew",
+    gradlew[0],
     [
+      ...gradlew.slice(1),
       "assembleRelease",
       ...daemonArgs,
       `-PreactNativeArchitectures=${abis}`,
@@ -112,8 +113,9 @@ try {
   }
   if (aab) {
     run(
-      "./gradlew",
+      gradlew[0],
       [
+        ...gradlew.slice(1),
         "bundleRelease",
         ...daemonArgs,
         `-PreactNativeArchitectures=${abis}`,

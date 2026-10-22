@@ -5,7 +5,7 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { androidEnv } from "./android-env";
+import { androidEnv, gradlew } from "./android-env";
 import { acquireBuildLock } from "./build-lock";
 import { assertApiReachable, productionEnv, signingEnv } from "./release-env";
 import { bump, bumpKinds, nextRelease, readVersion, writeVersion } from "./version";
@@ -53,8 +53,13 @@ async function buildStore(version: string): Promise<void> {
   run("bun", ["scripts/configure-android-signing.ts"], { env: buildEnv });
   // A warm Gradle daemon makes repeat local builds faster; CI runners are thrown away after one build.
   run(
-    "./gradlew",
-    ["bundleRelease", "assembleRelease", ...(process.env.CI ? ["--no-daemon"] : [])],
+    gradlew[0],
+    [
+      ...gradlew.slice(1),
+      "bundleRelease",
+      "assembleRelease",
+      ...(process.env.CI ? ["--no-daemon"] : []),
+    ],
     {
       cwd: resolve(root, "android"),
       env: buildEnv,

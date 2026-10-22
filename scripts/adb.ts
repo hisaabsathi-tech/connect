@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { sdkRoot } from "./android-env";
+import { exe, sdkRoot } from "./android-env";
 
 const deviceLinePattern = /\s+/;
 const usbProductNamePattern = /"USB Product Name" = "([^"]+)"/g;
@@ -16,7 +16,7 @@ export function findAdb(): string {
   if (spawnSync("adb", ["version"], { encoding: "utf8" }).status === 0) return "adb";
   const sdk = sdkRoot();
   const candidates = [
-    sdk ? join(sdk, "platform-tools", "adb") : null,
+    sdk ? join(sdk, "platform-tools", `adb${exe}`) : null,
     join(homedir(), "Library/Android/sdk/platform-tools/adb"),
     "/opt/homebrew/bin/adb",
   ].filter((candidate): candidate is string => Boolean(candidate));
