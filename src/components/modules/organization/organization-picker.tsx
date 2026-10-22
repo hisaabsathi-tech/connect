@@ -6,8 +6,9 @@ import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { BottomSheet } from "@/components/modules/sheet";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
-import type { SheetOrganization } from "@/lib/api/smart-sheets";
 import { haptic } from "@/lib/haptics";
+
+import type { OrganizationChoice } from "./organizations";
 
 // The list stops at this share of the screen and scrolls past it.
 const LIST_SHARE = 0.55;
@@ -46,18 +47,22 @@ function Option({
 
 /**
  * The organization selector at the end of a search bar: a building button that opens the list
- * of the member's organizations. Highlighted while one is chosen. With `allowAll`, an "All
- * organizations" row clears the choice. Nothing shows for a member of a single organization.
+ * of organizations. Highlighted while one is chosen. With `allowAll`, an "All organizations" row
+ * clears the choice. Nothing shows for fewer than two organizations, so a list holding a single
+ * organization's data never offers it.
  */
 export function OrganizationPicker({
   allowAll = false,
+  description,
   onChange,
   organizations,
   value,
 }: {
   allowAll?: boolean;
+  /** The line under the sheet's title, e.g. "Show the pickups of one organization". */
+  description: string;
   onChange: (organizationId: string | null) => void;
-  organizations: SheetOrganization[];
+  organizations: OrganizationChoice[];
   value: string | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -93,11 +98,7 @@ export function OrganizationPicker({
       </Pressable>
       <BottomSheet dragHandleOnly onClose={() => setOpen(false)} visible={open}>
         <Text className="mt-5 text-xl font-semibold text-foreground">Select Organization</Text>
-        <Text className="mt-1 text-sm text-muted-foreground">
-          {allowAll
-            ? "Show the sheets of one organization"
-            : "Choose the organization the orders are for"}
-        </Text>
+        <Text className="mt-1 text-sm text-muted-foreground">{description}</Text>
         <ScrollView className="mt-4" style={{ maxHeight: height * LIST_SHARE }}>
           {allowAll ? (
             <Option onPress={() => choose(null)} selected={!selected} title="All organizations" />

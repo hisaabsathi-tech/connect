@@ -1,7 +1,8 @@
 import type { DrsOrderLine, DrsSheet, DrsStatus } from "@/lib/api/drs";
 
-/** An order on one of the delivery boy's sheets, with the sheet it rides on. */
-export type DrsOrder = DrsOrderLine & { drsId: string; drsStatus: DrsStatus };
+/** An order on one of the delivery boy's sheets, with the sheet it rides on and its organization. */
+export type DrsOrder = DrsOrderLine &
+  Pick<DrsSheet, "organizationId" | "organizationName"> & { drsId: string; drsStatus: DrsStatus };
 
 /** The orders on the sheets (or only on `drsId`'s), each once even if it moved between sheets. */
 export function ordersFromSheets(sheets: DrsSheet[], drsId: string | null): DrsOrder[] {
@@ -12,7 +13,13 @@ export function ordersFromSheets(sheets: DrsSheet[], drsId: string | null): DrsO
     for (const line of sheet.orders) {
       if (seen.has(line.orderId)) continue;
       seen.add(line.orderId);
-      orders.push({ ...line, drsId: sheet.id, drsStatus: sheet.status });
+      orders.push({
+        ...line,
+        drsId: sheet.id,
+        drsStatus: sheet.status,
+        organizationId: sheet.organizationId,
+        organizationName: sheet.organizationName,
+      });
     }
   }
   return orders;

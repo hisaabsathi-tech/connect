@@ -9,6 +9,7 @@ import { HugeiconsIcon } from "@hugeicons/react-native";
 import { ActivityIndicator, Pressable, View } from "react-native";
 
 import { SyncBadge } from "@/components/modules/network";
+import { OrganizationBadge } from "@/components/modules/organization";
 import { RemarkBadge } from "@/components/modules/remark-badge";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -169,7 +170,8 @@ function AdvanceBlock({
  * One delivery run sheet: its id and status, the areas and pincodes it covers, and how many
  * orders ride on it. Tapping the card shows those orders; the squares print it and attach (or
  * show) the scan of the signed sheet. A block along the bottom moves it on: out for delivery once
- * issued, resolved once no order is left to deliver.
+ * issued, resolved once no order is left to deliver. `showOrganization` tags it with its
+ * organization, for a list holding more than one's sheets.
  */
 export function DrsCard({
   advancing,
@@ -179,6 +181,7 @@ export function DrsCard({
   onScan,
   printing,
   sheet,
+  showOrganization = false,
 }: {
   /** The status update from the bottom block is being saved. */
   advancing: boolean;
@@ -189,6 +192,7 @@ export function DrsCard({
   onScan: () => void;
   printing: boolean;
   sheet: DrsSheet;
+  showOrganization?: boolean;
 }) {
   const pincodes = drsPincodes(sheet);
   const orders = sheet.orders.length;
@@ -201,6 +205,9 @@ export function DrsCard({
       onPress={onOpen}
       onPressIn={() => haptic("light")}
     >
+      {showOrganization && sheet.organizationName ? (
+        <OrganizationBadge name={sheet.organizationName} />
+      ) : null}
       <View className="flex-row items-start gap-3">
         <View className="flex-1">
           <Text className="text-[11px] font-medium uppercase tracking-[0.3px] text-muted-foreground">

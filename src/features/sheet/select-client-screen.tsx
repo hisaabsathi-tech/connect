@@ -13,6 +13,7 @@ import { FlatList, Pressable, RefreshControl, TextInput, View } from "react-nati
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { LastUpdated } from "@/components/modules/network";
+import { OrganizationPicker } from "@/components/modules/organization";
 import { Skeleton } from "@/components/modules/skeleton";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -24,7 +25,6 @@ import { haptic } from "@/lib/haptics";
 import { onReconnect } from "@/lib/network/connectivity";
 import { readCache, writeCache } from "@/lib/offline/cache";
 
-import { OrganizationPicker } from "./components/organization-picker";
 import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
 
 const CLIENTS_CACHE = "sheet-clients";
@@ -223,6 +223,7 @@ export function SelectClientScreen() {
           </Pressable>
         ) : null}
         <OrganizationPicker
+          description="Choose the organization the orders are for"
           onChange={(next) => {
             if (next) setPickedOrganizationId(next);
           }}
@@ -297,7 +298,7 @@ export function SelectClientScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: !selected }}
-          className={`h-12 flex-row items-center justify-center gap-2 bg-primary ${selected ? "active:bg-primary-hover" : "opacity-40"}`}
+          className={`h-12 flex-row items-center justify-center gap-2 bg-primary active:bg-primary-hover ${selected ? "" : "opacity-40"}`}
           disabled={!selected}
           onPress={proceed}
         >

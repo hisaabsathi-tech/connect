@@ -9,6 +9,7 @@ import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { LocationIndicator, locationIndicatorState } from "@/components/modules/location";
 import { LastUpdated, OfflineChip, useNetwork } from "@/components/modules/network";
+import { distinctOrganizations, OrganizationPicker } from "@/components/modules/organization";
 import {
   CardListSkeleton,
   ListPageSkeleton,
@@ -81,7 +82,9 @@ function matchesDrsSearch(sheet: DrsSheet, search: string) {
  * The Orders tab, for any role with order edit: their orders and their delivery run sheets (DRS) on one page,
  * Orders first. Both work from the sheets issued on the day picked on Home, or a range picked
  * here; the counts on top, the status chips and the search follow the tab. Tapping a DRS shows
- * its orders, and the Orders tab narrows to one DRS with the picker under the search.
+ * its orders, and the Orders tab narrows to one DRS with the picker under the search. When the
+ * sheets come from more than one organization, each card names its own and the search bar can
+ * narrow both tabs to one.
  */
 export function OrdersScreen() {
   const { token } = useAuthSession();
@@ -96,6 +99,8 @@ export function OrdersScreen() {
   const [orderFilter, setOrderFilter] = useState<OrderFilter>("all");
   const [drsFilter, setDrsFilter] = useState<DrsFilter>("all");
   const [drsId, setDrsId] = useState<string | null>(null);
+  // One organization's sheets, or every organization's (null).
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const listRef = useRef<FlatList<DrsOrder | DrsSheet>>(null);
 
@@ -235,10 +240,26 @@ export function OrdersScreen() {
     }, [load]),
   );
 
-  // The chosen DRS only narrows the orders while it is among the range's sheets.
-  const activeDrsId = drsId && sheets.some((sheet) => sheet.id === drsId) ? drsId : null;
+  const organizations = useMemo(() => distinctOrganizations(sheets), [sheets]);
+  // Each card names its organization only when the sheets come from more than one.
+  const manyOrganizations = organizations.length > 1;
+  // The chosen organization only narrows things while the range's sheets span several.
+  const organization = manyOrganizations
+    ? (organizations.find((item) => item.id === organizationId) ?? null)
+    : null;
+  const scopedSheets = useMemo(
+    () =>
+      organization ? sheets.filter((sheet) => sheet.organizationId === organization.id) : sheets,
+    [organization, sheets],
+  );
 
-  const scopedOrders = useMemo(() => ordersFromSheets(sheets, activeDrsId), [activeDrsId, sheets]);
+  // The chosen DRS only narrows the orders while it is among the range's sheets.
+  const activeDrsId = drsId && scopedSheets.some((sheet) => sheet.id === drsId) ? drsId : null;
+
+  const scopedOrders = useMemo(
+    () => ordersFromSheets(scopedSheets, activeDrsId),
+    [activeDrsId, scopedSheets],
+  );
   // Orders still to deliver come first; delivered ones sink to the bottom.
   const orders = useMemo(
     () =>
@@ -251,11 +272,11 @@ export function OrdersScreen() {
   );
   const shownSheets = useMemo(
     () =>
-      sheets
+      scopedSheets
         .filter((sheet) => matchesDrsFilter(sheet, drsFilter) && matchesDrsSearch(sheet, query))
         // In Delivering, start with untouched runs; otherwise keep the full delivery work queue.
         .sort(drsFilter === "DELIVERING ORDERS" ? compareDeliveringDrs : compareDrsForDelivery),
-    [drsFilter, query, sheets],
+    [drsFilter, query, scopedSheets],
   );
 
   const openDrs = (sheet: DrsSheet) => {
@@ -359,13 +380,13 @@ export function OrdersScreen() {
               active={drsFilter === "ongoing"}
               label="Ongoing DRS"
               onPress={() => toggleDrsFilter("ongoing")}
-              value={String(sheets.filter(isDrsOngoing).length)}
+              value={String(scopedSheets.filter(isDrsOngoing).length)}
             />
             <StatCard
               active={drsFilter === "RESOLVED"}
               label="Completed DRS"
               onPress={() => toggleDrsFilter("RESOLVED")}
-              value={String(sheets.filter((sheet) => !isDrsOngoing(sheet)).length)}
+              value={String(scopedSheets.filter((sheet) => !isDrsOngoing(sheet)).length)}
             />
           </>
         )}
@@ -387,9 +408,23 @@ export function OrdersScreen() {
       )}
       <View className="mt-3">
         <SearchRangeToolbar
+          accessory={
+            <OrganizationPicker
+              allowAll
+              description={`Show the ${onOrders ? "orders" : "DRS"} of one organization`}
+              onChange={setOrganizationId}
+              organizations={organizations}
+              value={organization?.id ?? null}
+            />
+          }
           // Sheets and pickups can be issued ahead, so upcoming days can be picked.
           allowFuture
           autoCapitalize={onOrders ? "words" : "characters"}
+          filterChip={
+            organization
+              ? { label: organization.name, onClear: () => setOrganizationId(null) }
+              : null
+          }
           onQueryChange={setQuery}
           onSelectedDateClear={resetToToday}
           onRangeChange={setRange}
@@ -404,8 +439,8 @@ export function OrdersScreen() {
       {/* The DRS picker's place is held while the sheets load, so the list doesn't jump down. */}
       {!onOrders ? null : data.loading ? (
         <Skeleton className="mt-3" height={48} />
-      ) : sheets.length ? (
-        <DrsPicker onChange={setDrsId} sheets={sheets} value={activeDrsId} />
+      ) : scopedSheets.length ? (
+        <DrsPicker onChange={setDrsId} sheets={scopedSheets} value={activeDrsId} />
       ) : null}
     </View>
   );
@@ -425,7 +460,9 @@ export function OrdersScreen() {
         description={
           activeDrsId
             ? `There are no orders on ${activeDrsId}.`
-            : "There are no orders yet.\nGenerate a DRS to see active orders here."
+            : organization
+              ? `${organization.name} has no orders ${period}.`
+              : "There are no orders yet.\nGenerate a DRS to see active orders here."
         }
         title={activeDrsId ? "No orders on this DRS" : `No orders ${period}`}
       />
@@ -439,9 +476,13 @@ export function OrdersScreen() {
         title="No orders found"
       />
     )
-  ) : !sheets.length ? (
+  ) : !scopedSheets.length ? (
     <EmptyBlock
-      description={"There are no DRS yet.\nDRS issued to you will show here."}
+      description={
+        organization
+          ? `${organization.name} has no DRS ${period}.`
+          : "There are no DRS yet.\nDRS issued to you will show here."
+      }
       title={`No DRS ${period}`}
     />
   ) : (
@@ -493,6 +534,7 @@ export function OrdersScreen() {
               onPress={() => openOrder(item)}
               onViewMap={() => void orderMap.open(item)}
               order={item}
+              showOrganization={manyOrganizations}
             />
           ) : (
             <DrsCard
@@ -503,6 +545,7 @@ export function OrdersScreen() {
               onScan={() => scan.open(item)}
               printing={printer.printing === item.id}
               sheet={item}
+              showOrganization={manyOrganizations}
             />
           )
         }

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ActivityIndicator, Linking, Pressable, View } from "react-native";
 
 import { SyncBadge } from "@/components/modules/network";
+import { OrganizationBadge } from "@/components/modules/organization";
 import { RemarkBadge } from "@/components/modules/remark-badge";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
@@ -85,6 +86,7 @@ function Label({ children }: { children: string }) {
  * An order on the delivery boy's run, as the Figma lays it out: the AWB with its payment pill,
  * the receiver with View on Map and Call buttons, the delivery address, and the amount to
  * collect for COD and To Pay. With `onPress` the card opens the order's scan and update.
+ * `showOrganization` tags it with its organization, for a list holding more than one's orders.
  */
 export function OrderCard({
   address: fullAddress,
@@ -93,6 +95,7 @@ export function OrderCard({
   onPress,
   onViewMap,
   order,
+  showOrganization = false,
 }: {
   /** View on Map is finding the address. */
   locating: boolean;
@@ -104,6 +107,7 @@ export function OrderCard({
   /** The receiver's complete address when known (the update page), in place of the DRS's. */
   address?: string | null;
   order: DrsOrder;
+  showOrganization?: boolean;
 }) {
   // A delivered order says so in the corner; until then the corner shows how it is paid.
   const badge: Remark | null = isDelivered(order)
@@ -118,11 +122,14 @@ export function OrderCard({
     <Pressable
       accessibilityHint={onPress ? "Scan the parcel to update this order" : undefined}
       accessibilityRole={onPress ? "button" : undefined}
-      className={`border border-[#EEF0F6] bg-card p-4 ${onPress ? "active:bg-[#F7F8FF]" : ""}`}
+      className="border border-[#EEF0F6] bg-card p-4 active:bg-[#F7F8FF]"
       disabled={!onPress}
       onPress={onPress}
       onPressIn={onPress ? () => haptic("light") : undefined}
     >
+      {showOrganization && order.organizationName ? (
+        <OrganizationBadge name={order.organizationName} />
+      ) : null}
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
           <Label>AWB Number</Label>

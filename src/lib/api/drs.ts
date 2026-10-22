@@ -43,10 +43,13 @@ export type DrsSheet = {
   /** Storage key of the uploaded scan of the signed sheet. */
   scanCopy: string | null;
   orders: DrsOrderLine[];
+  /** The organization it was issued in; missing on a sheet the phone saved before the app asked. */
+  organizationId?: string;
+  organizationName?: string | null;
 };
 
 const DRS_SHEET_FIELDS = `
-  id status issuedAt pincodes scanCopy
+  id status issuedAt pincodes scanCopy organizationId organizationName
   areas { pincode area }
   orders {
     orderId awbNo refNo receiverName customerName customerMobile addressLine1 addressLine2

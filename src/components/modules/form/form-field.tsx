@@ -89,7 +89,7 @@ export function FormField({
   const border = error ? "border-destructive" : focused ? "border-primary" : "border-border";
   return (
     <View>
-      <Text className="mb-2 text-base text-foreground">
+      <Text className="mb-2 text-base text-foreground" numberOfLines={1}>
         {label}
         {required ? <Text className="text-destructive">*</Text> : null}
       </Text>
@@ -135,7 +135,7 @@ export function FormField({
         />
         {status ? <StatusIcon status={status} /> : null}
         {suffix ? (
-          <View className="w-[72px] items-center justify-center border-border border-l bg-muted">
+          <View className="items-center justify-center border-border border-l bg-muted px-3.5">
             <Text className="text-base text-foreground">{suffix}</Text>
           </View>
         ) : null}

@@ -16,6 +16,11 @@ import { useDialog } from "@/components/modules/dialog";
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { LastUpdated, OfflineChip, SyncBadge } from "@/components/modules/network";
+import {
+  distinctOrganizations,
+  OrganizationBadge,
+  OrganizationPicker,
+} from "@/components/modules/organization";
 import { RemarkBadge } from "@/components/modules/remark-badge";
 import { BottomSheet } from "@/components/modules/sheet";
 import { CardListSkeleton } from "@/components/modules/skeleton";
@@ -137,6 +142,7 @@ function PickupDetails({
   );
 }
 
+/** `showOrganization` tags the card with its organization, for a list holding more than one's. */
 function PickupCard({
   busy,
   locating,
@@ -144,6 +150,7 @@ function PickupCard({
   onOpen,
   onPickedUp,
   request,
+  showOrganization,
 }: {
   busy: boolean;
   /** The map button's spinner while the address is being found. */
@@ -152,10 +159,14 @@ function PickupCard({
   onOpen: () => void;
   onPickedUp: () => void;
   request: PickupRequest;
+  showOrganization: boolean;
 }) {
   const dial = dialUrl(request.phoneNumber);
   return (
     <View className="border border-[#EEF0F6] bg-card p-4">
+      {showOrganization && request.organizationName ? (
+        <OrganizationBadge name={request.organizationName} />
+      ) : null}
       <Pressable accessibilityRole="button" onPress={onOpen} onPressIn={() => haptic("light")}>
         <View className="flex-row items-start gap-3">
           <View className="flex-1">
@@ -251,6 +262,8 @@ export function PickupsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [updating, setUpdating] = useState<string | null>(null);
   const [selected, setSelected] = useState<PickupRequest | null>(null);
+  // One organization's pickups, or every organization's (null).
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
   const from = range?.from ?? selectedDate;
   const to = range?.to ?? selectedDate;
   // The whole range is loaded (and saved on the phone); the search filters it here, so typing
@@ -283,18 +296,33 @@ export function PickupsScreen() {
   useEffect(() => {
     setRange(null);
   }, [selectedDate]);
+  const organizations = useMemo(() => distinctOrganizations(requests), [requests]);
+  // Each card names its organization only when the pickups come from more than one.
+  const manyOrganizations = organizations.length > 1;
+  // The chosen organization only narrows the list while the range's pickups span several.
+  const organization = manyOrganizations
+    ? (organizations.find((item) => item.id === organizationId) ?? null)
+    : null;
   const shown = useMemo(() => {
     const words = query.trim().toLowerCase();
     return requests.filter(
       (request) =>
+        (!organization || request.organizationId === organization.id) &&
         matchesTab(request, tab) &&
         (!words ||
-          [request.name, request.phoneNumber, request.address, request.pincode, request.note]
+          [
+            request.name,
+            request.phoneNumber,
+            request.address,
+            request.pincode,
+            request.note,
+            request.organizationName,
+          ]
             .join(" ")
             .toLowerCase()
             .includes(words)),
     );
-  }, [query, requests, tab]);
+  }, [organization, query, requests, tab]);
   const confirmPickedUp = async (request: PickupRequest) => {
     if (!token || updating) return;
     const accepted = await dialog.confirm({
@@ -355,8 +383,22 @@ export function PickupsScreen() {
       />
       <View className="mt-5">
         <SearchRangeToolbar
+          accessory={
+            <OrganizationPicker
+              allowAll
+              description="Show the pickups of one organization"
+              onChange={setOrganizationId}
+              organizations={organizations}
+              value={organization?.id ?? null}
+            />
+          }
           // Sheets and pickups can be issued ahead, so upcoming days can be picked.
           allowFuture
+          filterChip={
+            organization
+              ? { label: organization.name, onClear: () => setOrganizationId(null) }
+              : null
+          }
           onQueryChange={setQuery}
           onRangeChange={setRange}
           onSelectedDateClear={resetToToday}
@@ -411,7 +453,9 @@ export function PickupsScreen() {
                   ? "Check your connection and try again."
                   : query
                     ? `No pickup matches "${query}".`
-                    : "There are no pickup requests for this date."
+                    : organization
+                      ? `${organization.name} has no pickup requests for this date.`
+                      : "There are no pickup requests for this date."
               }
               title={failed ? "Couldn't load pickups" : "No pickup requests"}
             />
@@ -436,6 +480,7 @@ export function PickupsScreen() {
             onOpen={() => setSelected(item)}
             onPickedUp={() => void confirmPickedUp(item)}
             request={item}
+            showOrganization={manyOrganizations}
           />
         )}
       />

@@ -22,7 +22,7 @@ export function StatCard({
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityState={onPress ? { selected: active } : undefined}
-      className={`flex-1 border px-4 py-3 ${active ? "border-primary bg-accent" : "border-border bg-card"} ${onPress ? (active ? "active:bg-accent" : "active:bg-[#F7F8FF]") : ""}`}
+      className={`flex-1 border px-4 py-3 ${active ? "border-primary bg-accent active:bg-accent" : "border-border bg-card active:bg-[#F7F8FF]"}`}
       disabled={!onPress}
       onPress={onPress}
       onPressIn={onPress ? () => haptic("selection") : undefined}

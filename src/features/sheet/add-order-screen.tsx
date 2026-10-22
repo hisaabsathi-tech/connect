@@ -5,6 +5,7 @@ import {
   Location01Icon,
   Package04Icon,
   PlusSignIcon,
+  RefreshIcon,
   ShuffleIcon,
   User03Icon,
   UserIcon,
@@ -13,7 +14,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { type PropsWithChildren, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
 
 import { DateRangeSheet } from "@/components/modules/date-range";
 import { FormField } from "@/components/modules/form";
@@ -57,13 +58,20 @@ type Form = {
   receiverPhone: string;
   receiverAddress: string;
   weight: string;
+  /** Optional: an empty one is sent as 0. */
   volumetricWeight: string;
+  // Optional, and not sent: all three fill in the volumetric weight.
+  length: string;
+  height: string;
+  width: string;
 };
 
 type Field = keyof Form;
 
 const EMPTY_FORM: Form = {
   awbNo: "",
+  height: "",
+  length: "",
   pincode: "",
   refNo: "",
   receiverAddress: "",
@@ -71,11 +79,23 @@ const EMPTY_FORM: Form = {
   receiverPhone: "",
   volumetricWeight: "",
   weight: "",
+  width: "",
 };
 
+const DIMENSIONS = ["length", "height", "width"] as const;
+// Rows of equal columns, split by percentage so a column's label or value can't widen it; each
+// column pads half the gap and the row pulls out by as much.
+const COLUMNS_GAP = 12;
+const COLUMNS_ROW = { flexDirection: "row", marginHorizontal: -COLUMNS_GAP / 2 } as const;
+const HALF = { paddingHorizontal: COLUMNS_GAP / 2, width: "50%" } as const;
+const THIRD = { paddingHorizontal: COLUMNS_GAP / 2, width: "33.3333%" } as const;
 const WEIGHT = /^\d{1,6}(\.\d{1,3})?$/;
 // Letters, digits and dashes, up to 64: what the server and the web's duplicate check accept.
 const AWB = /^[A-Za-z0-9-]{1,64}$/;
+// Cubic cm per kg of volumetric weight, as the web works it out.
+const VOLUMETRIC_DIVISOR = 5000;
+// The most the server takes for either weight, in kg.
+const WEIGHT_MAX = 100_000;
 const AWB_MAX_LENGTH = 64;
 // What the server and the web's duplicate check accept for a reference number.
 const REF_MAX_LENGTH = 120;
@@ -92,6 +112,41 @@ function mobileDigits(value: string) {
   if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
   if (digits.length === 11 && digits.startsWith("0")) return digits.slice(1);
   return digits;
+}
+
+/** What is wrong with a weight as typed, if anything; an optional one may be left empty. */
+function weightError(value: string, required: boolean) {
+  if (!(value || required)) return undefined;
+  if (Number(value) > WEIGHT_MAX) return `Can't be more than ${WEIGHT_MAX} kg`;
+  return WEIGHT.test(value) ? undefined : "Enter the weight in kg";
+}
+
+/** `value` rounded to `scale` steps (100 for 0.01), as the web rounds it. */
+function roundTo(value: number, scale: number) {
+  return Math.round((value + Number.EPSILON) * scale) / scale;
+}
+
+/**
+ * The volumetric weight the three sides give, once all are entered: length × height × width in cm
+ * (each to 0.01 cm) over 5000, in kg to the gram, as the web works it out. Null till then.
+ */
+function volumetricFrom(form: Form) {
+  const sides = DIMENSIONS.map((side) => form[side].trim());
+  if (!sides.every((side) => WEIGHT.test(side))) return null;
+  const volume = sides.reduce((product, side) => product * roundTo(Number(side), 100), 1);
+  return volume ? String(roundTo(volume / VOLUMETRIC_DIVISOR, 1000)) : null;
+}
+
+/**
+ * The form after a side changed from `before`: its volumetric weight filled in from the sides, or
+ * cleared once they no longer give one if they had filled it in. One typed in stays.
+ */
+function withVolumetric(form: Form, before: Form): Form {
+  const volumetric = volumetricFrom(form);
+  if (volumetric !== null) return { ...form, volumetricWeight: volumetric };
+  return form.volumetricWeight === volumetricFrom(before)
+    ? { ...form, volumetricWeight: "" }
+    : form;
 }
 
 /** A well-formed AWB number, or one kept as the sheet has it (which isn't checked again). */
@@ -127,10 +182,15 @@ function validate(
   if (!form.receiverAddress.trim()) errors.receiverAddress = "Enter the delivery address";
   const weight = form.weight.trim();
   const volumetric = form.volumetricWeight.trim();
-  if (!WEIGHT.test(weight)) errors.weight = "Enter the weight in kg";
-  if (!WEIGHT.test(volumetric)) errors.volumetricWeight = "Enter the weight in kg";
+  errors.weight = weightError(weight, true);
+  errors.volumetricWeight = weightError(volumetric, false);
+  // An empty volumetric weight counts as 0.
   if (!(errors.weight || errors.volumetricWeight) && Number(weight) + Number(volumetric) === 0)
     errors.weight = "Both weights can't be 0";
+  for (const side of DIMENSIONS) {
+    const value = form[side].trim();
+    if (value && !WEIGHT.test(value)) errors[side] = "Enter a number";
+  }
   return errors;
 }
 
@@ -186,6 +246,8 @@ type Params = {
 function formFrom(params: Params): Form {
   return {
     awbNo: params.awbNo ?? "",
+    height: "",
+    length: "",
     pincode: params.pincode ?? "",
     refNo: params.refNo ?? "",
     receiverAddress: params.receiverAddress ?? "",
@@ -193,6 +255,7 @@ function formFrom(params: Params): Form {
     receiverPhone: mobileDigits(params.receiverPhone ?? "").slice(0, 10),
     volumetricWeight: params.volumetricWeight ?? "",
     weight: params.weight ?? "",
+    width: "",
   };
 }
 
@@ -221,6 +284,9 @@ export function AddOrderScreen() {
   const [orderDate, setOrderDate] = useState(() => (editing && params.orderDate) || today);
   const [dateOpen, setDateOpen] = useState(false);
   const [form, setForm] = useState<Form>(() => (editing ? formFrom(params) : EMPTY_FORM));
+  // What Reset (or a pull to refresh) goes back to: an empty form, or an edited order as last
+  // saved, with its date.
+  const resetTo = useRef({ form, orderDate });
   // The sheet version an edit is made on; each saved edit moves it on.
   const [version, setVersion] = useState(() => Number(params.version ?? 0));
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
@@ -288,8 +354,29 @@ export function AddOrderScreen() {
   const update = (field: Field) => (value: string) => {
     // Changed details are a different order from the one that may have been saved.
     pendingActionId.current = null;
-    setForm((current) => ({ ...current, [field]: value }));
-    if (errors[field]) setErrors((current) => ({ ...current, [field]: undefined }));
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      return (DIMENSIONS as readonly Field[]).includes(field)
+        ? withVolumetric(next, current)
+        : next;
+    });
+    // A filled-in volumetric weight is a new one, so its old error goes too.
+    const cleared: Field[] = (DIMENSIONS as readonly Field[]).includes(field)
+      ? [field, "volumetricWeight"]
+      : [field];
+    if (cleared.some((name) => errors[name]))
+      setErrors((current) => ({
+        ...current,
+        ...Object.fromEntries(cleared.map((name) => [name, undefined])),
+      }));
+  };
+
+  const reset = () => {
+    pendingActionId.current = null;
+    setForm(resetTo.current.form);
+    if (editing) setOrderDate(resetTo.current.orderDate);
+    setErrors({});
+    setAddressTyped(false);
   };
 
   const pickSuggestion = (suggestion: AddressSuggestion) => {
@@ -326,7 +413,7 @@ export function AddOrderScreen() {
       receiverAddress: form.receiverAddress.trim(),
       receiverName: form.receiverName.trim(),
       receiverPhone: mobileDigits(form.receiverPhone),
-      volumetricWeight: Number(form.volumetricWeight),
+      volumetricWeight: Number(form.volumetricWeight.trim() || 0),
       weight: Number(form.weight),
     };
     setSaving(true);
@@ -339,8 +426,9 @@ export function AddOrderScreen() {
           { row: Number(params.row), version },
           details,
         );
-        // Further edits here are made on the version this one saved.
+        // Further edits here are made on the version this one saved, and Reset comes back to it.
         setVersion(saved.version);
+        resetTo.current = { form, orderDate };
         setAddressTyped(false);
         haptic("success");
         toast.success("Order updated", "The sheet shows the new details.");
@@ -408,6 +496,18 @@ export function AddOrderScreen() {
           keyboardShouldPersistTaps="handled"
           onScroll={keyboard.onScroll}
           ref={keyboard.scrollRef}
+          refreshControl={
+            <RefreshControl
+              colors={[colors.primary]}
+              onRefresh={() => {
+                if (saving) return;
+                haptic("light");
+                reset();
+              }}
+              refreshing={false}
+              tintColor={colors.primary}
+            />
+          }
           scrollEventThrottle={16}
         >
           <View className="flex-row items-start justify-between gap-3">
@@ -589,9 +689,22 @@ export function AddOrderScreen() {
             </FormField>
           </Section>
 
-          <Section icon={WeightScaleIcon} title="Package Weight">
-            <View className="flex-row gap-4">
-              <View className="flex-1">
+          <Section icon={WeightScaleIcon} title="Package">
+            <View style={COLUMNS_ROW}>
+              {DIMENSIONS.map((side) => (
+                <View key={side} style={THIRD}>
+                  <FormField
+                    {...field(side)}
+                    keyboardType="decimal-pad"
+                    label={`${side[0].toUpperCase()}${side.slice(1)} (cm)`}
+                    maxLength={10}
+                    placeholder="0"
+                  />
+                </View>
+              ))}
+            </View>
+            <View style={COLUMNS_ROW}>
+              <View style={HALF}>
                 <FormField
                   {...field("weight")}
                   keyboardType="decimal-pad"
@@ -602,42 +715,55 @@ export function AddOrderScreen() {
                   suffix="kg"
                 />
               </View>
-              <View className="flex-1">
+              <View style={HALF}>
                 <FormField
                   {...field("volumetricWeight")}
                   keyboardType="decimal-pad"
                   label="Volumetric Weight"
                   maxLength={10}
                   placeholder="0.00"
-                  required
                   suffix="kg"
                 />
               </View>
             </View>
           </Section>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ busy: saving, disabled: saving }}
-            className="mt-6 h-12 flex-row items-center justify-center gap-2 bg-primary active:bg-primary-hover"
-            disabled={saving}
-            onPress={() => void save()}
-          >
-            {saving ? (
-              <ActivityIndicator color={colors.primaryForeground} size="small" />
-            ) : (
-              <>
-                <Text className="text-base font-medium text-primary-foreground">
-                  {editing ? "Update & Save" : "Save & Add another order"}
-                </Text>
-                <HugeiconsIcon
-                  color={colors.primaryForeground}
-                  icon={editing ? CheckmarkCircle02Icon : CirclePlusIcon}
-                  size={20}
-                />
-              </>
-            )}
-          </Pressable>
+          <View className="mt-6 flex-row gap-3">
+            <Pressable
+              accessibilityLabel="Reset the form"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: saving }}
+              className="h-12 flex-row items-center justify-center gap-1.5 border border-primary bg-card px-4 active:bg-accent"
+              disabled={saving}
+              onPress={reset}
+              onPressIn={() => haptic("light")}
+            >
+              <HugeiconsIcon color={colors.primary} icon={RefreshIcon} size={18} />
+              <Text className="text-base font-medium text-primary">Reset</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ busy: saving, disabled: saving }}
+              className="h-12 flex-1 flex-row items-center justify-center gap-2 bg-primary active:bg-primary-hover"
+              disabled={saving}
+              onPress={() => void save()}
+            >
+              {saving ? (
+                <ActivityIndicator color={colors.primaryForeground} size="small" />
+              ) : (
+                <>
+                  <Text className="text-base font-medium text-primary-foreground" numberOfLines={1}>
+                    {editing ? "Update & Save" : "Save & Add another order"}
+                  </Text>
+                  <HugeiconsIcon
+                    color={colors.primaryForeground}
+                    icon={editing ? CheckmarkCircle02Icon : CirclePlusIcon}
+                    size={20}
+                  />
+                </>
+              )}
+            </Pressable>
+          </View>
         </ScrollView>
       </View>
       <DateRangeSheet

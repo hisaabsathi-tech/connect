@@ -7,6 +7,7 @@ import { type DateRange, SearchRangeToolbar } from "@/components/modules/date-ra
 import { EmptyBlock } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { LastUpdated, OfflineChip } from "@/components/modules/network";
+import { OrganizationPicker } from "@/components/modules/organization";
 import { CardListSkeleton } from "@/components/modules/skeleton";
 import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
@@ -21,7 +22,6 @@ import { saveToDevice, shareFile } from "@/lib/files/device-files";
 import { onReconnect } from "@/lib/network/connectivity";
 import { readCache, writeCache } from "@/lib/offline/cache";
 
-import { OrganizationPicker } from "./components/organization-picker";
 import { SheetCard } from "./components/sheet-card";
 import { SheetHero } from "./components/sheet-hero";
 import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
@@ -142,6 +142,7 @@ export function SheetsScreen() {
           accessory={
             <OrganizationPicker
               allowAll
+              description="Show the sheets of one organization"
               onChange={setOrganizationId}
               organizations={organizations}
               value={organization?.id ?? null}
