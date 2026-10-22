@@ -1,4 +1,6 @@
 import {
+  ArrowDown01Icon,
+  ArrowUp01Icon,
   Calendar03Icon,
   CheckmarkCircle02Icon,
   CirclePlusIcon,
@@ -291,6 +293,11 @@ export function AddOrderScreen() {
   const [version, setVersion] = useState(() => Number(params.version ?? 0));
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [saving, setSaving] = useState(false);
+  // The AWB and reference numbers stay folded away under Advanced Option, unless an edited order
+  // has either.
+  const [advanced, setAdvanced] = useState(() =>
+    Boolean(editing && (params.awbNo?.trim() || params.refNo?.trim())),
+  );
   // The sheet this visit fills: the one opened from its table, else the one the first order
   // starts.
   const [sheet, setSheet] = useState<{ id: string; name: string } | null>(() =>
@@ -393,6 +400,8 @@ export function AddOrderScreen() {
     const found = validate(form, pincode, kept, checks);
     setErrors(found);
     if (Object.values(found).some(Boolean)) {
+      // A folded-away number that's wrong is shown, so its error can be seen.
+      if (found.awbNo || found.refNo) setAdvanced(true);
       haptic("error");
       return;
     }
@@ -585,31 +594,6 @@ export function AddOrderScreen() {
               </Pressable>
             </View>
             <FormField
-              {...field("awbNo")}
-              autoCapitalize="characters"
-              // Wrong as typed, or already taken: said at once, as the pincode is.
-              error={
-                errors.awbNo ??
-                awbFormatError(form.awbNo, kept.awbNo) ??
-                clashMessage("awbNo", checks.awbNo.clash)
-              }
-              label="AWB No"
-              maxLength={AWB_MAX_LENGTH}
-              // Upper case and no spaces, as AWB numbers are written; the scanner's paste too.
-              onChangeText={(value) => update("awbNo")(value.replace(/\s+/g, "").toUpperCase())}
-              placeholder="Enter AWB number"
-              status={checks.awbNo.status}
-            />
-            <FormField
-              {...field("refNo")}
-              autoCapitalize="none"
-              error={errors.refNo ?? clashMessage("refNo", checks.refNo.clash)}
-              label="Reference No"
-              maxLength={REF_MAX_LENGTH}
-              placeholder="Enter reference number"
-              status={checks.refNo.status}
-            />
-            <FormField
               {...field("pincode")}
               hint={
                 pincode.place
@@ -625,6 +609,55 @@ export function AddOrderScreen() {
               required
               status={pincode.status}
             />
+            {/* Kept close under the pincode, and the numbers close under it. */}
+            <View className="-mt-2">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: advanced }}
+                className="flex-row items-center gap-1 self-end py-1 active:opacity-60"
+                hitSlop={8}
+                onPress={() => setAdvanced((open) => !open)}
+                onPressIn={() => haptic("light")}
+              >
+                <Text className="text-sm font-medium text-primary underline">Advanced Option</Text>
+                <HugeiconsIcon
+                  color={colors.primary}
+                  icon={advanced ? ArrowUp01Icon : ArrowDown01Icon}
+                  size={18}
+                />
+              </Pressable>
+              {advanced ? (
+                <View className="mt-2 gap-5">
+                  <FormField
+                    {...field("awbNo")}
+                    autoCapitalize="characters"
+                    // Wrong as typed, or already taken: said at once, as the pincode is.
+                    error={
+                      errors.awbNo ??
+                      awbFormatError(form.awbNo, kept.awbNo) ??
+                      clashMessage("awbNo", checks.awbNo.clash)
+                    }
+                    label="AWB No"
+                    maxLength={AWB_MAX_LENGTH}
+                    // Upper case and no spaces, as AWB numbers are written; the scanner's paste too.
+                    onChangeText={(value) =>
+                      update("awbNo")(value.replace(/\s+/g, "").toUpperCase())
+                    }
+                    placeholder="Enter AWB number"
+                    status={checks.awbNo.status}
+                  />
+                  <FormField
+                    {...field("refNo")}
+                    autoCapitalize="none"
+                    error={errors.refNo ?? clashMessage("refNo", checks.refNo.clash)}
+                    label="Reference No"
+                    maxLength={REF_MAX_LENGTH}
+                    placeholder="Enter reference number"
+                    status={checks.refNo.status}
+                  />
+                </View>
+              ) : null}
+            </View>
           </Section>
 
           <Section icon={UserIcon} title="Receiver Details">
@@ -706,22 +739,22 @@ export function AddOrderScreen() {
             <View style={COLUMNS_ROW}>
               <View style={HALF}>
                 <FormField
+                  {...field("volumetricWeight")}
+                  keyboardType="decimal-pad"
+                  label="Volumetric Weight"
+                  maxLength={10}
+                  placeholder="0.00"
+                  suffix="kg"
+                />
+              </View>
+              <View style={HALF}>
+                <FormField
                   {...field("weight")}
                   keyboardType="decimal-pad"
                   label="Actual Weight"
                   maxLength={10}
                   placeholder="0.00"
                   required
-                  suffix="kg"
-                />
-              </View>
-              <View style={HALF}>
-                <FormField
-                  {...field("volumetricWeight")}
-                  keyboardType="decimal-pad"
-                  label="Volumetric Weight"
-                  maxLength={10}
-                  placeholder="0.00"
                   suffix="kg"
                 />
               </View>
