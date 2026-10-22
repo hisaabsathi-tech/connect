@@ -6,6 +6,7 @@ import type { ComponentProps } from "react";
 import { Pressable, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
+import { SheetIcon } from "@/components/modules/sheet-icon";
 import { Text } from "@/components/modules/typography";
 import { colors } from "@/config/colors";
 import { useViewer } from "@/lib/auth/viewer";
@@ -138,6 +139,7 @@ function ActiveIcon({ name }: { name: ActiveIconName }) {
 const items = {
   index: { icon: null, label: "Home" },
   orders: { icon: Package04Icon, label: "Orders" },
+  sheet: { icon: null, label: "Sheet" },
   pickups: { icon: null, label: "Pickups" },
   attendance: { icon: Calendar01Icon, label: "Attendance" },
   profile: { icon: User02Icon, label: "Profile" },
@@ -149,20 +151,27 @@ const pageHaptics: Record<keyof typeof items, HapticKind> = {
   orders: "medium",
   pickups: "medium",
   profile: "light",
+  sheet: "medium",
 };
 
 /**
  * Home and Profile for every signed-in user; Attendance when the role grants attendance view;
- * Orders when it grants order edit.
+ * Orders when it grants order edit; Sheet when it grants the Smart Sheet menu.
  */
 export function BottomNavigation({ insets, navigation, state }: BottomTabBarProps) {
-  const { canUpdateOrders, canViewAttendance, canViewPickups } = useViewer();
+  const { canUpdateOrders, canViewAttendance, canViewPickups, canViewSheets } = useViewer();
+  // With all six tabs the bar gives up its side margin, so "Attendance" fits a narrow phone.
+  const crowded = canUpdateOrders && canViewSheets && canViewPickups && canViewAttendance;
   return (
-    <View className="flex-row bg-[#F0F2FF] px-5 pt-3" style={{ paddingBottom: insets.bottom + 8 }}>
+    <View
+      className={`flex-row bg-[#F0F2FF] pt-3 ${crowded ? "px-1" : "px-5"}`}
+      style={{ paddingBottom: insets.bottom + 8 }}
+    >
       {state.routes.map((route, index) => {
         const item = items[route.name as keyof typeof items];
         if (!item) return null;
         if (route.name === "orders" && !canUpdateOrders) return null;
+        if (route.name === "sheet" && !canViewSheets) return null;
         if (route.name === "pickups" && !canViewPickups) return null;
         if (route.name === "attendance" && !canViewAttendance) return null;
         const active = state.index === index;
@@ -200,6 +209,9 @@ export function BottomNavigation({ insets, navigation, state }: BottomTabBarProp
                 </View>
               ) : item.icon ? (
                 <HugeiconsIcon color={color} icon={item.icon} size={26} />
+              ) : route.name === "sheet" ? (
+                // The same coloured mark whether or not it is the current tab, like Home's.
+                <SheetIcon size={26} />
               ) : route.name === "pickups" ? (
                 <Svg fill="none" height={26} viewBox="0 0 24 24" width={26}>
                   <Path
@@ -222,6 +234,7 @@ export function BottomNavigation({ insets, navigation, state }: BottomTabBarProp
               className={
                 active ? "text-xs font-medium text-primary" : "text-xs font-medium text-foreground"
               }
+              numberOfLines={1}
             >
               {item.label}
             </Text>

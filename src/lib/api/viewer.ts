@@ -21,11 +21,14 @@ export type Viewer = {
   orderActions: string[];
   /** True when an enabled same-owner organization grants this delivery boy Pickup access. */
   canViewPickups: boolean;
+  /** The menu ids the member is granted in the active organisation (`orders.sheet`, …). */
+  menus: string[];
 };
 
 const VIEWER_QUERY = `
 query ConnectorViewer {
   me {
+    menus
     orgRole { slug }
     permissions { resource actions }
     user { name }
@@ -38,10 +41,11 @@ query ConnectorViewer {
 
 const isUrl = (value: string | null | undefined) => /^(https?:|data:)/i.test(value?.trim() ?? "");
 
-/** Who is signed in to the active organisation: their name, role, attendance access, and the organisation. */
+/** Who is signed in to the active organisation: their name, role, access, menus, and the organisation. */
 export async function fetchViewer(token: string): Promise<Viewer> {
   const payload = await graphqlRequest<{
     me: {
+      menus?: string[] | null;
       orgRole?: { slug?: string | null } | null;
       permissions?: { resource: string; actions: string[] }[] | null;
       user: { name: string };
@@ -63,6 +67,7 @@ export async function fetchViewer(token: string): Promise<Viewer> {
   return {
     attendanceActions: actionsOn("attendance"),
     canViewPickups: Boolean(payload.pickupAvailability?.eligible),
+    menus: payload.me.menus ?? [],
     name: payload.me.user.name,
     organization: organization
       ? {

@@ -14,13 +14,14 @@ type TabNavigation = {
 };
 
 /**
- * Leaving Orders puts its stack back to just the list. An order opened from a trip card starts
- * the stack on its scan page, and without this the Orders tab kept reopening that scan.
+ * Leaving a stacked tab puts its stack back to just its list. An order opened from a trip card
+ * starts the Orders stack on its scan page, and without this the Orders tab kept reopening that
+ * scan; Sheet likewise reopens on its sheets, not a half-chosen client.
  */
-function resetOrdersOnBlur({ navigation }: { navigation: TabNavigation }) {
-  return {
+function resetStackOnBlur(tab: string) {
+  return ({ navigation }: { navigation: TabNavigation }) => ({
     blur: () => {
-      const stack = navigation.getState().routes.find((route) => route.name === "orders")?.state;
+      const stack = navigation.getState().routes.find((route) => route.name === tab)?.state;
       if (!stack?.key || (stack.routes.length === 1 && stack.routes[0].name === "index")) return;
       navigation.dispatch({
         payload: { index: 0, routes: [{ name: "index" }] },
@@ -28,7 +29,7 @@ function resetOrdersOnBlur({ navigation }: { navigation: TabNavigation }) {
         type: "RESET",
       });
     },
-  };
+  });
 }
 
 /**
@@ -60,7 +61,8 @@ export default function TabsLayout() {
           tabBar={(props) => <BottomNavigation {...props} />}
         >
           <Tabs.Screen name="index" />
-          <Tabs.Screen listeners={resetOrdersOnBlur} name="orders" />
+          <Tabs.Screen listeners={resetStackOnBlur("orders")} name="orders" />
+          <Tabs.Screen listeners={resetStackOnBlur("sheet")} name="sheet" />
           <Tabs.Screen name="pickups" />
           <Tabs.Screen name="attendance" />
           <Tabs.Screen name="profile" />

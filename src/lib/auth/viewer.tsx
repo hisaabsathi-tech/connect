@@ -15,6 +15,8 @@ import { readCache, writeCache } from "@/lib/offline/cache";
 import { retryOnce } from "@/lib/retry";
 
 const VIEWER_CACHE = "viewer";
+// The web app's Smart Sheet menu; granted along with either of its views.
+const SHEET_MENU = "orders.sheet";
 
 type ViewerState = {
   viewer: Viewer | null;
@@ -32,6 +34,12 @@ type ViewerState = {
   canViewOrders: boolean;
   /** An enabled same-owner organization grants this delivery boy Pickup access. */
   canViewPickups: boolean;
+  /**
+   * The role grants the Smart Sheet menu (`orders.sheet`, present with either of its own / all
+   * views) and order GET_ALL, which the sheet list needs: the Sheet tab. Whether the list holds
+   * every sheet or only the member's own is decided by the server from the same menus.
+   */
+  canViewSheets: boolean;
   /** The role grants attendance view: the Attendance tab and the day's record on Home. */
   canViewAttendance: boolean;
   /** The role grants attendance create: the check-in / check-out swipe. */
@@ -84,6 +92,10 @@ export function ViewerProvider({ children }: PropsWithChildren) {
       canViewOrders:
         viewer?.orderActions.some((action) => action === "GET" || action === "GET_ALL") ?? false,
       canViewPickups: viewer?.canViewPickups ?? false,
+      // `menus` is missing from a role saved by an older version until the next load.
+      canViewSheets:
+        (viewer?.menus?.includes(SHEET_MENU) ?? false) &&
+        (viewer?.orderActions.includes("GET_ALL") ?? false),
       isLoaded,
       reload,
       viewer,
