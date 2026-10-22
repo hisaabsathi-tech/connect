@@ -8,7 +8,7 @@ import {
   type TripPathPoint,
 } from "@/lib/api/live-trips";
 import { useAuthSession } from "@/lib/auth/session";
-import { type Coordinates, simplifyForDisplay } from "@/lib/maps/geo";
+import { type Coordinates, collapseStops, simplifyForDisplay } from "@/lib/maps/geo";
 import { connectTripChannel } from "@/lib/realtime/vehicle-trips-socket";
 
 import { applyTripProgress, newerPoint } from "../lib/live-trips-store";
@@ -84,10 +84,11 @@ export function useTripMap(trip: LiveTrip | null, own: Coordinates | null) {
       ),
     [orders],
   );
-  // Long trips are thinned for drawing only; the raw points stay as they are.
+  // Stops drawn as one point and long trips thinned, for drawing only; the raw points stay as
+  // they are.
   const shownPath = useMemo(
     () =>
-      simplifyForDisplay(path).map((point) => ({
+      simplifyForDisplay(collapseStops(path)).map((point) => ({
         latitude: point.latitude,
         longitude: point.longitude,
       })),

@@ -208,7 +208,6 @@ export function HomeScreen() {
           animateHeight={revealed}
           checkIn={dayCheckIn}
           checkOut={dayCheckOut}
-          deliveryBoy={canUpdateOrders}
           height={mapHeight}
           live={live}
           heading={location.heading}

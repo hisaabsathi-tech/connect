@@ -9,10 +9,14 @@ const tokenUrl = `${env.apiUrl}${env.authBasePath}`;
 // Connector origins configured by the API and is required by Better Auth.
 const CONNECT_ORIGIN = "http://localhost";
 
+/** `code` of the 401 for a session ended by a sign-in on another phone. */
+export const SESSION_REPLACED_CODE = "SESSION_REPLACED";
+
 export class AuthApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = "AuthApiError";
@@ -56,6 +60,11 @@ function messageFrom(payload: unknown) {
   return "Something went wrong. Please try again.";
 }
 
+function codeFrom(payload: unknown) {
+  const code = payload && typeof payload === "object" && (payload as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, token?: string | null) {
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
@@ -78,8 +87,10 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
     throw error;
   }
   if (!response.ok) {
-    if (response.status === 401) reportRejectedToken(token);
-    throw new AuthApiError(messageFrom(payload), response.status);
+    const code = codeFrom(payload);
+    if (response.status === 401)
+      reportRejectedToken(token, code === SESSION_REPLACED_CODE ? "replaced" : undefined);
+    throw new AuthApiError(messageFrom(payload), response.status, code);
   }
 
   return { data: payload as T, token: response.headers.get(AUTH_TOKEN_HEADER) };

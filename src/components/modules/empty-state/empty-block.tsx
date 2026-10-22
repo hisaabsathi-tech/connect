@@ -23,6 +23,8 @@ const SCREEN_SHARE = 0.5;
  *
  * The illustration sits directly on the page background, sized to its own content — no card
  * background, no border and no minimum height, so an empty list never forces the page to scroll.
+ * It grows into the space its parent leaves (a list whose content container grows), so it sits
+ * centred between the list's header and the bottom of the screen.
  * Inside a table, the empty/loading row keeps a card background and holds half the screen's
  * height, in place of the rows it stands in for.
  */
@@ -43,7 +45,7 @@ export function EmptyBlock({
   if (!title && framed) return <CardListSkeleton />;
   return (
     <View
-      className={`items-center justify-center px-6 py-8 ${framed ? "" : "bg-card"}`}
+      className={`items-center justify-center px-6 py-8 ${framed ? "grow" : "bg-card"}`}
       style={framed ? undefined : { minHeight: height * SCREEN_SHARE }}
     >
       {title ? (

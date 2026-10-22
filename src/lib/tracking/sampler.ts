@@ -26,8 +26,7 @@ export const MAX_SPEED_MPS = 350 / 3.6;
 export const MIN_GAP_MS = 5_000;
 // Standing still: one point this often, so the trip shows it is alive.
 export const HEARTBEAT_MS = 60_000;
-// Below this speed and inside the stillness radius the vehicle counts as parked.
-const STILL_SPEED_MPS = 1;
+// Inside this radius (or the readings' accuracy, if wider) the vehicle counts as parked.
 const STILL_RADIUS_METRES = 15;
 // Moving: the distance gate scales with speed and retains fewer samples on fast straight travel.
 const MIN_GATE_METRES = 25;
@@ -45,6 +44,22 @@ function turned(from: number | null, to: number | null) {
   if (a == null || b == null) return 0;
   const diff = Math.abs(a - b) % 360;
   return diff > 180 ? 360 - diff : diff;
+}
+
+// GPS drift standing still stays within the readings' own accuracy radii (and never under 15 m),
+// so a move shorter than that says nothing about the vehicle having gone anywhere.
+function stillRadius(fix: Fix, last: Fix) {
+  return Math.max(STILL_RADIUS_METRES, fix.accuracy ?? 0, last.accuracy ?? 0);
+}
+
+/**
+ * The reading as it should be recorded. Parked, each heartbeat reports the spot the last kept
+ * point was at, not wherever GPS drift put it this minute: drift joined up fix after fix draws a
+ * star of lines round one place on the trip map.
+ */
+export function pinWhenParked(fix: Fix, last: Fix | null): Fix {
+  if (!last || distanceInMetres(last, fix) >= stillRadius(fix, last)) return fix;
+  return { ...fix, accuracy: last.accuracy, latitude: last.latitude, longitude: last.longitude };
 }
 
 /**
@@ -66,17 +81,20 @@ export function shouldKeep(fix: Fix, last: Fix | null): boolean {
   if (elapsed >= HEARTBEAT_MS) return true;
   if (accuracy > MAX_ACCURACY_METRES) return false;
 
-  const speed = known(fix.speed) ?? moved / (elapsed / 1000);
-  const stillRadius = Math.max(STILL_RADIUS_METRES, fix.accuracy ?? 0);
-  if (speed < STILL_SPEED_MPS && moved < stillRadius) return false;
+  // Whatever speed the device reports: parked phones claim a few m/s now and then.
+  if (moved < stillRadius(fix, last)) return false;
+  const travelled = moved / (elapsed / 1000);
+  const speed = known(fix.speed) ?? travelled;
 
   // Roughly 5–10 seconds in town and 10–15 seconds at road/train speed. A sharp turn still wins
   // immediately, preserving the path without sending every native GPS fix.
   const gateSeconds = speed < 5 ? 7 : speed < 20 ? 10 : 12;
   const gate = Math.min(MAX_GATE_METRES, Math.max(MIN_GATE_METRES, speed * gateSeconds));
   if (moved >= gate) return true;
+  // A turn counts only when the ground covered agrees: drift swings the heading about too.
   return (
     speed >= TURN_MIN_SPEED_MPS &&
+    travelled >= TURN_MIN_SPEED_MPS &&
     moved >= TURN_MIN_METRES &&
     turned(last.heading, fix.heading) >= TURN_DEGREES
   );

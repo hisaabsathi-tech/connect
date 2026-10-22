@@ -15,3 +15,11 @@ export function humanizeLabel(value: string | null | undefined) {
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
 }
+
+/**
+ * "NON DOX" for a code such as "NON_DOX": underscores become spaces and runs of spaces collapse,
+ * keeping the original casing (the web app's `formatText`).
+ */
+export function formatText(value: string | null | undefined) {
+  return (value ?? "").replaceAll("_", " ").replace(/\s+/g, " ").trim();
+}

@@ -1,6 +1,7 @@
 import type { DrsSheet } from "@/lib/api/drs";
 import type { ViewerOrganization } from "@/lib/api/viewer";
 import { formatMobile } from "@/lib/phone";
+import { formatText } from "@/lib/text";
 
 /** One order line of the printed sheet. */
 export type DrsPrintRow = {
@@ -82,7 +83,7 @@ export function drsPrintData(
       id: order.orderId,
       remarks: order.remarks?.trim() || null,
       serviceType:
-        [order.serviceType?.trim(), order.packageType?.trim()].filter(Boolean).join(" - ") || "—",
+        [formatText(order.serviceType), formatText(order.packageType)].filter(Boolean).join(" - ") || "—",
     })),
     ...issuedLabels(sheet.issuedAt),
   };

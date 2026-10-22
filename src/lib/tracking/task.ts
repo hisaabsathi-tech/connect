@@ -3,7 +3,7 @@ import * as TaskManager from "expo-task-manager";
 import { AppState } from "react-native";
 
 import { flushTracking } from "./flush";
-import { type Fix, shouldKeep } from "./sampler";
+import { type Fix, pinWhenParked, shouldKeep } from "./sampler";
 import { setTrackingStatus } from "./status";
 import { newPointId, readTracking, writeTracking } from "./store";
 
@@ -30,7 +30,7 @@ export async function recordFixes(locations: Location.LocationObject[]) {
     let anchor = state.anchor;
     const queue = [...state.queue];
     for (const location of sorted) {
-      const fix: Fix = {
+      const reading: Fix = {
         accuracy: location.coords.accuracy ?? null,
         at: location.timestamp,
         heading: location.coords.heading ?? null,
@@ -38,7 +38,8 @@ export async function recordFixes(locations: Location.LocationObject[]) {
         longitude: location.coords.longitude,
         speed: location.coords.speed ?? null,
       };
-      if (location.mocked || !shouldKeep(fix, anchor)) continue;
+      if (location.mocked || !shouldKeep(reading, anchor)) continue;
+      const fix = pinWhenParked(reading, anchor);
       anchor = fix;
       queue.push({
         accuracy: fix.accuracy,

@@ -123,6 +123,64 @@ export function simplifyForDisplay<T extends Coordinates>(
   return points.filter((_, index) => keep[index] === 1);
 }
 
+/**
+ * A driven line with every stop drawn as one point. Standing still, GPS drifts tens of metres from
+ * fix to fix, and joined up in order the fixes draw a star of lines round one place. So a lone fix
+ * that jumps out and straight back is dropped, and a run that stays within `radiusMetres` of where
+ * it began for `minStopMs` or more is drawn as its middlemost fix. Only for drawing: the raw
+ * history is never changed.
+ */
+export function collapseStops<T extends Coordinates & { recordedAt: string }>(
+  points: readonly T[],
+  radiusMetres = 60,
+  minStopMs = 120_000,
+): T[] {
+  const steady: T[] = [];
+  points.forEach((point, index) => {
+    const before = steady.at(-1);
+    const after = points[index + 1];
+    const spike =
+      before &&
+      after &&
+      distanceInMetres(before, after) <= radiusMetres &&
+      distanceInMetres(before, point) > radiusMetres &&
+      distanceInMetres(point, after) > radiusMetres;
+    if (!spike) steady.push(point);
+  });
+  const shown: T[] = [];
+  let from = 0;
+  while (from < steady.length) {
+    const anchor = steady[from] as T;
+    // Measured from the run's middle so far, not its first fix: that may sit at the drift's edge.
+    let middle: Coordinates = anchor;
+    let to = from + 1;
+    for (; to < steady.length; to += 1) {
+      const next = steady[to] as T;
+      if (distanceInMetres(middle, next) > radiusMetres) break;
+      const size = to - from + 1;
+      middle = {
+        latitude: middle.latitude + (next.latitude - middle.latitude) / size,
+        longitude: middle.longitude + (next.longitude - middle.longitude) / size,
+      };
+    }
+    const run = steady.slice(from, to);
+    const lasted = Date.parse((run.at(-1) as T).recordedAt) - Date.parse(anchor.recordedAt);
+    if (run.length > 2 && lasted >= minStopMs) {
+      const centre = middle;
+      shown.push(
+        run.reduce((best, point) =>
+          distanceInMetres(point, centre) < distanceInMetres(best, centre) ? point : best,
+        ),
+      );
+      from = to;
+    } else {
+      shown.push(anchor);
+      from += 1;
+    }
+  }
+  return shown;
+}
+
 export function centerOf(points: Coordinates[]): Coordinates {
   if (!points.length) return INDIA_CENTER;
   return points.reduce(

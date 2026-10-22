@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "bun:test";
 
 import { reportReachable, reportUnreachable } from "@/lib/network/connectivity";
 import { flushTracking, watchTrackingFlush } from "@/lib/tracking/flush";
-import { type Fix, MAX_SPEED_MPS, shouldKeep } from "@/lib/tracking/sampler";
+import { type Fix, MAX_SPEED_MPS, pinWhenParked, shouldKeep } from "@/lib/tracking/sampler";
 import {
   type QueuedPoint,
   readTracking,
@@ -363,4 +363,21 @@ describe("which readings are kept", () => {
       expect(shouldKeep(fix, last)).toBe(keep);
     });
   }
+
+  it("parked drift that claims speed and swings its heading is still dropped", () => {
+    const drift = { ...base, at: 30_000, heading: 120, longitude: 88.3 + east(20), speed: 2.5 };
+    expect(shouldKeep(drift, { ...base, accuracy: 20, heading: 0 })).toBe(false);
+    expect(shouldKeep({ ...drift, at: 10_000 }, { ...base, heading: 0 })).toBe(false);
+  });
+
+  it("a parked heartbeat reports the last kept spot, not this minute's drift", () => {
+    const heartbeat = { ...base, accuracy: 40, at: 60_000, longitude: 88.3 + east(35) };
+    expect(pinWhenParked(heartbeat, base)).toEqual({ ...heartbeat, accuracy: 10, longitude: 88.3 });
+  });
+
+  it("a real move is recorded where it is", () => {
+    const moved = { ...base, at: 11_000, longitude: 88.3 + east(45), speed: 4 };
+    expect(pinWhenParked(moved, base)).toBe(moved);
+    expect(pinWhenParked(base, null)).toBe(base);
+  });
 });

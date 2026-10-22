@@ -72,11 +72,6 @@ type Props = {
   /** Direction of travel (degrees from north) to turn the self pin. */
   heading?: number;
   /**
-   * A delivery boy shows as the rider wherever they are; their map has no office pin and no
-   * legend, only themselves and their deliveries (or the day's check-in and check-out).
-   */
-  deliveryBoy?: boolean;
-  /**
    * A delivery boy's orders still to deliver, when they have any: the map then shows where they
    * are and where the orders go, instead of the day's check-in and check-out.
    */
@@ -151,13 +146,15 @@ const RIDER_SIZE = VEHICLE_PIN_ART.rider.map;
 const TRUCK_SIZE = VEHICLE_PIN_ART.truck.map;
 const centred = (kind: PinKind) => kind === "rider" || kind === "truck";
 
-// The user's own position needs no key; every other pin is named in the legend.
+// A vehicle on the map needs no key; every other pin (the plain start pin of a member without a
+// vehicle included) is named in the legend.
 const pinLabels: Partial<Record<PinKind, string>> = {
   "delivered-at": "Delivered Location",
   destination: "Check-out",
   order: "Order Delivery Location",
   "order-area": "Approx. area",
   organization: "Office",
+  start: "You",
   transit: "Check-in",
 };
 
@@ -916,14 +913,14 @@ const at = (place: Coordinates, id: string, kind: PinKind): MapPoint => ({
 });
 
 /**
- * The delivery boy's own pin: the truck, turned the way they are heading, while their live trip
- * is being tracked; the rider otherwise.
+ * The member's own pin: their vehicle, turned the way they are heading, when they have one; the
+ * plain start pin otherwise.
  */
 function useSelfPin(live: Coordinates | null, heading?: number) {
   // A two-wheeler shows as the rider, a three- or four-wheeler as the truck (see vehicle-pins);
-  // someone without a vehicle is the rider.
+  // someone without a vehicle gets the start pin, which doesn't turn.
   const myVehicle = useMyVehicle();
-  const kind = myVehicle ? vehiclePinFor(myVehicle.wheelCount) : "rider";
+  const kind: PinKind = myVehicle ? vehiclePinFor(myVehicle.wheelCount) : "start";
   const previous = useRef<Coordinates | null>(null);
   const [bearing, setBearing] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -938,7 +935,8 @@ function useSelfPin(live: Coordinates | null, heading?: number) {
     if (next !== undefined) setBearing(next);
   }, [heading, live]);
   return useCallback(
-    (place: Coordinates, id: string): MapPoint => ({ ...at(place, id, kind), bearing }),
+    (place: Coordinates, id: string): MapPoint =>
+      kind === "start" ? at(place, id, kind) : { ...at(place, id, kind), bearing },
     [bearing, kind],
   );
 }
@@ -958,7 +956,6 @@ const orderMapPoint = (order: OrderPoint): MapPoint => ({
 export function HomeMap({
   checkIn,
   checkOut,
-  deliveryBoy = false,
   height,
   live,
   heading,
@@ -982,8 +979,6 @@ export function HomeMap({
   useEffect(() => {
     if (resetKey) setFocusId(null);
   }, [resetKey]);
-  // With no orders to deliver, a delivery boy's map opens zoomed in on where they are.
-  const anchorId = deliveryBoy && !orders && live ? "here" : null;
   // An order's pin opens the full-screen map on it, with its address and map links; any other
   // pin just zooms in where it is.
   const focusFromPage = (point: MapPoint | null) => {
@@ -994,27 +989,27 @@ export function HomeMap({
     setExpanded(false);
     setFocusId(null);
   };
-  // A delivery boy with orders to deliver: where they are now and a pin per order (exact
-  // address, or only its area), no org pin. Otherwise (anyone, including a delivery boy before
-  // or between checking in/out): the org's pin stays alongside where the user is now; after
-  // checking in, the check-in point replaces it, and a check-out adds the destination pin.
+  // The org's pin is always there, for every member, with the day's check-in and check-out pins
+  // once there are any, and a pin per order still to deliver (exact address, or only its area).
+  // Where the member is now: their vehicle, from before check-in until check-out; without a
+  // vehicle, the plain start pin until they check in, when the check-in pin takes its place.
+  // With orders to deliver it always shows, to see the way to them.
   const selfPin = useSelfPin(live, heading);
   const points = useMemo(() => {
-    const here = live ? (deliveryBoy ? selfPin(live, "here") : at(live, "here", "start")) : null;
-    const day: (MapPoint | null)[] = orders
-      ? [here, ...orders.map(orderMapPoint)]
-      : [
-          // Once checked in, the check-in point stands in for a delivery boy's live pin; it
-          // only tracks them live before that, with no orders yet to show.
-          checkIn ? at(checkIn, "check-in", "transit") : deliveryBoy ? null : here,
-          !checkIn && deliveryBoy ? here : null,
-          checkOut ? at(checkOut, "check-out", "destination") : null,
-        ];
-    // The org's pin stays on a delivery boy's map too, as long as there's no route of
-    // orders or a live trip taking over the map (those have their own pins to frame).
-    const office = organization && !orders ? at(organization, "office", "organization") : null;
-    return [office, ...day].filter((point): point is MapPoint => point !== null);
-  }, [checkIn, checkOut, deliveryBoy, live, orders, organization, selfPin]);
+    const self = live ? selfPin(live, "here") : null;
+    const here =
+      self && (orders || (self.kind === "start" ? !checkIn : !checkOut)) ? self : null;
+    return [
+      organization ? at(organization, "office", "organization") : null,
+      checkIn ? at(checkIn, "check-in", "transit") : null,
+      checkOut ? at(checkOut, "check-out", "destination") : null,
+      ...(orders ?? []).map(orderMapPoint),
+      // Last, so it's drawn over the other pins.
+      here,
+    ].filter((point): point is MapPoint => point !== null);
+  }, [checkIn, checkOut, live, orders, organization, selfPin]);
+  // Only a lone live pin is zoomed in on; anything else is framed together, the org's pin with it.
+  const anchorId = points.length === 1 && points[0]?.id === "here" ? "here" : null;
   return (
     <>
       <Animated.View style={heightStyle}>
@@ -1044,7 +1039,7 @@ export function HomeMap({
               origin={live}
               points={points}
               resetKey={resetKey}
-              showLegend={!deliveryBoy}
+              showLegend
             >
               <MapControl
                 icon={FullScreenIcon}
@@ -1066,7 +1061,7 @@ export function HomeMap({
             origin={live}
             points={points}
             resetKey={resetKey}
-            showLegend={!deliveryBoy}
+            showLegend
           >
             <MapControl icon={Cancel01Icon} label="Minimize map" onPress={minimize} />
           </NativeOlaMap>

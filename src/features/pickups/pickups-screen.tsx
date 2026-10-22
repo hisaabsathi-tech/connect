@@ -395,6 +395,7 @@ export function PickupsScreen() {
     <TabScreen>
       <FlatList
         contentContainerClassName="px-5 pb-8 pt-2"
+        contentContainerStyle={{ flexGrow: 1 }}
         data={loading ? [] : shown}
         keyExtractor={(item) => `${item.organizationId}-${item.id}`}
         ItemSeparatorComponent={() => <View className="h-3" />}

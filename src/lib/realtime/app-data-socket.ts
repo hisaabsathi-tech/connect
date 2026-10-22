@@ -1,5 +1,6 @@
 import { io, type Socket } from "socket.io-client";
 
+import { reportRejectedToken } from "@/lib/auth/session-expiry";
 import { env } from "@/lib/env";
 
 import { SOCKET_TRANSPORTS } from "./vehicle-trips-socket";
@@ -39,6 +40,8 @@ export function connectAppData(token: string): () => void {
     if (connectedBefore) for (const listener of listeners) listener(ALL);
     connectedBefore = true;
   });
+  // A sign-in on another phone ended this session: the session provider signs out.
+  socket.on("session.replaced", () => reportRejectedToken(token, "replaced"));
   socket.on("app.changed", (event: AppChangedEvent) => {
     const resources = (event?.resources ?? []).filter((r): r is AppDataResource => ALL.includes(r));
     if (resources.length === 0) return;

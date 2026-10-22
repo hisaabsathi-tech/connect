@@ -12,7 +12,13 @@ import {
 import { AppState } from "react-native";
 
 import { useToast } from "@/components/ui/toast";
-import { AuthApiError, authApi, type SessionPayload, sessionScope } from "@/lib/api/auth";
+import {
+  AuthApiError,
+  authApi,
+  SESSION_REPLACED_CODE,
+  type SessionPayload,
+  sessionScope,
+} from "@/lib/api/auth";
 import { onRejectedToken } from "@/lib/auth/session-expiry";
 import { TOKEN_KEY } from "@/lib/auth/token-key";
 import { clearCache } from "@/lib/offline/cache";
@@ -52,6 +58,21 @@ function isUsable(payload: SessionPayload) {
 function rejectsSession(error: unknown) {
   return error instanceof AuthApiError && (error.status === 401 || error.status === 403);
 }
+
+/** One phone at a time: the server ended this session for a sign-in on another phone. */
+function replacedSession(error: unknown) {
+  return error instanceof AuthApiError && error.code === SESSION_REPLACED_CODE;
+}
+
+const ENDED_NOTICE = {
+  description: "Please sign in again to continue.",
+  title: "Your session has ended",
+};
+
+const REPLACED_NOTICE = {
+  description: "Your account was signed in on another device, so you were signed out here.",
+  title: "Logged in on another device",
+};
 
 /** Tells the GPS outbox which login's points may go out with this token. */
 function claimTracking(token: string) {
@@ -103,8 +124,10 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
         if (active) setToken(refreshed);
         if (refreshed !== stored) await SecureStore.setItemAsync(TOKEN_KEY, refreshed);
       } catch (error) {
-        if (rejectsSession(error)) await SecureStore.deleteItemAsync(TOKEN_KEY);
-        else if (active) setToken(stored);
+        if (rejectsSession(error)) {
+          await SecureStore.deleteItemAsync(TOKEN_KEY);
+          if (replacedSession(error)) toast.show(REPLACED_NOTICE);
+        } else if (active) setToken(stored);
       }
     })().finally(() => {
       if (active) setReady(true);
@@ -112,17 +135,25 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [toast]);
 
-  // Any request the server rejects with this session's token (signed out elsewhere, password
-  // changed, expired) ends it here, so no screen is left stuck with failing requests.
+  // Any request the server rejects with this session's token (signed out elsewhere, signed in on
+  // another phone, password changed, expired) ends it here, so no screen is left stuck with
+  // failing requests.
   useEffect(() => {
-    onRejectedToken((rejected) => {
+    onRejectedToken((rejected, reason) => {
       if (rejected !== current.current) return;
-      void endSession({
-        description: "Please sign in again to continue.",
-        title: "Your session has ended",
-      });
+      // Taken here, so the other requests failing with this token don't end it again.
+      current.current = null;
+      if (reason === "replaced") {
+        void endSession(REPLACED_NOTICE);
+        return;
+      }
+      // A data request's 401 doesn't say why; the session check does.
+      void authApi.getSession(rejected).then(
+        () => endSession(ENDED_NOTICE),
+        (error) => endSession(replacedSession(error) ? REPLACED_NOTICE : ENDED_NOTICE),
+      );
     });
     return () => onRejectedToken(null);
   }, [endSession]);
@@ -137,13 +168,10 @@ export function AuthSessionProvider({ children }: PropsWithChildren) {
         .then((result) => {
           if (current.current !== active) return;
           if (isUsable(result.data)) setTrackingIdentity(sessionScope(result.data));
-          else
-            void endSession({
-              description: "Please sign in again to continue.",
-              title: "Your session has ended",
-            });
+          else void endSession(ENDED_NOTICE);
         })
-        // A 401 is reported through the rejected-token handler; offline keeps the session.
+        // A 401 (with why, if another phone signed in) is reported through the rejected-token
+        // handler; offline keeps the session.
         .catch(() => undefined);
     });
     return () => subscription.remove();

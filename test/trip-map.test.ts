@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { newerPoint } from "@/features/live-trips/lib/live-trips-store";
 import { mergeTripPath, type TripPathPoint } from "@/lib/api/live-trips";
-import { distanceInMetres, simplifyForDisplay } from "@/lib/maps/geo";
+import { collapseStops, distanceInMetres, simplifyForDisplay } from "@/lib/maps/geo";
 
 const at = (id: string, second: number, lat = 22.5): TripPathPoint => ({
   id,
@@ -50,6 +50,30 @@ describe("drawing a long path", () => {
 
   it("keeps short paths exactly as they are", () => {
     expect(simplifyForDisplay(line.slice(0, 50))).toHaveLength(50);
+  });
+
+  it("draws a stop as one point, not a star of GPS drift", () => {
+    const metres = (m: number) => m / 111_320;
+    // Drive north 300 m, park 20 minutes with 40 m of drift and one 200 m jump, drive on.
+    const driving = Array.from({ length: 3 }, (_, i) =>
+      at(`d${i}`, i * 10, 22.5 + metres(i * 100)),
+    );
+    const parked = Array.from({ length: 20 }, (_, i) => {
+      const drift = at(`p${i}`, 40 + i * 60, 22.5 + metres(300 + ((i * 37) % 80) - 40));
+      return i === 7 ? { ...drift, longitude: 88.3 + metres(200) } : drift;
+    });
+    const onward = Array.from({ length: 4 }, (_, i) =>
+      at(`o${i}`, 1_300 + i * 10, 22.5 + metres(400 + i * 100)),
+    );
+    const path = [...driving, ...parked, ...onward];
+    const shown = collapseStops(path);
+    expect(shown.map((p) => p.id.charAt(0))).toEqual(["d", "d", "d", "p", "o", "o", "o", "o"]);
+    expect(shown.some((p) => p.id === "p7")).toBe(false);
+  });
+
+  it("leaves a moving line as it is", () => {
+    const moving = Array.from({ length: 30 }, (_, i) => at(`m${i}`, i * 10, 22.5 + i * 0.000_3));
+    expect(collapseStops(moving)).toEqual(moving);
   });
 
   it("thins a long path, keeping both ends and the turn", () => {
