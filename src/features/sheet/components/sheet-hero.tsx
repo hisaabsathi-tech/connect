@@ -8,7 +8,7 @@ import { colors } from "@/config/colors";
 import { haptic } from "@/lib/haptics";
 
 // "Auto filled by AI" over a sheet (462×371).
-const ILLUSTRATION = require("@/assets/illustrations/sheet.svg");
+const ILLUSTRATION = require("@/assets/illustrations/sheet.webp");
 const ILLUSTRATION_RATIO = 371 / 462;
 // The page's side gutters (px-5) and the card's own padding (p-6), both sides.
 const CARD_INSET = 40 + 48;

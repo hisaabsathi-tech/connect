@@ -12,4 +12,11 @@ config.cacheVersion = Object.keys(process.env)
   .map((key) => `${key}=${process.env[key]}`)
   .join("\n");
 
+// expo-router imports expo-symbols, which bundles the ~1 MB Material Symbols font for Android
+// <SymbolView> and native-tab icons. The app uses neither, so the font resolves to an empty module.
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName.startsWith("@expo-google-fonts/material-symbols")) return { type: "empty" };
+  return context.resolveRequest(context, moduleName, platform);
+};
+
 module.exports = withNativewind(config);

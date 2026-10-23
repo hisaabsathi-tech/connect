@@ -1,8 +1,8 @@
 import { setAudioModeAsync, useAudioPlayer } from "expo-audio";
 import { useCallback, useEffect } from "react";
 
-const checkInSource = require("@/assets/audio/checkin.wav");
-const checkOutSource = require("@/assets/audio/checkout.wav");
+const checkInSource = require("@/assets/audio/checkin.m4a");
+const checkOutSource = require("@/assets/audio/checkout.m4a");
 
 /**
  * Short confirmation sounds for a saved check-in or check-out. They mix with whatever else is
