@@ -31,8 +31,16 @@ const PING_TIMEOUT_MS = 5_000;
 const RECHECK_MS = 30_000;
 const CONFIRM_RECHECK_MS = 5_000;
 const SERVER_FAILURE_THRESHOLD = 3;
+// Android pauses a backgrounded app's network, and for a moment after it reopens the phone can
+// report no connection and requests fail though nothing is wrong. Going offline in the background
+// is ignored, and for this long after reopening (until the server first answers) it is checked
+// again before it counts, so the offline sheet and chip don't flash up on every reopen.
+const RESUME_SETTLE_MS = 5_000;
 
 let state: Connectivity = { since: Date.now(), status: "unknown" };
+// When the app last came back to the foreground; 0 once the server has answered since.
+let resumedAt = 0;
+let settleCheck: ReturnType<typeof setTimeout> | null = null;
 let lastDeviceConnected: boolean | null = null;
 const listeners = new Set<() => void>();
 const reconnectListeners = new Set<() => void>();
@@ -54,7 +62,31 @@ function markServerFailure() {
   }, CONFIRM_RECHECK_MS);
 }
 
+/**
+ * True when going offline now shouldn't count: the app is in the background, or it has only just
+ * reopened (the server is then asked again once the network has settled).
+ */
+function holdOffline() {
+  const app = AppState.currentState;
+  if (app === "background" || app === "inactive") return true;
+  const wait = resumedAt + RESUME_SETTLE_MS - Date.now();
+  if (wait <= 0) return false;
+  settleCheck ??= setTimeout(() => {
+    settleCheck = null;
+    void probe();
+  }, wait);
+  return true;
+}
+
 function set(status: ConnectivityStatus, reason?: OfflineReason) {
+  // Only the change into offline is held; one already shown stays until the server answers.
+  if (status === "offline" && state.status !== "offline" && holdOffline()) return;
+  // The server answered: the network has settled, and a failure from now on is real.
+  if (status === "online") {
+    resumedAt = 0;
+    if (settleCheck) clearTimeout(settleCheck);
+    settleCheck = null;
+  }
   const resolvedReason =
     status === "offline"
       ? (reason ?? (lastDeviceConnected === false ? "no_network" : "server_unreachable"))
@@ -164,7 +196,11 @@ export function startConnectivity() {
     else void probe();
   });
   AppState.addEventListener("change", (next) => {
-    if (next === "active") void probe();
+    if (next !== "active") return;
+    // Failures counted while in the background don't carry over into the reopened app.
+    resumedAt = Date.now();
+    serverFailures = 0;
+    void probe();
   });
   void probe();
 }

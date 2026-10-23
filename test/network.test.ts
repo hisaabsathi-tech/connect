@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
+import { AppState } from "react-native";
 
 import { ApiError, apiRequest } from "@/lib/api/client";
 import { graphqlRequest } from "@/lib/api/graphql";
@@ -69,6 +70,39 @@ describe("connectivity", () => {
     for (const listener of fake.appListeners) listener("active");
     await settle(5);
     expect(isOnline()).toBe(true);
+  });
+
+  it("doesn't go offline while in the background, where Android pauses the network", async () => {
+    startConnectivity();
+    await settle();
+    const network = fake.networkListeners.at(-1);
+    if (!network) throw new Error("no network listener");
+    const app = AppState as { currentState: string };
+    app.currentState = "background";
+    try {
+      network({ isConnected: false });
+      reportUnreachable("no_network");
+      expect(isOnline()).toBe(true);
+    } finally {
+      app.currentState = "active";
+    }
+  });
+
+  it("doesn't flash offline for a network blip just after reopening, until the server answers", async () => {
+    startConnectivity();
+    await settle();
+    const network = fake.networkListeners.at(-1);
+    if (!network) throw new Error("no network listener");
+    fake.server.offline = true;
+    for (const listener of fake.appListeners) listener("active");
+    network({ isConnected: false });
+    await settle(5);
+    expect(isOnline()).toBe(true);
+    // Answered once the network has settled: from then on an outage shows at once.
+    fake.server.offline = false;
+    reportReachable();
+    network({ isConnected: false });
+    expect(isOnline()).toBe(false);
   });
 
   it("distinguishes device offline (no network) from server unreachable (server down)", async () => {
