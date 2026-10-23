@@ -245,6 +245,31 @@ const PIN_FOCUS_ZOOM = 17;
 // A map anchored on the user (a delivery boy with no orders) shows their streets at this zoom.
 const ANCHOR_ZOOM = 16;
 
+// The map shows at most this many order pins: one per place, nearest first.
+const MAX_ORDER_PINS = 7;
+
+/**
+ * Orders grouped by place (within `SAME_PLACE_METRES`), one group per pin, so a sheet of parcels to
+ * one address is a single pin rather than a row of them. Only the `MAX_ORDER_PINS` places nearest
+ * `from` are kept (the first ones while it isn't known).
+ */
+function orderPlaces<T extends Coordinates>(items: T[], from: Coordinates | null): T[][] {
+  const groups: T[][] = [];
+  for (const item of items) {
+    const group = groups.find((members) => distanceInMetres(members[0], item) < SAME_PLACE_METRES);
+    if (group) group.push(item);
+    else groups.push([item]);
+  }
+  if (from) {
+    groups.sort((a, b) => distanceInMetres(from, a[0]) - distanceInMetres(from, b[0]));
+  }
+  return groups.slice(0, MAX_ORDER_PINS);
+}
+
+/** "PLAY23102601", or "PLAY23102601 +31 more" for a pin standing for several orders. */
+const placeTitle = (first: string, count: number) =>
+  count > 1 ? `${first} +${count - 1} more` : first;
+
 /** Horizontal pixel offset per pin; a pin alone at its place stays centred. */
 function samePlaceOffsets(points: MapPoint[]) {
   const groups: MapPoint[][] = [];
@@ -941,15 +966,18 @@ function useSelfPin(live: Coordinates | null, heading?: number) {
   );
 }
 
-/** An order's pin, with the card its tap opens (receiver, call, address and map links). */
-const orderMapPoint = (order: OrderPoint): MapPoint => ({
+/**
+ * An order's pin, with the card its tap opens (receiver, call, address and map links). `count` is
+ * how many orders share the place; the card's title says so.
+ */
+const orderMapPoint = (order: OrderPoint, count = 1): MapPoint => ({
   ...at(order, `order-${order.orderId}`, order.exact ? "order" : "order-area"),
   detail: {
     address: order.address,
     exact: order.exact,
     mobile: order.mobile,
     receiver: order.receiver,
-    title: order.awbNo,
+    title: placeTitle(order.awbNo, count),
   },
 });
 
@@ -1002,7 +1030,7 @@ export function HomeMap({
       organization ? at(organization, "office", "organization") : null,
       checkIn ? at(checkIn, "check-in", "transit") : null,
       checkOut ? at(checkOut, "check-out", "destination") : null,
-      ...(orders ?? []).map(orderMapPoint),
+      ...orderPlaces(orders ?? [], live).map((group) => orderMapPoint(group[0], group.length)),
       // Last, so it's drawn over the other pins.
       here,
     ].filter((point): point is MapPoint => point !== null);
@@ -1464,9 +1492,9 @@ export function LiveTripMap({
             info: { address: null, title: "Trip started" },
           }
         : null,
-      ...stops.map((stop) => ({
+      ...orderPlaces(stops, vehicle).map(([stop, ...others]) => ({
         ...at(stop, `trip-stop-${stop.id}`, "order" as const),
-        info: { address: stop.address, title: stop.title },
+        info: { address: stop.address, title: placeTitle(stop.title, others.length + 1) },
       })),
       vehicle ? { ...at(vehicle, "trip-vehicle", vehiclePin), bearing: computedBearing } : null,
     ];
