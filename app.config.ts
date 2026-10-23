@@ -52,6 +52,28 @@ const withPortraitOnLargeScreens: ConfigPlugin = (config) =>
     return config;
   });
 
+// `orientation: "portrait"` only locks MainActivity. Screens that libraries open as their own
+// activities follow the phone's auto-rotate unless declared here; the manifest merger adds the
+// attribute to the library's declaration. Translucent activities (e.g. GoogleApiActivity) are left
+// out: Android 8.0 crashes when a non-opaque activity requests a fixed orientation.
+const PORTRAIT_LIBRARY_ACTIVITIES = [
+  // Photo crop screen after picking or capturing a photo (react-native-image-crop-picker).
+  "com.yalantis.ucrop.UCropActivity",
+];
+
+const withPortraitLibraryActivities: ConfigPlugin = (config) =>
+  withAndroidManifest(config, (config) => {
+    const application = AndroidConfig.Manifest.getMainApplicationOrThrow(config.modResults);
+    const activities = (application.activity ?? []).filter(
+      (activity) => !PORTRAIT_LIBRARY_ACTIVITIES.includes(activity.$["android:name"]),
+    );
+    for (const name of PORTRAIT_LIBRARY_ACTIVITIES) {
+      activities.push({ $: { "android:name": name, "android:screenOrientation": "portrait" } });
+    }
+    application.activity = activities;
+    return config;
+  });
+
 // The home screen icon's label is just "Connect" — short enough to sit under the icon without
 // wrapping or being cut off. The app's full name ("Hisaab Sathi Connect") stays everywhere else:
 // Settings > Apps, the recents/app-switcher card, and the Play Store listing.
@@ -135,117 +157,119 @@ const withReleaseBuildGradle: ConfigPlugin = (config) =>
 export default ({ config }: ConfigContext): ExpoConfig =>
   withShortLauncherLabel(
     withPortraitOnLargeScreens(
-      withReleaseBuildGradle(
-        withGradlePropertyOverrides(
-          withTransparentAutofillHighlight({
-            ...config,
-            name: "Hisaab Sathi Connect",
-            slug: "hisaab-sathi-connect",
-            version: release.version,
-            orientation: "portrait",
-            icon: "./assets/logo/android/app.png",
-            scheme: "hisaabsathi-connect",
-            userInterfaceStyle: "light",
-            // Android-only app; this just satisfies `expo prebuild`, which needs both platforms
-            // identified even when only android/ is generated.
-            ios: {
-              bundleIdentifier: "in.hisaabsathi.connect",
-            },
-            android: {
-              package: "in.hisaabsathi.connect",
-              versionCode: release.versionCode,
-              softwareKeyboardLayoutMode: "resize",
-              adaptiveIcon: {
-                backgroundColor: androidLogo.backgroundColor,
-                foregroundImage: "./assets/logo/android/adaptive-foreground.png",
-                backgroundImage: "./assets/logo/android/adaptive-background.png",
-                monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
+      withPortraitLibraryActivities(
+        withReleaseBuildGradle(
+          withGradlePropertyOverrides(
+            withTransparentAutofillHighlight({
+              ...config,
+              name: "Hisaab Sathi Connect",
+              slug: "hisaab-sathi-connect",
+              version: release.version,
+              orientation: "portrait",
+              icon: "./assets/logo/android/app.png",
+              scheme: "hisaabsathi-connect",
+              userInterfaceStyle: "light",
+              // Android-only app; this just satisfies `expo prebuild`, which needs both platforms
+              // identified even when only android/ is generated.
+              ios: {
+                bundleIdentifier: "in.hisaabsathi.connect",
               },
-              predictiveBackGestureEnabled: true,
-              // Attendance photos (Image Confirmation module) open the phone's camera app.
-              // The live-trip location task is a persisted job (it survives a reboot), which Android
-              // refuses without RECEIVE_BOOT_COMPLETED; WAKE_LOCK lets it run with the screen off.
-              permissions: [
-                "android.permission.CAMERA",
-                "android.permission.RECEIVE_BOOT_COMPLETED",
-                "android.permission.WAKE_LOCK",
-                // Offline mode: knowing when the phone loses or regains its connection.
-                "android.permission.ACCESS_NETWORK_STATE",
-              ],
-            },
-            plugins: [
-              "expo-router",
-              // Satoshi ships only Regular and Medium. One native family maps every weight to a real
-              // face (500+ → Medium), so heavier classes never fall back to a synthesized bold.
-              [
-                "expo-font",
-                {
-                  android: {
-                    fonts: [
-                      {
-                        fontFamily: "Satoshi",
-                        fontDefinitions: [
-                          { path: "./assets/fonts/satoshi-regular.otf", weight: 400 },
-                          { path: "./assets/fonts/satoshi-medium.otf", weight: 500 },
-                          { path: "./assets/fonts/satoshi-medium.otf", weight: 600 },
-                          { path: "./assets/fonts/satoshi-medium.otf", weight: 700 },
-                        ],
-                      },
-                    ],
+              android: {
+                package: "in.hisaabsathi.connect",
+                versionCode: release.versionCode,
+                softwareKeyboardLayoutMode: "resize",
+                adaptiveIcon: {
+                  backgroundColor: androidLogo.backgroundColor,
+                  foregroundImage: "./assets/logo/android/adaptive-foreground.png",
+                  backgroundImage: "./assets/logo/android/adaptive-background.png",
+                  monochromeImage: "./assets/logo/android/adaptive-monochrome.png",
+                },
+                predictiveBackGestureEnabled: true,
+                // Attendance photos (Image Confirmation module) open the phone's camera app.
+                // The live-trip location task is a persisted job (it survives a reboot), which Android
+                // refuses without RECEIVE_BOOT_COMPLETED; WAKE_LOCK lets it run with the screen off.
+                permissions: [
+                  "android.permission.CAMERA",
+                  "android.permission.RECEIVE_BOOT_COMPLETED",
+                  "android.permission.WAKE_LOCK",
+                  // Offline mode: knowing when the phone loses or regains its connection.
+                  "android.permission.ACCESS_NETWORK_STATE",
+                ],
+              },
+              plugins: [
+                "expo-router",
+                // Satoshi ships only Regular and Medium. One native family maps every weight to a real
+                // face (500+ → Medium), so heavier classes never fall back to a synthesized bold.
+                [
+                  "expo-font",
+                  {
+                    android: {
+                      fonts: [
+                        {
+                          fontFamily: "Satoshi",
+                          fontDefinitions: [
+                            { path: "./assets/fonts/satoshi-regular.otf", weight: 400 },
+                            { path: "./assets/fonts/satoshi-medium.otf", weight: 500 },
+                            { path: "./assets/fonts/satoshi-medium.otf", weight: 600 },
+                            { path: "./assets/fonts/satoshi-medium.otf", weight: 700 },
+                          ],
+                        },
+                      ],
+                    },
+                    ios: {
+                      fonts: [
+                        "./assets/fonts/satoshi-regular.otf",
+                        "./assets/fonts/satoshi-medium.otf",
+                      ],
+                    },
                   },
-                  ios: {
-                    fonts: [
-                      "./assets/fonts/satoshi-regular.otf",
-                      "./assets/fonts/satoshi-medium.otf",
-                    ],
+                ],
+                "expo-secure-store",
+                // Durable WAL-backed live-trip outbox; queued GPS points survive process death.
+                "expo-sqlite",
+                // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
+                // A development/release build is required; this is not available in Expo Go.
+                "@maplibre/maplibre-react-native",
+                // Scans the parcel label's barcode before an order is updated. Video is never
+                // recorded, so no microphone permission is added.
+                [
+                  "expo-camera",
+                  {
+                    cameraPermission:
+                      "Allow Hisaab Sathi Connect to use the camera to scan parcel barcodes.",
+                    recordAudioAndroid: false,
                   },
-                },
+                ],
+                // Live delivery tracking keeps reading GPS with the app in the background, through an
+                // Android foreground service (a "Live tracking on" notification) while a DRS is out.
+                [
+                  "expo-location",
+                  {
+                    locationWhenInUsePermission:
+                      "Allow Hisaab Sathi Connect to use your location for attendance.",
+                    locationAlwaysAndWhenInUsePermission:
+                      "Allow Hisaab Sathi Connect to share your location while you are out for delivery, even when the app is closed.",
+                    isAndroidBackgroundLocationEnabled: true,
+                    isAndroidForegroundServiceEnabled: true,
+                    isIosBackgroundLocationEnabled: true,
+                  },
+                ],
+                [
+                  "expo-splash-screen",
+                  {
+                    backgroundColor: androidLogo.splashBackgroundColor,
+                    image: "./assets/logo/splash/dark.png",
+                    imageWidth: 288,
+                    resizeMode: "contain",
+                  },
+                ],
               ],
-              "expo-secure-store",
-              // Durable WAL-backed live-trip outbox; queued GPS points survive process death.
-              "expo-sqlite",
-              // Installs MapLibre Native, which renders Ola vector tiles directly on Android/iOS.
-              // A development/release build is required; this is not available in Expo Go.
-              "@maplibre/maplibre-react-native",
-              // Scans the parcel label's barcode before an order is updated. Video is never
-              // recorded, so no microphone permission is added.
-              [
-                "expo-camera",
-                {
-                  cameraPermission:
-                    "Allow Hisaab Sathi Connect to use the camera to scan parcel barcodes.",
-                  recordAudioAndroid: false,
-                },
-              ],
-              // Live delivery tracking keeps reading GPS with the app in the background, through an
-              // Android foreground service (a "Live tracking on" notification) while a DRS is out.
-              [
-                "expo-location",
-                {
-                  locationWhenInUsePermission:
-                    "Allow Hisaab Sathi Connect to use your location for attendance.",
-                  locationAlwaysAndWhenInUsePermission:
-                    "Allow Hisaab Sathi Connect to share your location while you are out for delivery, even when the app is closed.",
-                  isAndroidBackgroundLocationEnabled: true,
-                  isAndroidForegroundServiceEnabled: true,
-                  isIosBackgroundLocationEnabled: true,
-                },
-              ],
-              [
-                "expo-splash-screen",
-                {
-                  backgroundColor: androidLogo.splashBackgroundColor,
-                  image: "./assets/logo/splash/dark.png",
-                  imageWidth: 288,
-                  resizeMode: "contain",
-                },
-              ],
-            ],
-            experiments: {
-              typedRoutes: true,
-              reactCompiler: true,
-            },
-          }),
+              experiments: {
+                typedRoutes: true,
+                reactCompiler: true,
+              },
+            }),
+          ),
         ),
       ),
     ),
