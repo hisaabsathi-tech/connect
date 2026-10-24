@@ -24,6 +24,15 @@ type WorkbookSnapshot = {
   sheets?: Record<string, { cellData?: CellData } | undefined>;
 };
 
+/** Where the destination pincode sits in a manifest row; its city goes right after it. */
+const PINCODE_COLUMN = COLUMNS.findIndex((column) => column.label === "Dest Pincode*");
+
+const withCity = (line: readonly string[], city: string) => [
+  ...line.slice(0, PINCODE_COLUMN + 1),
+  city,
+  ...line.slice(PINCODE_COLUMN + 1),
+];
+
 /** "*Destination  pincode" → "DESTINATION PINCODE", as the web editor matches headers. */
 const headerKey = (header: string) =>
   header.trim().replace(/^\*+/, "").replace(/\s+/g, " ").trim().toUpperCase();
@@ -39,11 +48,14 @@ function firstSheetCells(workbook: Record<string, unknown>): CellData {
 }
 
 /**
- * The sheet's rows under the manifest's five columns, header first. Rows with none of them filled
- * in are left out; a row without an AWB number yet, or a sheet without one of the columns, leaves
- * that cell blank.
+ * The sheet's rows under the manifest's columns, header first, each destination pincode followed
+ * by its city (from `cities`). Rows with none of the sheet's columns filled in are left out; a row
+ * without an AWB number yet, or a sheet without one of the columns, leaves that cell blank.
  */
-export function manifestRows(workbook: Record<string, unknown>): string[][] {
+export function manifestRows(
+  workbook: Record<string, unknown>,
+  cities: Readonly<Record<string, string>> = {},
+): string[][] {
   const cells = firstSheetCells(workbook);
   const header = cells[0] ?? {};
   const columnOf = new Map<string, number>();
@@ -64,9 +76,23 @@ export function manifestRows(workbook: Record<string, unknown>): string[][] {
     const line = sources.map((column) =>
       column === null ? "" : cellText(cells[index]?.[String(column)]),
     );
-    if (line.some(Boolean)) rows.push(line);
+    if (line.some(Boolean)) rows.push(withCity(line, cities[line[PINCODE_COLUMN] ?? ""] ?? ""));
   }
-  return [COLUMNS.map((column) => column.label), ...rows];
+  return [
+    withCity(
+      COLUMNS.map((column) => column.label),
+      "City",
+    ),
+    ...rows,
+  ];
+}
+
+/** The destination pincodes of the sheet's manifest rows, to look their cities up. */
+export function manifestPincodes(workbook: Record<string, unknown>) {
+  return manifestRows(workbook)
+    .slice(1)
+    .map((line) => line[PINCODE_COLUMN] ?? "")
+    .filter(Boolean);
 }
 
 /**
@@ -82,9 +108,12 @@ export function manifestFileName(sheetName: string) {
 }
 
 /** The sheet's Shipping Manifest as an Excel file, ready to save or share. */
-export function manifestFile(sheet: Pick<SmartSheetRecord, "name" | "workbook">): ExportFile {
+export function manifestFile(
+  sheet: Pick<SmartSheetRecord, "name" | "workbook">,
+  cities: Readonly<Record<string, string>> = {},
+): ExportFile {
   return {
-    contents: toBase64(buildTableWorkbook(MANIFEST_NAME, manifestRows(sheet.workbook))),
+    contents: toBase64(buildTableWorkbook(MANIFEST_NAME, manifestRows(sheet.workbook, cities))),
     encoding: "base64",
     mimeType: XLSX_MIME_TYPE,
     name: manifestFileName(sheet.name),

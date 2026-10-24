@@ -13,7 +13,12 @@ import { Text } from "@/components/modules/typography";
 import { useToast } from "@/components/ui/toast";
 import { colors } from "@/config/colors";
 import { isNetworkError } from "@/lib/api/network";
-import { fetchSmartSheet, fetchSmartSheets, type SmartSheetSummary } from "@/lib/api/smart-sheets";
+import {
+  fetchPincodeCities,
+  fetchSmartSheet,
+  fetchSmartSheets,
+  type SmartSheetSummary,
+} from "@/lib/api/smart-sheets";
 import { useAuthSession } from "@/lib/auth/session";
 import { useViewer } from "@/lib/auth/viewer";
 import { useDateFilter } from "@/lib/date";
@@ -27,7 +32,7 @@ import { SheetCard } from "./components/sheet-card";
 import { SheetHero } from "./components/sheet-hero";
 import { useSheetOrganizations } from "./hooks/use-sheet-organizations";
 import { sheetDay } from "./lib/format";
-import { manifestFile } from "./lib/manifest";
+import { manifestFile, manifestPincodes } from "./lib/manifest";
 
 const SHEETS_CACHE = "smart-sheets";
 
@@ -118,7 +123,14 @@ export function SheetsScreen() {
     if (!token || downloading) return;
     setDownloading(sheetKey(sheet));
     try {
-      const file = manifestFile(await fetchSmartSheet(token, sheet));
+      const record = await fetchSmartSheet(token, sheet);
+      // Without the cities (offline lookup, an older server) the manifest still downloads.
+      const cities = await fetchPincodeCities(
+        token,
+        sheet.organizationId,
+        manifestPincodes(record.workbook),
+      ).catch(() => ({}));
+      const file = manifestFile(record, cities);
       const folder = await saveToDevice([file]);
       if (folder) toast.success("Manifest downloaded", `Saved to ${folder} on your device.`);
       // Backed out of choosing a folder: it can still be sent on from the share sheet.

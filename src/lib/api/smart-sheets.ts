@@ -125,6 +125,17 @@ export function fetchSmartSheet(
   );
 }
 
+/**
+ * The city of each of a sheet's pincodes as its organization's pincode mapping has it, keyed by
+ * pincode, for the Shipping Manifest; unknown pincodes are left out.
+ */
+export function fetchPincodeCities(token: string, organizationId: string, pincodes: string[]) {
+  return apiRequest<Record<string, string>>(`${LINKED}/${part(organizationId)}/cities`, token, {
+    body: JSON.stringify({ pincodes: [...new Set(pincodes.filter(Boolean))] }),
+    method: "POST",
+  });
+}
+
 /** The organizations whose sheets the member may read, by name. */
 export function fetchSheetOrganizations(token: string) {
   return apiRequest<SheetOrganization[]>(`${LINKED}/organizations`, token);
