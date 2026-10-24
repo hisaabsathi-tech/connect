@@ -155,14 +155,14 @@ const pageHaptics: Record<keyof typeof items, HapticKind> = {
 };
 
 /**
- * Home and Profile for every signed-in user; Attendance when the role grants attendance view;
- * Orders when it grants order edit without order create (delivery work); Sheet when it grants the
- * Smart Sheet menu.
+ * Home and Profile for every signed-in user; Orders, Sheet, Pickups and Attendance when the role
+ * is granted that Connect App menu. A tab without the access its screen needs still shows, and
+ * the screen says so.
  */
 export function BottomNavigation({ insets, navigation, state }: BottomTabBarProps) {
-  const { canUpdateOrders, canViewAttendance, canViewPickups, canViewSheets } = useViewer();
+  const { tabs } = useViewer();
   // With all six tabs the bar gives up its side margin, so "Attendance" fits a narrow phone.
-  const crowded = canUpdateOrders && canViewSheets && canViewPickups && canViewAttendance;
+  const crowded = tabs.orders && tabs.sheet && tabs.pickups && tabs.attendance;
   return (
     <View
       className={`flex-row bg-[#F0F2FF] pt-3 ${crowded ? "px-1" : "px-5"}`}
@@ -171,10 +171,14 @@ export function BottomNavigation({ insets, navigation, state }: BottomTabBarProp
       {state.routes.map((route, index) => {
         const item = items[route.name as keyof typeof items];
         if (!item) return null;
-        if (route.name === "orders" && !canUpdateOrders) return null;
-        if (route.name === "sheet" && !canViewSheets) return null;
-        if (route.name === "pickups" && !canViewPickups) return null;
-        if (route.name === "attendance" && !canViewAttendance) return null;
+        if (
+          (route.name === "orders" ||
+            route.name === "sheet" ||
+            route.name === "pickups" ||
+            route.name === "attendance") &&
+          !tabs[route.name]
+        )
+          return null;
         const active = state.index === index;
         const color = active ? colors.primary : colors.foreground;
         const activeIcon =

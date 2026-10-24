@@ -2,6 +2,7 @@ import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
+import { NoPermission } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { ListPageSkeleton } from "@/components/modules/skeleton";
 import { Text } from "@/components/modules/typography";
@@ -92,8 +93,8 @@ function useAccess(token: string | null) {
 /**
  * The Attendance tab. Only the organisation's owner gets its roster (Company); when they also
  * check in themselves (Superadmin Attendance on) they get Company / Own tabs to see their own
- * attendance too. Every other member sees only their own, and a member whose role has no
- * attendance view is sent back Home (the tab is hidden for them; this covers links).
+ * attendance too. Every other member sees only their own. Without the Attendance menu the tab is
+ * hidden and a link goes Home; with it but without attendance view, the tab says so.
  */
 export function AttendanceScreen() {
   const { token } = useAuthSession();
@@ -102,7 +103,11 @@ export function AttendanceScreen() {
   const access = useAccess(allowed ? token : null);
   const [view, setView] = useState<AttendanceView>("company");
 
-  if (viewer.isLoaded && !viewer.canViewAttendance) return <Redirect href="/" />;
+  if (viewer.isLoaded && !viewer.tabs.attendance) return <Redirect href="/" />;
+  if (viewer.isLoaded && !viewer.canViewAttendance)
+    return (
+      <NoPermission description="Your role needs Attendance view access, with Attendance on for this organization." />
+    );
   if (!access)
     return (
       <TabScreen>

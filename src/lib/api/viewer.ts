@@ -21,11 +21,16 @@ export type Viewer = {
   orderActions: string[];
   /** True when an enabled same-owner organization grants this delivery boy Pickup access. */
   canViewPickups: boolean;
-  /** The menu ids the member is granted in the active organisation (`orders.sheet`, …). */
+  /** The member's granted `pickup_request` actions; empty without any (or from an older save). */
+  pickupActions?: string[];
+  /**
+   * The menu ids the member is granted in the active organisation; the app's tabs are the
+   * `connect.*` ones.
+   */
   menus: string[];
   /**
    * True when any same-owner organization grants this member Smart Sheets; null when the server
-   * couldn't say (one without the check), and the active organisation's menus decide instead.
+   * couldn't say (one without the check), and the role's order access decides instead.
    */
   sheetsAvailable: boolean | null;
 };
@@ -107,6 +112,7 @@ export async function fetchViewer(token: string): Promise<Viewer> {
         }
       : null,
     orderActions: actionsOn("order"),
+    pickupActions: actionsOn("pickup_request"),
     roleSlug: payload.me.orgRole?.slug ?? null,
     sheetsAvailable: await sheetsAvailable,
   };

@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { AppState } from "react-native";
 
 import { fetchViewer, type Viewer } from "@/lib/api/viewer";
 import { useAuthSession } from "@/lib/auth/session";
@@ -15,18 +16,29 @@ import { readCache, writeCache } from "@/lib/offline/cache";
 import { retryOnce } from "@/lib/retry";
 
 const VIEWER_CACHE = "viewer";
-// The web app's Smart Sheet menu; granted along with either of its views.
-const SHEET_MENU = "orders.sheet";
+/**
+ * The app's tabs, granted per role on the web's Role Permissions (Connect App). The menus alone
+ * decide which tabs show; Home and Profile always do. A shown tab whose screen lacks the backend
+ * access it uses says so instead of loading (the `can…` flags).
+ */
+const APP_MENU = {
+  attendance: "connect.attendance",
+  orders: "connect.orders",
+  pickups: "connect.pickups",
+  sheet: "connect.sheet",
+} as const;
+
+export type AppTab = keyof typeof APP_MENU;
 
 type ViewerState = {
   viewer: Viewer | null;
+  /** The tabs the role's Connect App menus show. */
+  tabs: Record<AppTab, boolean>;
   /** False until the first answer (or failure); role-gated screens wait for it. */
   isLoaded: boolean;
   /**
-   * Delivery work: the role grants order edit but not order create. It brings the Orders tab, the
-   * day's deliveries on Home, and updating an order. Any such role gets them, not only the
-   * delivery boy role; a role that also creates orders (office staff, who book them through the
-   * Sheet tab) doesn't.
+   * Delivery work: the Orders menu with order edit. It brings the Orders tab, the day's
+   * deliveries on Home, and updating an order, for any role granted them.
    */
   canUpdateOrders: boolean;
   /**
@@ -34,18 +46,21 @@ type ViewerState = {
    * shows on Home. Any role with it, including ones created later.
    */
   canViewOrders: boolean;
-  /** An enabled same-owner organization grants this delivery boy Pickup access. */
+  /**
+   * The Pickups menu with pickup view: the role's own, or as a delivery boy in an organization
+   * with Pickups on. Only a delivery boy's assigned pickups list there.
+   */
   canViewPickups: boolean;
   /**
-   * Any same-owner organization grants the member Smart Sheets (its menu, present with either of
-   * the own / all views, and order GET_ALL): the Sheet tab, listing every such organization's
+   * The Sheet menu, and any same-owner organization grants the member Smart Sheets (the app's or
+   * the web's Sheet menu, and order GET_ALL): the Sheet tab, listing every such organization's
    * sheets without switching. Whether each lists all sheets or only the member's own is decided
-   * by the server from the same menus.
+   * by the server.
    */
   canViewSheets: boolean;
-  /** The role grants attendance view: the Attendance tab and the day's record on Home. */
+  /** The Attendance menu with attendance view: the Attendance tab and the day's record on Home. */
   canViewAttendance: boolean;
-  /** The role grants attendance create: the check-in / check-out swipe. */
+  /** The Attendance menu with attendance create: the check-in / check-out swipe. */
   canCheckIn: boolean;
   reload: () => Promise<void>;
 };
@@ -80,35 +95,50 @@ export function ViewerProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void reload();
   }, [reload]);
-  // Back online: a role changed meanwhile applies without reopening the app.
+  // Back online, or back from another app (say, the web after a role change): a role changed
+  // meanwhile applies without reopening the app.
   useEffect(() => onReconnect(() => void reload()), [reload]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void reload();
+    });
+    return () => subscription.remove();
+  }, [reload]);
 
-  const value = useMemo(
-    () => ({
+  const value = useMemo(() => {
+    const menus = new Set(viewer?.menus ?? []);
+    const orderActions = viewer?.orderActions ?? [];
+    const attendanceActions = viewer?.attendanceActions ?? [];
+    const tabs: Record<AppTab, boolean> = {
+      // Until the role is known, Attendance shows as before; most roles have it.
+      attendance: viewer ? menus.has(APP_MENU.attendance) : true,
+      orders: menus.has(APP_MENU.orders),
+      pickups: menus.has(APP_MENU.pickups),
+      sheet: menus.has(APP_MENU.sheet),
+    };
+    const canSeeAttendance = menus.has(APP_MENU.attendance);
+    return {
       // Until the role is known, attendance shows as before; most roles have it, and the server
       // turns away a check-in the role doesn't allow.
-      canCheckIn: viewer ? viewer.attendanceActions.includes("CREATE") : true,
+      canCheckIn: viewer ? canSeeAttendance && attendanceActions.includes("CREATE") : true,
       canViewAttendance: viewer
-        ? viewer.attendanceActions.some((action) => action === "GET" || action === "GET_ALL")
+        ? canSeeAttendance &&
+          attendanceActions.some((action) => action === "GET" || action === "GET_ALL")
         : true,
-      canUpdateOrders:
-        (viewer?.orderActions.includes("UPDATE") ?? false) &&
-        !(viewer?.orderActions.includes("CREATE") ?? false),
-      canViewOrders:
-        viewer?.orderActions.some((action) => action === "GET" || action === "GET_ALL") ?? false,
-      canViewPickups: viewer?.canViewPickups ?? false,
-      // Without the server's answer (or from a role saved by an older version, which lacks both
-      // fields), the active organisation's menu and order access decide.
+      canUpdateOrders: menus.has(APP_MENU.orders) && orderActions.includes("UPDATE"),
+      canViewOrders: orderActions.some((action) => action === "GET" || action === "GET_ALL"),
+      canViewPickups:
+        menus.has(APP_MENU.pickups) &&
+        ((viewer?.canViewPickups ?? false) || (viewer?.pickupActions?.includes("GET") ?? false)),
+      // Without the server's answer, the role's order access decides.
       canViewSheets:
-        viewer?.sheetsAvailable ??
-        ((viewer?.menus?.includes(SHEET_MENU) ?? false) &&
-          (viewer?.orderActions.includes("GET_ALL") ?? false)),
+        menus.has(APP_MENU.sheet) && (viewer?.sheetsAvailable ?? orderActions.includes("GET_ALL")),
       isLoaded,
       reload,
+      tabs,
       viewer,
-    }),
-    [isLoaded, reload, viewer],
-  );
+    };
+  }, [isLoaded, reload, viewer]);
   return <ViewerContext.Provider value={value}>{children}</ViewerContext.Provider>;
 }
 

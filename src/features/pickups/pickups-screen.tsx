@@ -1,6 +1,7 @@
 /** biome-ignore-all lint/correctness/useExhaustiveDependencies: <forced> */
 import { Call02Icon, CheckmarkCircle02Icon, Location01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
+import { Redirect } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,7 +14,7 @@ import {
 
 import { type DateRange, SearchRangeToolbar } from "@/components/modules/date-range";
 import { useDialog } from "@/components/modules/dialog";
-import { EmptyBlock } from "@/components/modules/empty-state";
+import { EmptyBlock, NoPermission } from "@/components/modules/empty-state";
 import { TabScreen } from "@/components/modules/layout";
 import { LastUpdated, OfflineChip, SyncBadge } from "@/components/modules/network";
 import {
@@ -269,8 +270,10 @@ export function PickupsScreen() {
   // The whole range is loaded (and saved on the phone); the search filters it here, so typing
   // needs no request and works offline.
   const rangeKey = `${from}|${to}`;
+  // Nothing to ask for without Pickup access; the screen says so instead.
+  const allowed = viewer.canViewPickups;
   const load = async (quiet = false) => {
-    if (!token) return;
+    if (!(token && allowed)) return;
     const saved = readCache<PickupRequest[]>(PICKUPS_CACHE, rangeKey);
     if (saved) {
       setRequests(saved.data);
@@ -291,8 +294,8 @@ export function PickupsScreen() {
   };
   useEffect(() => {
     void load();
-  }, [from, to, token]);
-  useEffect(() => onReconnect(() => void load(true)), [from, to, token]);
+  }, [allowed, from, to, token]);
+  useEffect(() => onReconnect(() => void load(true)), [allowed, from, to, token]);
   useEffect(() => {
     setRange(null);
   }, [selectedDate]);
@@ -424,14 +427,10 @@ export function PickupsScreen() {
         />
       </TabScreen>
     );
+  if (!viewer.tabs.pickups) return <Redirect href="/" />;
   if (!viewer.canViewPickups)
     return (
-      <TabScreen>
-        <EmptyBlock
-          description="Pickup requests are not available for this organization."
-          title="No Pickup access"
-        />
-      </TabScreen>
+      <NoPermission description="Your role needs Pickup requests view access, with Pickups on for the organization." />
     );
   return (
     <TabScreen>

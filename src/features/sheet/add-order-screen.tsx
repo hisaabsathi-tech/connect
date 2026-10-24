@@ -6,7 +6,6 @@ import {
   CheckmarkCircle02Icon,
   CirclePlusIcon,
   File02Icon,
-  Image01Icon,
   Location01Icon,
   Package04Icon,
   PlusSignIcon,
@@ -19,7 +18,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { type PropsWithChildren, useEffect, useRef, useState } from "react";
+import { type PropsWithChildren, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
 
 import { DateRangeSheet } from "@/components/modules/date-range";
@@ -34,11 +33,8 @@ import { KEYBOARD_GAP, useKeyboardReveal } from "@/hooks/use-keyboard-reveal";
 import { ApiError } from "@/lib/api/client";
 import {
   attachLabelScan,
-  deleteSheetLabelScan,
   type LabelScanField,
   linkLabelScans,
-  listSheetLabelScans,
-  type SheetLabelScan,
   scanShippingLabel,
 } from "@/lib/api/label-scan";
 import type { AddressSuggestion } from "@/lib/api/maps";
@@ -54,7 +50,6 @@ import { errorMessage } from "@/lib/errors";
 import { haptic } from "@/lib/haptics";
 import { newActionId } from "@/lib/offline/outbox";
 
-import { SheetImages } from "./components/sheet-images";
 import { useAddressSuggestions } from "./hooks/use-address-suggestions";
 import { useBookingOptions } from "./hooks/use-booking-options";
 import {
@@ -358,9 +353,6 @@ export function AddOrderScreen() {
   const keyboard = useKeyboardReveal();
   const { today } = useDateFilter();
   const { organizations } = useSheetOrganizations();
-  // Deleting a label photo needs order delete in the sheet's organization.
-  const canDeleteScans =
-    organizations.find((item) => item.id === params.organizationId)?.canDelete ?? false;
   const [orderDate, setOrderDate] = useState(() => (editing && params.orderDate) || today);
   const [dateOpen, setDateOpen] = useState(false);
   const [form, setForm] = useState<Form>(() => (editing ? formFrom(params) : EMPTY_FORM));
@@ -400,26 +392,8 @@ export function AddOrderScreen() {
   const [shipments, setShipments] = useState(() =>
     appending ? Number(params.dataRows ?? 0) || 0 : 0,
   );
-  // The sheet this order goes into (opened, edited, or started by the first save), and the label
-  // photos scanned for it, shown under Images. Each scan or save reloads them.
-  const sheetId = sheet?.id ?? params.sheetId ?? "";
+  // The sheet this order goes into (opened, edited, or started by the first save).
   const sheetName = sheet?.name || params.sheetName || "";
-  const [sheetScans, setSheetScans] = useState<SheetLabelScan[]>([]);
-  const [scansVersion, setScansVersion] = useState(0);
-  const [imagesOpen, setImagesOpen] = useState(false);
-  const reloadSheetScans = () => setScansVersion((version) => version + 1);
-  useEffect(() => {
-    if (!(token && sheetId)) return;
-    let live = true;
-    listSheetLabelScans(token, params.organizationId, sheetId)
-      .then((scans) => {
-        if (live) setSheetScans(scans);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [params.organizationId, scansVersion, sheetId, token]);
 
   // Another client: for a sheet opened from its table, picked for that same sheet; else back to
   // the client list, which starts a new sheet.
@@ -553,7 +527,6 @@ export function AddOrderScreen() {
       });
       // The latest photo is the one behind the details; any earlier one stays on the server.
       scanId.current = scan.scanId;
-      reloadSheetScans();
       if (!(sheet?.id ?? params.sheetId)) unfiledScans.current.push(scan.scanId);
       const read: [Field, string | null][] = [
         ["receiverName", scan.receiverName],
@@ -612,9 +585,7 @@ export function AddOrderScreen() {
       receiverName: order.receiverName,
       receiverPhone: order.receiverPhone,
       smartSheetId,
-    })
-      .then(reloadSheetScans)
-      .catch(() => undefined);
+    }).catch(() => undefined);
   };
 
   const save = async () => {
@@ -693,10 +664,7 @@ export function AddOrderScreen() {
         target = { id: created.id, name: created.name };
         setSheet(target);
         const unfiled = unfiledScans.current.splice(0);
-        if (unfiled.length)
-          linkLabelScans(token, target.id, unfiled)
-            .then(reloadSheetScans)
-            .catch(() => undefined);
+        if (unfiled.length) linkLabelScans(token, target.id, unfiled).catch(() => undefined);
       }
       const actionId = pendingActionId.current ?? newActionId();
       pendingActionId.current = actionId;
@@ -896,12 +864,12 @@ export function AddOrderScreen() {
             </AdvancedOption>
           </Section>
 
-          <View className="mt-5 flex-row gap-3">
+          <View className="mt-5">
             <Pressable
               accessibilityHint="Opens the camera to photograph the parcel's label"
               accessibilityRole="button"
               accessibilityState={{ busy: scanning, disabled: scanning || saving }}
-              className="h-12 flex-1 flex-row items-center justify-center gap-2 border border-primary border-dashed bg-accent active:bg-card"
+              className="h-12 flex-row items-center justify-center gap-2 border border-primary border-dashed bg-accent active:bg-card"
               disabled={scanning || saving}
               onPress={() => void scanLabel()}
               onPressIn={() => haptic("light")}
@@ -915,21 +883,6 @@ export function AddOrderScreen() {
                 <HugeiconsIcon color={colors.primary} icon={ScanImageIcon} size={20} />
               )}
             </Pressable>
-            {/* The sheet's label photos, once it has any; not while editing one order. */}
-            {sheetScans.length && !editing ? (
-              <Pressable
-                accessibilityLabel={`Images, ${sheetScans.length} label photos in this sheet`}
-                accessibilityRole="button"
-                className="h-12 flex-row items-center justify-center gap-2 border border-primary bg-card px-4 active:bg-accent"
-                onPress={() => setImagesOpen(true)}
-                onPressIn={() => haptic("light")}
-              >
-                <Text className="text-base font-medium text-primary">
-                  Images ({sheetScans.length})
-                </Text>
-                <HugeiconsIcon color={colors.primary} icon={Image01Icon} size={20} />
-              </Pressable>
-            ) : null}
           </View>
 
           <Section icon={UserIcon} title="Receiver Details">
@@ -1124,25 +1077,6 @@ export function AddOrderScreen() {
           </View>
         </ScrollView>
       </View>
-      <SheetImages
-        onClose={() => setImagesOpen(false)}
-        onDelete={
-          canDeleteScans
-            ? async (scan) => {
-                if (!token) return;
-                await deleteSheetLabelScan(token, params.organizationId, scan.id);
-                const left = sheetScans.filter((item) => item.id !== scan.id);
-                setSheetScans(left);
-                // The last photo gone, the empty Images screen closes too.
-                if (!left.length) setImagesOpen(false);
-                reloadSheetScans();
-              }
-            : undefined
-        }
-        scans={sheetScans}
-        sheetName={sheetName}
-        visible={imagesOpen}
-      />
       <DateRangeSheet
         allowFuture
         onApply={(range) => {
